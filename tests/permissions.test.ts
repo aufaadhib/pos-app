@@ -20,6 +20,12 @@ const expectations: Array<[AppRole, AppPermission, boolean]> = [
   ["owner", { pos: ["operate"] }, true],
   ["manager", { pos: ["operate"] }, true],
   ["cashier", { pos: ["operate"] }, true],
+  ["owner", { catalog: ["view"] }, true],
+  ["owner", { catalog: ["manage"] }, true],
+  ["manager", { catalog: ["view"] }, true],
+  ["manager", { catalog: ["manage"] }, true],
+  ["cashier", { catalog: ["view"] }, true],
+  ["cashier", { catalog: ["manage"] }, false],
 ];
 
 describe("POS role permissions", () => {

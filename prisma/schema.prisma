@@ -72,3 +72,75 @@ model Verification {
   @@index([identifier])
   @@map("verification")
 }
+
+enum CatalogStatus {
+  ACTIVE
+  ARCHIVED
+}
+
+enum CatalogEntityType {
+  CATEGORY
+  PRODUCT
+}
+
+enum CatalogAuditAction {
+  CREATE
+  UPDATE
+  PRICE_CHANGE
+  ARCHIVE
+  RESTORE
+  REORDER
+}
+
+model Category {
+  id             String        @id @default(cuid())
+  name           String
+  normalizedName String        @unique
+  description    String?       @db.VarChar(240)
+  displayOrder   Int           @default(0)
+  status         CatalogStatus @default(ACTIVE)
+  archivedAt     DateTime?
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
+  products       Product[]
+
+  @@index([status, displayOrder])
+  @@map("category")
+}
+
+model Product {
+  id             String        @id @default(cuid())
+  categoryId     String
+  name           String
+  normalizedName String
+  sku            String?       @unique
+  description    String?       @db.VarChar(280)
+  basePrice      Decimal       @db.Decimal(12, 2)
+  displayOrder   Int           @default(0)
+  status         CatalogStatus @default(ACTIVE)
+  archivedAt     DateTime?
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
+  category       Category      @relation(fields: [categoryId], references: [id], onDelete: Restrict)
+
+  @@unique([categoryId, normalizedName])
+  @@index([categoryId, status, displayOrder])
+  @@index([status, updatedAt])
+  @@map("product")
+}
+
+model CatalogAuditLog {
+  id          String             @id @default(cuid())
+  entityType  CatalogEntityType
+  entityId    String
+  action      CatalogAuditAction
+  actorUserId String
+  actorEmail  String
+  before      Json?
+  after       Json?
+  createdAt   DateTime           @default(now())
+
+  @@index([entityType, entityId, createdAt])
+  @@index([actorUserId, createdAt])
+  @@map("catalog_audit_log")
+}

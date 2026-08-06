@@ -36,7 +36,7 @@ test.describe("live Better Auth smoke tests", () => {
   test("wrong credentials do not create a session", async ({ page }) => {
     await page.goto("/sign-in");
     await page.getByLabel("Email").fill("wrong@example.com");
-    await page.getByLabel("Kata sandi").fill("wrong-password");
+    await page.getByLabel("Kata sandi", { exact: true }).fill("wrong-password");
     await page.getByRole("button", { name: "Masuk" }).click();
 
     await expect(page.getByText(/Email atau kata sandi tidak sesuai/)).toBeVisible();
@@ -46,7 +46,7 @@ test.describe("live Better Auth smoke tests", () => {
   test("owner can open design system and sign out", async ({ page }) => {
     await page.goto("/sign-in");
     await page.getByLabel("Email").fill(ownerEmail!);
-    await page.getByLabel("Kata sandi").fill(ownerPassword!);
+    await page.getByLabel("Kata sandi", { exact: true }).fill(ownerPassword!);
     await page.getByRole("button", { name: "Masuk" }).click();
 
     await expect(page).toHaveURL(/\/workspace$/);
@@ -65,7 +65,7 @@ test.describe("live Better Auth smoke tests", () => {
 
       await page.goto("/sign-in");
       await page.getByLabel("Email").fill(account.email!);
-      await page.getByLabel("Kata sandi").fill(account.password!);
+      await page.getByLabel("Kata sandi", { exact: true }).fill(account.password!);
       await page.getByRole("button", { name: "Masuk" }).click();
       await expect(page).toHaveURL(/\/workspace$/);
 

@@ -33,7 +33,7 @@ export default async function DesignSystemPage() {
 
   return (
     <div className="min-h-svh bg-background">
-      <WorkspaceHeader canViewDesignSystem />
+      <WorkspaceHeader activeRoute="design-system" canViewDesignSystem />
       <main className="mx-auto max-w-7xl px-5 py-8 sm:px-8 sm:py-10 lg:px-10">
         <div className="max-w-3xl">
           <p className="font-mono text-xs font-semibold tracking-widest text-success uppercase">

@@ -4,7 +4,7 @@ import { PrismaClient } from "../generated/prisma/client";
 import { parseServerEnvironment } from "./env-schema";
 
 const prismaGlobal = globalThis as unknown as {
-  prisma: PrismaClient | undefined;
+  prismaCatalogV2: PrismaClient | undefined;
 };
 
 function createPrismaClient() {
@@ -14,8 +14,8 @@ function createPrismaClient() {
   return new PrismaClient({ adapter });
 }
 
-export const prisma = prismaGlobal.prisma ?? createPrismaClient();
+export const prisma = prismaGlobal.prismaCatalogV2 ?? createPrismaClient();
 
 if (process.env.NODE_ENV !== "production") {
-  prismaGlobal.prisma = prisma;
+  prismaGlobal.prismaCatalogV2 = prisma;
 }

@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
-import { AlertCircle, Clock3, Coffee, LayoutGrid, ShieldCheck } from "lucide-react";
+import Link from "next/link";
+import { AlertCircle, BookOpen, Clock3, Coffee, LayoutGrid, ShieldCheck } from "lucide-react";
 
 import { WorkspaceHeader } from "@/components/workspace-header";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
@@ -89,6 +90,15 @@ export default async function WorkspacePage({ searchParams }: WorkspacePageProps
           </div>
 
           <div className="mt-5 grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
+            <Link className="rounded-xl focus-visible:ring-3 focus-visible:ring-ring/40 focus-visible:outline-none" href="/catalog">
+              <Card className="h-full border border-border shadow-none transition-colors hover:border-primary">
+                <CardHeader>
+                  <BookOpen aria-hidden="true" className="mb-3 size-6 text-primary" />
+                  <CardTitle>Katalog menu</CardTitle>
+                  <CardDescription>Lihat kategori, produk, SKU, dan harga dasar.</CardDescription>
+                </CardHeader>
+              </Card>
+            </Link>
             <Card className="border border-border shadow-none">
               <CardHeader>
                 <Coffee aria-hidden="true" className="mb-3 size-6 text-primary" />
@@ -103,7 +113,7 @@ export default async function WorkspacePage({ searchParams }: WorkspacePageProps
                 <CardDescription>Konteks outlet dan shift akan diverifikasi sebelum melayani.</CardDescription>
               </CardHeader>
             </Card>
-            <Card className="border border-border shadow-none sm:col-span-2 xl:col-span-1">
+            <Card className="border border-border shadow-none">
               <CardHeader>
                 <ShieldCheck aria-hidden="true" className="mb-3 size-6 text-foreground" />
                 <CardTitle>Akses berbasis peran</CardTitle>

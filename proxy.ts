@@ -1,7 +1,7 @@
 import { getSessionCookie } from "better-auth/cookies";
 import { type NextRequest, NextResponse } from "next/server";
 
-const protectedRoutes = ["/workspace", "/design-system"];
+const protectedRoutes = ["/workspace", "/design-system", "/catalog"];
 
 export function proxy(request: NextRequest) {
   const sessionCookie = getSessionCookie(request);
@@ -22,5 +22,10 @@ export function proxy(request: NextRequest) {
 }
 
 export const config = {
-  matcher: ["/sign-in", "/workspace/:path*", "/design-system/:path*"],
+  matcher: [
+    "/sign-in",
+    "/workspace/:path*",
+    "/design-system/:path*",
+    "/catalog/:path*",
+  ],
 };
