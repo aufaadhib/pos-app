@@ -1,26 +1,151 @@
 @import "tailwindcss";
+@import "tw-animate-css";
+@import "shadcn/tailwind.css";
 
-:root {
-  --background: #ffffff;
-  --foreground: #171717;
-}
+@custom-variant dark (&:is(.dark *));
 
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-success: var(--success);
+  --color-success-foreground: var(--success-foreground);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --color-surface: var(--surface);
+  --color-ticket: var(--ticket);
+  --color-brand-panel: var(--brand-panel);
+  --color-brand-panel-foreground: var(--brand-panel-foreground);
+  --font-sans: var(--font-atkinson);
+  --font-heading: var(--font-bricolage);
+  --font-mono: var(--font-ibm-plex-mono);
+  --radius-sm: calc(var(--radius) * 0.7);
+  --radius-md: var(--radius);
+  --radius-lg: calc(var(--radius) * 1.2);
+  --radius-xl: calc(var(--radius) * 1.6);
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
+:root {
+  --background: #f6f6f0;
+  --foreground: #2c1d2b;
+  --card: #fffef9;
+  --card-foreground: #2c1d2b;
+  --popover: #fffef9;
+  --popover-foreground: #2c1d2b;
+  --primary: #e8ac2e;
+  --primary-foreground: #2c1d2b;
+  --secondary: #ebeae3;
+  --secondary-foreground: #2c1d2b;
+  --muted: #ecebe5;
+  --muted-foreground: #6f686d;
+  --accent: #f3dfaa;
+  --accent-foreground: #2c1d2b;
+  --destructive: #b84a3e;
+  --success: #2f6f5e;
+  --success-foreground: #ffffff;
+  --border: #d8d7cf;
+  --input: #cbc9c0;
+  --ring: #8b6012;
+  --surface: #fffef9;
+  --ticket: #f2c762;
+  --brand-panel: #2c1d2b;
+  --brand-panel-foreground: #f6f6f0;
+  --radius: 0.625rem;
+}
+
+.dark {
+  --background: #171217;
+  --foreground: #f4f1ea;
+  --card: #211a21;
+  --card-foreground: #f4f1ea;
+  --popover: #211a21;
+  --popover-foreground: #f4f1ea;
+  --primary: #f0b83f;
+  --primary-foreground: #211a21;
+  --secondary: #302730;
+  --secondary-foreground: #f4f1ea;
+  --muted: #302730;
+  --muted-foreground: #b9afb6;
+  --accent: #4a3820;
+  --accent-foreground: #f4f1ea;
+  --destructive: #e77b70;
+  --success: #67b59a;
+  --success-foreground: #171217;
+  --border: #3a313a;
+  --input: #4b414b;
+  --ring: #f0b83f;
+  --surface: #211a21;
+  --ticket: #f0b83f;
+  --brand-panel: #2c1d2b;
+  --brand-panel-foreground: #f6f6f0;
+}
+
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+  }
+
+  html {
+    @apply bg-background font-sans;
+  }
+
+  body {
+    @apply min-h-svh bg-background text-foreground antialiased;
+  }
+
+  button:not(:disabled),
+  [role="button"]:not(:disabled) {
+    cursor: pointer;
+  }
+
+  ::selection {
+    background: var(--primary);
+    color: var(--primary-foreground);
   }
 }
 
-body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+@keyframes service-entry {
+  from {
+    opacity: 0;
+    transform: translateY(0.75rem);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@layer utilities {
+  .service-entry {
+    animation: service-entry 220ms ease-out both;
+  }
+
+  .service-entry-delay {
+    animation-delay: 70ms;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    scroll-behavior: auto !important;
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
 }

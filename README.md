@@ -1,36 +1,68 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Glutong POS
 
-## Getting Started
+Fondasi aplikasi POS untuk kafe/restoran: login staf dengan Better Auth, RBAC, Prisma 7, Neon PostgreSQL, workspace terlindungi, dan design system responsif.
 
-First, run the development server:
+## Menyiapkan Neon
 
-```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+1. Masuk ke [Neon Console](https://console.neon.tech/) dan buat project bernama **Glutong POS**.
+2. Pilih provider **AWS** dan region **Asia Pacific (Singapore)**.
+3. Pertahankan branch utama untuk environment production, lalu buat branch bernama `development` untuk pekerjaan lokal.
+4. Dari **Connect**, salin connection string branch `development`:
+   - URL dengan host yang memuat `-pooler` menjadi `DATABASE_URL` untuk runtime.
+   - URL direct/non-pooled menjadi `DIRECT_URL` untuk migration Prisma.
+5. Salin `.env.example` menjadi `.env`, lalu isi seluruh nilai rahasia. Jangan commit `.env`.
+
+Gunakan secret acak minimal 32 karakter untuk Better Auth. Contoh membuatnya dari terminal:
+
+```powershell
+node -e "console.log(require('crypto').randomBytes(32).toString('base64url'))"
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+## Inisialisasi database dan owner
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+```powershell
+npm install
+npm run db:generate
+npm run db:migrate -- --name initialize_auth
+npm run seed:owner
+```
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+Seed hanya berjalan jika database kosong. Jika hanya owner dengan email yang sama sudah tersedia, seed menjadi no-op. Jika ada akun berbeda, seed berhenti agar tidak mengambil alih database. Setelah seed berhasil, hapus `INITIAL_OWNER_PASSWORD` dari environment.
 
-## Learn More
+Public sign-up dinonaktifkan. Email verification, reset password, transaksi POS, dan pengelolaan staf belum termasuk milestone ini.
 
-To learn more about Next.js, take a look at the following resources:
+## Menjalankan aplikasi
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+```powershell
+npm run dev
+```
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+Route utama:
 
-## Deploy on Vercel
+- `/sign-in` — login email dan kata sandi.
+- `/workspace` — workspace semua role yang sah.
+- `/design-system` — referensi UI khusus owner.
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+## Quality checks
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+```powershell
+npm run lint
+npm run typecheck
+npm run test
+npm run test:e2e
+npm run build
+```
+
+Smoke test Better Auth memerlukan database Neon dan `E2E_OWNER_EMAIL` / `E2E_OWNER_PASSWORD`. Test pembatasan role juga menerima pasangan `E2E_MANAGER_EMAIL` / `E2E_MANAGER_PASSWORD` dan `E2E_CASHIER_EMAIL` / `E2E_CASHIER_PASSWORD`. Tanpa nilai tersebut, skenario live dilewati; pengujian redirect anonim, tema, unit, dan komponen tetap berjalan.
+
+## Script database dan auth
+
+- `npm run db:generate` menghasilkan Prisma client ke `generated/prisma`.
+- `npm run db:migrate` membuat dan menjalankan migration versioned memakai `DIRECT_URL`.
+- `npm run db:studio` membuka Prisma Studio.
+- `npm run auth:generate -- -y` menyelaraskan model Better Auth ke schema Prisma.
+- `npm run seed:owner` membuat owner bootstrap secara aman.
+
+Dokumentasi rujukan: [Neon connection pooling](https://neon.com/docs/connect/connection-pooling), [Prisma PostgreSQL](https://www.prisma.io/docs/orm/core-concepts/supported-databases/postgresql), dan [Better Auth Prisma adapter](https://www.better-auth.com/docs/adapters/prisma).
+
+Daftar tujuan, input, output, dan side effect function baru tersedia di [`docs/functions.md`](docs/functions.md).
