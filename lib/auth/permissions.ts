@@ -8,7 +8,8 @@ export const permissionStatements = {
   staff: ["view", "manage"],
   settings: ["view", "manage"],
   designSystem: ["view"],
-  catalog: ["view", "manage"],
+  catalog: ["view", "manageMaster", "manageOutlet"],
+  outlet: ["view", "manage"],
   profile: ["view", "update"],
 } as const;
 
@@ -22,7 +23,8 @@ export const ownerRole = accessControl.newRole({
   staff: ["view", "manage"],
   settings: ["view", "manage"],
   designSystem: ["view"],
-  catalog: ["view", "manage"],
+  catalog: ["view", "manageMaster", "manageOutlet"],
+  outlet: ["view", "manage"],
   profile: ["view", "update"],
 });
 
@@ -31,10 +33,11 @@ export const managerRole = accessControl.newRole({
   session: [],
   workspace: ["view"],
   pos: ["operate"],
-  staff: ["view"],
+  staff: ["view", "manage"],
   settings: ["view"],
   designSystem: [],
-  catalog: ["view", "manage"],
+  catalog: ["view", "manageOutlet"],
+  outlet: ["view"],
   profile: ["view", "update"],
 });
 
@@ -47,6 +50,7 @@ export const cashierRole = accessControl.newRole({
   settings: [],
   designSystem: [],
   catalog: ["view"],
+  outlet: ["view"],
   profile: ["view", "update"],
 });
 

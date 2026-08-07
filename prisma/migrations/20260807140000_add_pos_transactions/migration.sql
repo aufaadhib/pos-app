@@ -1,0 +1,1 @@
+-- No-op: the generated 20260807090447 migration already applied this schema.

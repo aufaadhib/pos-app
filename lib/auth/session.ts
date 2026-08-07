@@ -24,8 +24,18 @@ export async function requireSession() {
   return session;
 }
 
-export async function requirePermission(permission: AppPermission) {
+export async function requirePasswordReadySession() {
   const session = await requireSession();
+
+  if (session.user.mustChangePassword) {
+    redirect("/change-password");
+  }
+
+  return session;
+}
+
+export async function requirePermission(permission: AppPermission) {
+  const session = await requirePasswordReadySession();
   const role = session.user.role;
 
   if (!isAppRole(role)) {

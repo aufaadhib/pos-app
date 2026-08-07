@@ -21,7 +21,7 @@ test("captures the catalog in every supported viewport and theme", async ({ page
   await page.getByLabel("Email").fill(ownerEmail!);
   await page.getByLabel("Kata sandi", { exact: true }).fill(ownerPassword!);
   await page.getByRole("button", { name: "Masuk" }).click();
-  await expect(page).toHaveURL(/\/workspace$/);
+  await expect(page).toHaveURL(/\/(workspace|select-outlet)$/, { timeout: 30_000 });
 
   for (const viewport of viewports) {
     await page.setViewportSize({ width: viewport.width, height: viewport.height });
@@ -30,6 +30,7 @@ test("captures the catalog in every supported viewport and theme", async ({ page
       await page.evaluate((nextTheme) => localStorage.setItem("theme", nextTheme), theme);
       await page.reload();
       await expect(page.locator("html")).toHaveClass(new RegExp(theme));
+      await expect(page.getByRole("heading", { name: "Katalog produk" })).toBeVisible();
       await page.addStyleTag({ content: "nextjs-portal { display: none !important; }" });
       await page.screenshot({
         fullPage: true,

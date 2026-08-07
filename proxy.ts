@@ -1,7 +1,17 @@
 import { getSessionCookie } from "better-auth/cookies";
 import { type NextRequest, NextResponse } from "next/server";
 
-const protectedRoutes = ["/workspace", "/design-system", "/catalog"];
+const protectedRoutes = [
+  "/workspace",
+  "/design-system",
+  "/catalog",
+  "/pos",
+  "/transactions",
+  "/outlets",
+  "/staff",
+  "/select-outlet",
+  "/change-password",
+];
 
 export function proxy(request: NextRequest) {
   const sessionCookie = getSessionCookie(request);
@@ -27,5 +37,11 @@ export const config = {
     "/workspace/:path*",
     "/design-system/:path*",
     "/catalog/:path*",
+    "/pos/:path*",
+    "/transactions/:path*",
+    "/outlets/:path*",
+    "/staff/:path*",
+    "/select-outlet/:path*",
+    "/change-password/:path*",
   ],
 };

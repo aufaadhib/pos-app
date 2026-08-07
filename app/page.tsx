@@ -6,5 +6,7 @@ export const dynamic = "force-dynamic";
 
 export default async function HomePage() {
   const session = await getCurrentSession();
-  redirect(session ? "/workspace" : "/sign-in");
+  if (!session) redirect("/sign-in");
+  if (session.user.mustChangePassword) redirect("/change-password");
+  redirect(session.session.activeOutletId ? "/workspace" : "/select-outlet");
 }

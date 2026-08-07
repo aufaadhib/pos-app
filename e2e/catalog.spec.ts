@@ -27,7 +27,7 @@ async function signIn(page: import("@playwright/test").Page, email: string, pass
   await page.getByLabel("Email").fill(email);
   await page.getByLabel("Kata sandi", { exact: true }).fill(password);
   await page.getByRole("button", { name: "Masuk" }).click();
-  await expect(page).toHaveURL(/\/workspace$/);
+  await expect(page).toHaveURL(/\/(workspace|select-outlet)$/);
 }
 
 test("anonymous staff is redirected from the catalog", async ({ page }) => {
@@ -36,12 +36,14 @@ test("anonymous staff is redirected from the catalog", async ({ page }) => {
 });
 
 test.describe("live catalog role checks", () => {
-  test("manager can see catalog management controls", async ({ page }) => {
+  test("manager can manage only the assigned outlet catalog", async ({ page }) => {
     test.skip(!managerEmail || !managerPassword, "Requires E2E manager credentials.");
     await signIn(page, managerEmail!, managerPassword!);
     await page.goto("/catalog");
-    await expect(page.getByRole("button", { name: "Kategori baru" }).first()).toBeVisible();
-    await expect(page.getByRole("button", { name: "Produk baru" })).toBeVisible();
+    await expect(page.getByRole("heading", { name: /Produk outlet/ })).toBeVisible();
+    await expect(page.getByRole("button", { name: "Kategori baru" })).toHaveCount(0);
+    await expect(page.getByRole("button", { name: "Produk baru" })).toHaveCount(0);
+    await expect(page.getByText(/Harga dan ketersediaan mewarisi katalog master/)).toBeVisible();
   });
 
   test("cashier sees only the active read-only catalog", async ({ page }) => {
@@ -70,8 +72,8 @@ test.describe("live catalog role checks", () => {
     await page.getByRole("button", { name: "Kategori baru" }).first().click();
     await page.getByRole("textbox", { name: "Nama kategori" }).fill(categoryName);
     await page.getByRole("button", { name: "Simpan kategori" }).click();
-    await expect(page.getByText("Kategori berhasil dibuat.")).toBeVisible({ timeout: 30_000 });
-    await page.getByRole("button", { name: "Tutup dialog" }).click();
+    await expect(page.getByRole("dialog")).toHaveCount(0, { timeout: 30_000 });
+    await expect(page.getByRole("status")).toContainText("Kategori berhasil dibuat.");
 
     await page.getByRole("button", { name: "Produk baru" }).first().click();
     await page.getByRole("combobox", { name: "Kategori" }).click();
@@ -80,26 +82,28 @@ test.describe("live catalog role checks", () => {
     await page.getByRole("textbox", { name: "SKU (opsional)" }).fill(sku);
     await page.getByRole("textbox", { name: "Harga dasar (Rp)" }).fill("25000");
     await page.getByRole("button", { name: "Simpan produk" }).click();
-    await expect(page.getByText("Produk berhasil dibuat.")).toBeVisible({ timeout: 30_000 });
-    await page.getByRole("button", { name: "Tutup dialog" }).click();
+    await expect(page.getByRole("dialog")).toHaveCount(0, { timeout: 30_000 });
+    await expect(page.getByRole("status")).toContainText("Produk berhasil dibuat.");
 
     const row = page.getByRole("row").filter({ hasText: productName });
     await row.getByRole("button", { name: "Edit produk" }).click();
     await page.getByRole("textbox", { name: "Harga dasar (Rp)" }).fill("27500");
     await page.getByRole("button", { name: "Simpan produk" }).click();
-    await expect(page.getByText("Produk berhasil diperbarui.")).toBeVisible({ timeout: 30_000 });
-    await page.getByRole("button", { name: "Tutup dialog" }).click();
+    await expect(page.getByRole("dialog")).toHaveCount(0, { timeout: 30_000 });
+    await expect(page.getByRole("status")).toContainText("Produk berhasil diperbarui.");
     await expect(row.getByText(/27\.500/)).toBeVisible();
 
     await row.getByRole("button", { name: `Arsipkan ${productName}` }).click();
     await expect(row).toHaveCount(0, { timeout: 30_000 });
-    await page.getByRole("combobox", { name: "Filter status" }).selectOption("archived");
+    await page.getByRole("combobox", { name: "Filter status" }).click();
+    await page.getByRole("option", { name: "Diarsipkan", exact: true }).click();
     await page.getByRole("button", { name: "Terapkan" }).click();
     const archivedRow = page.getByRole("row").filter({ hasText: productName });
     await archivedRow.getByRole("button", { name: `Pulihkan ${productName}` }).click();
-    await expect(archivedRow).toHaveCount(0);
+    await expect(archivedRow).toHaveCount(0, { timeout: 30_000 });
 
-    await page.getByRole("combobox", { name: "Filter status" }).selectOption("active");
+    await page.getByRole("combobox", { name: "Filter status" }).click();
+    await page.getByRole("option", { name: "Aktif", exact: true }).click();
     await page.getByRole("button", { name: "Terapkan" }).click();
     const restoredRow = page.getByRole("row").filter({ hasText: productName });
     await restoredRow.getByRole("button", { name: `Arsipkan ${productName}` }).click();

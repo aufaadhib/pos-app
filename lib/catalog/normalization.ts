@@ -37,6 +37,20 @@ export function parseRupiahToMinorUnit(value: string) {
   return amount.toString();
 }
 
+/**
+ * Parses a non-negative whole Rupiah amount into a canonical integer string.
+ * It accepts optional Rp prefixes and separators, returns null for invalid input, and has no side effects.
+ */
+export function parseNonNegativeRupiah(value: string) {
+  const normalized = value.normalize("NFKC").trim();
+  if (!/^\s*(?:Rp\s*)?[\d.]+\s*$/i.test(normalized)) return null;
+  const digits = normalized.replace(/\D/g, "");
+  if (!digits) return null;
+  const amount = BigInt(digits);
+  if (amount > BigInt(999_999_999)) return null;
+  return amount.toString();
+}
+
 export function formatRupiah(value: string) {
   return new Intl.NumberFormat("id-ID", {
     style: "currency",

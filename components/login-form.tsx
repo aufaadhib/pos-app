@@ -96,7 +96,6 @@ export function LoginForm() {
               aria-describedby={errors.email ? "email-error" : undefined}
               aria-invalid={Boolean(errors.email)}
               autoComplete="username"
-              autoFocus
               className="pl-10"
               disabled={pending}
               id="email"

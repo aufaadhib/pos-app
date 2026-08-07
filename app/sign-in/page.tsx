@@ -12,7 +12,7 @@ export const metadata: Metadata = {
 
 export default function SignInPage() {
   return (
-    <main className="grid min-h-svh grid-rows-[auto_1fr] bg-background lg:grid-cols-[minmax(22rem,0.82fr)_minmax(32rem,1.18fr)] lg:grid-rows-none">
+    <main className="grid min-h-svh grid-rows-[auto_1fr] bg-background lg:grid-cols-[minmax(22rem,0.82fr)_minmax(32rem,1.18fr)] lg:grid-rows-none" id="main-content">
       <section className="relative overflow-hidden bg-brand-panel px-5 py-6 text-brand-panel-foreground sm:px-8 sm:py-8 lg:flex lg:min-h-svh lg:flex-col lg:justify-between lg:px-10 lg:py-10 xl:px-14 xl:py-12">
         <div className="service-entry">
           <BrandMark inverse />

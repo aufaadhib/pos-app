@@ -26,15 +26,10 @@ import {
 } from "@/components/ui/dialog";
 import { Field, FieldError, FieldGroup, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
+import { SearchableSelect } from "@/components/ui/searchable-select";
 import { Spinner } from "@/components/ui/spinner";
 import { Textarea } from "@/components/ui/textarea";
+import { useAutoCloseDialogAction } from "@/components/ui/use-auto-close-dialog-action";
 import type { CatalogCategoryItem, CatalogProductItem } from "@/lib/catalog/types";
 import { initialCatalogActionState } from "@/lib/catalog/types";
 
@@ -44,13 +39,13 @@ type CategoryDialogProps = {
 
 export function CategoryFormDialog({ category }: CategoryDialogProps) {
   const isEditing = Boolean(category);
-  const [state, action, pending] = useActionState(
+  const { state, action, pending, open, setOpen } = useAutoCloseDialogAction(
     isEditing ? updateCategoryAction : createCategoryAction,
     initialCatalogActionState,
   );
 
   return (
-    <Dialog>
+    <Dialog onOpenChange={setOpen} open={open}>
       <DialogTrigger
         render={
           <Button size={isEditing ? "icon" : "default"} variant={isEditing ? "ghost" : "outline"} />
@@ -77,7 +72,6 @@ export function CategoryFormDialog({ category }: CategoryDialogProps) {
           )}
           <FieldGroup>
             <CatalogTextField
-              autoFocus
               defaultValue={category?.name}
               errors={state.fieldErrors?.name}
               label="Nama kategori"
@@ -128,7 +122,7 @@ type ProductDialogProps = {
 
 export function ProductFormDialog({ categories, product, defaultCategoryId }: ProductDialogProps) {
   const isEditing = Boolean(product);
-  const [state, action, pending] = useActionState(
+  const { state, action, pending, open, setOpen } = useAutoCloseDialogAction(
     isEditing ? updateProductAction : createProductAction,
     initialCatalogActionState,
   );
@@ -136,7 +130,7 @@ export function ProductFormDialog({ categories, product, defaultCategoryId }: Pr
   const selectedCategory = product?.categoryId ?? defaultCategoryId ?? activeCategories[0]?.id;
 
   return (
-    <Dialog>
+    <Dialog onOpenChange={setOpen} open={open}>
       <DialogTrigger render={<Button disabled={activeCategories.length === 0} />}>
         {isEditing ? <Pencil aria-hidden="true" /> : <Plus aria-hidden="true" />}
         {isEditing ? "Edit produk" : "Produk baru"}
@@ -158,18 +152,16 @@ export function ProductFormDialog({ categories, product, defaultCategoryId }: Pr
           <FieldGroup>
             <Field data-invalid={Boolean(state.fieldErrors?.categoryId)}>
               <FieldLabel htmlFor={`${product?.id ?? "new"}-product-category`}>Kategori</FieldLabel>
-              <Select key={selectedCategory ?? "unselected"} defaultValue={selectedCategory} name="categoryId" required>
-                <SelectTrigger className="h-12 w-full" id={`${product?.id ?? "new"}-product-category`}>
-                  <SelectValue placeholder="Pilih kategori" />
-                </SelectTrigger>
-                <SelectContent>
-                  {activeCategories.map((category) => (
-                    <SelectItem key={category.id} value={category.id}>
-                      {category.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              <SearchableSelect
+                aria-invalid={Boolean(state.fieldErrors?.categoryId)}
+                defaultValue={selectedCategory}
+                id={`${product?.id ?? "new"}-product-category`}
+                key={selectedCategory ?? "unselected"}
+                name="categoryId"
+                options={activeCategories.map((category) => ({ label: category.name, value: category.id }))}
+                placeholder="Cari kategori"
+                required
+              />
               <FieldError errors={toFieldErrors(state.fieldErrors?.categoryId)} />
             </Field>
             <CatalogTextField
@@ -283,7 +275,7 @@ function CatalogTextField({
 }
 
 function CatalogActionFeedback({ state }: { state: typeof initialCatalogActionState }) {
-  if (state.status === "idle") return null;
+  if (state.status === "idle" || state.status === "success") return null;
   return (
     <Alert variant={state.status === "error" || state.status === "conflict" ? "destructive" : "default"}>
       <AlertDescription>{state.message}</AlertDescription>

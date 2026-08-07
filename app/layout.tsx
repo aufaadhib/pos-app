@@ -1,4 +1,5 @@
 import type { Metadata, Viewport } from "next";
+import type { ReactNode } from "react";
 import {
   Atkinson_Hyperlegible_Next,
   Bricolage_Grotesque,
@@ -6,6 +7,7 @@ import {
 } from "next/font/google";
 
 import { ThemeProvider } from "@/components/theme-provider";
+import { ToastProvider } from "@/components/toast-provider";
 
 import "./globals.css";
 
@@ -41,12 +43,12 @@ export const metadata: Metadata = {
 export const viewport: Viewport = {
   colorScheme: "light dark",
   themeColor: [
-    { media: "(prefers-color-scheme: light)", color: "#F6F6F0" },
-    { media: "(prefers-color-scheme: dark)", color: "#171217" },
+    { media: "(prefers-color-scheme: light)", color: "#F4F5F2" },
+    { media: "(prefers-color-scheme: dark)", color: "#111411" },
   ],
 };
 
-export default function RootLayout({ children }: LayoutProps<"/">) {
+export default function RootLayout({ children }: { children: ReactNode }) {
   return (
     <html
       lang="id"
@@ -54,7 +56,13 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
       suppressHydrationWarning
     >
       <body>
-        <ThemeProvider>{children}</ThemeProvider>
+        <a className="fixed top-3 left-3 z-[100] -translate-y-20 rounded-lg bg-primary px-4 py-3 font-semibold text-primary-foreground shadow-lg transition-transform focus:translate-y-0" href="#main-content">
+          Lewati ke konten utama
+        </a>
+        <ThemeProvider>
+          {children}
+          <ToastProvider />
+        </ThemeProvider>
       </body>
     </html>
   );

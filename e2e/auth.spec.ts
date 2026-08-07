@@ -16,9 +16,11 @@ const restrictedAccounts = [
   },
 ] as const;
 
-test("anonymous staff is redirected from the protected workspace", async ({ page }) => {
-  await page.goto("/workspace");
-  await expect(page).toHaveURL(/\/sign-in$/);
+test("anonymous staff is redirected from protected operational routes", async ({ page }) => {
+  for (const route of ["/workspace", "/pos", "/transactions"]) {
+    await page.goto(route);
+    await expect(page).toHaveURL(/\/sign-in$/);
+  }
   await expect(page.getByRole("heading", { name: "Masuk ke Glutong POS" })).toBeVisible();
 });
 
@@ -49,8 +51,8 @@ test.describe("live Better Auth smoke tests", () => {
     await page.getByLabel("Kata sandi", { exact: true }).fill(ownerPassword!);
     await page.getByRole("button", { name: "Masuk" }).click();
 
-    await expect(page).toHaveURL(/\/workspace$/);
-    await page.getByRole("link", { name: "Design system" }).click();
+    await expect(page).toHaveURL(/\/(workspace|select-outlet)$/);
+    await page.goto("/design-system");
     await expect(page.getByRole("heading", { name: "Design system Glutong" })).toBeVisible();
     await page.getByRole("button", { name: "Keluar dari Glutong POS" }).click();
     await expect(page).toHaveURL(/\/sign-in$/);
@@ -67,7 +69,7 @@ test.describe("live Better Auth smoke tests", () => {
       await page.getByLabel("Email").fill(account.email!);
       await page.getByLabel("Kata sandi", { exact: true }).fill(account.password!);
       await page.getByRole("button", { name: "Masuk" }).click();
-      await expect(page).toHaveURL(/\/workspace$/);
+      await expect(page).toHaveURL(/\/(workspace|select-outlet)$/);
 
       await page.goto("/design-system");
       await expect(page).toHaveURL(/\/workspace\?access=denied$/);

@@ -2,7 +2,7 @@
 @import "tw-animate-css";
 @import "shadcn/tailwind.css";
 
-@custom-variant dark (&:is(.dark *));
+@custom-variant dark (&:where(.dark, .dark *));
 
 @theme inline {
   --color-background: var(--background);
@@ -39,58 +39,59 @@
 }
 
 :root {
-  --background: #f6f6f0;
-  --foreground: #2c1d2b;
-  --card: #fffef9;
-  --card-foreground: #2c1d2b;
-  --popover: #fffef9;
-  --popover-foreground: #2c1d2b;
-  --primary: #e8ac2e;
-  --primary-foreground: #2c1d2b;
-  --secondary: #ebeae3;
-  --secondary-foreground: #2c1d2b;
-  --muted: #ecebe5;
-  --muted-foreground: #6f686d;
-  --accent: #f3dfaa;
-  --accent-foreground: #2c1d2b;
-  --destructive: #b84a3e;
-  --success: #2f6f5e;
+  --background: #f4f5f2;
+  --foreground: #1d211e;
+  --card: #ffffff;
+  --card-foreground: #1d211e;
+  --popover: #ffffff;
+  --popover-foreground: #1d211e;
+  --primary: #c84a1b;
+  --primary-foreground: #ffffff;
+  --secondary: #e7eae5;
+  --secondary-foreground: #1d211e;
+  --muted: #e8ece7;
+  --muted-foreground: #667069;
+  --accent: #dde9df;
+  --accent-foreground: #183a25;
+  --destructive: #b83b3b;
+  --success: #257354;
   --success-foreground: #ffffff;
-  --border: #d8d7cf;
-  --input: #cbc9c0;
-  --ring: #8b6012;
-  --surface: #fffef9;
-  --ticket: #f2c762;
-  --brand-panel: #2c1d2b;
-  --brand-panel-foreground: #f6f6f0;
-  --radius: 0.625rem;
+  --border: #d7dcd6;
+  --input: #bcc5bd;
+  --ring: #c84a1b;
+  --surface: #ffffff;
+  --ticket: #ffb38f;
+  --brand-panel: #18201b;
+  --brand-panel-foreground: #f5f7f2;
+  --radius: 0.75rem;
 }
 
 .dark {
-  --background: #171217;
-  --foreground: #f4f1ea;
-  --card: #211a21;
-  --card-foreground: #f4f1ea;
-  --popover: #211a21;
-  --popover-foreground: #f4f1ea;
-  --primary: #f0b83f;
-  --primary-foreground: #211a21;
-  --secondary: #302730;
-  --secondary-foreground: #f4f1ea;
-  --muted: #302730;
-  --muted-foreground: #b9afb6;
-  --accent: #4a3820;
-  --accent-foreground: #f4f1ea;
-  --destructive: #e77b70;
-  --success: #67b59a;
-  --success-foreground: #171217;
-  --border: #3a313a;
-  --input: #4b414b;
-  --ring: #f0b83f;
-  --surface: #211a21;
-  --ticket: #f0b83f;
-  --brand-panel: #2c1d2b;
-  --brand-panel-foreground: #f6f6f0;
+  color-scheme: dark;
+  --background: #111411;
+  --foreground: #f5f7f2;
+  --card: #191d19;
+  --card-foreground: #f5f7f2;
+  --popover: #202520;
+  --popover-foreground: #f5f7f2;
+  --primary: #ff7a45;
+  --primary-foreground: #111411;
+  --secondary: #252b26;
+  --secondary-foreground: #f5f7f2;
+  --muted: #242a25;
+  --muted-foreground: #aab2aa;
+  --accent: #263b2d;
+  --accent-foreground: #d8f3df;
+  --destructive: #ff7b72;
+  --success: #5bd39a;
+  --success-foreground: #111411;
+  --border: #303830;
+  --input: #465047;
+  --ring: #ff7a45;
+  --surface: #191d19;
+  --ticket: #ff9b70;
+  --brand-panel: #0d110e;
+  --brand-panel-foreground: #f5f7f2;
 }
 
 @layer base {
@@ -100,6 +101,7 @@
 
   html {
     @apply bg-background font-sans;
+    color-scheme: light;
   }
 
   body {
@@ -107,13 +109,29 @@
   }
 
   button:not(:disabled),
+  a,
   [role="button"]:not(:disabled) {
     cursor: pointer;
+    touch-action: manipulation;
   }
 
   ::selection {
     background: var(--primary);
     color: var(--primary-foreground);
+  }
+}
+
+.workspace-shell > main {
+  padding-bottom: calc(6.5rem + env(safe-area-inset-bottom));
+}
+
+@media (min-width: 64rem) {
+  .workspace-shell {
+    padding-left: 15rem;
+  }
+
+  .workspace-shell > main {
+    padding-bottom: 2.5rem;
   }
 }
 
@@ -147,5 +165,24 @@
     animation-duration: 0.01ms !important;
     animation-iteration-count: 1 !important;
     transition-duration: 0.01ms !important;
+  }
+}
+
+@media print {
+  body * {
+    visibility: hidden;
+  }
+
+  .credential-slip,
+  .credential-slip * {
+    visibility: visible;
+  }
+
+  .credential-slip {
+    position: fixed;
+    inset: 1.5cm;
+    border-color: #2c1d2b;
+    background: #ffffff;
+    color: #2c1d2b;
   }
 }

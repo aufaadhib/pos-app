@@ -31,10 +31,25 @@ export function createAuth({
       minPasswordLength: 8,
       maxPasswordLength: 128,
     },
+    user: {
+      additionalFields: {
+        mustChangePassword: {
+          type: "boolean",
+          defaultValue: false,
+          input: false,
+        },
+      },
+    },
     session: {
+      additionalFields: {
+        activeOutletId: {
+          type: "string",
+          required: false,
+          input: false,
+        },
+      },
       cookieCache: {
-        enabled: true,
-        maxAge: 5 * 60,
+        enabled: false,
       },
     },
     advanced: {

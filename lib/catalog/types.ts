@@ -11,6 +11,71 @@ export type CatalogActionState = {
 export type CatalogActor = {
   id: string;
   email: string;
+  role?: "owner" | "manager" | "cashier";
+};
+
+export type VariantOptionItem = {
+  id: string;
+  name: string;
+  priceAdjustment: string;
+  displayOrder: number;
+  status: "ACTIVE" | "ARCHIVED";
+  updatedAt: string;
+};
+
+export type VariantGroupItem = {
+  id: string;
+  productId: string;
+  name: string;
+  displayOrder: number;
+  status: "ACTIVE" | "ARCHIVED";
+  updatedAt: string;
+  options: VariantOptionItem[];
+};
+
+export type ModifierOptionItem = VariantOptionItem;
+
+export type ModifierGroupItem = {
+  id: string;
+  name: string;
+  description: string | null;
+  status: "ACTIVE" | "ARCHIVED";
+  updatedAt: string;
+  options: ModifierOptionItem[];
+};
+
+export type ProductModifierItem = {
+  modifierGroupId: string;
+  modifierGroupName: string;
+  minSelections: number;
+  maxSelections: number;
+  displayOrder: number;
+  status: "ACTIVE" | "ARCHIVED";
+  updatedAt: string;
+};
+
+export type AdvancedProductItem = CatalogProductItem & {
+  variantGroups: VariantGroupItem[];
+  modifierGroups: ProductModifierItem[];
+};
+
+export type OutletCatalogProductItem = CatalogProductItem & {
+  effectiveBasePrice: string;
+  isAvailable: boolean;
+  hasPriceOverride: boolean;
+  overrideUpdatedAt: string | null;
+  variantGroups: Array<Omit<VariantGroupItem, "options"> & {
+    options: Array<VariantOptionItem & {
+      effectivePriceAdjustment: string;
+      isAvailable: boolean;
+      hasPriceOverride: boolean;
+      overrideUpdatedAt: string | null;
+    }>;
+  }>;
+};
+
+export type OutletCatalogProductPage = Omit<CatalogProductPage, "items"> & {
+  items: OutletCatalogProductItem[];
 };
 
 export type CatalogCategoryItem = {

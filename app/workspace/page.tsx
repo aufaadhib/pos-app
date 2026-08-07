@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { AlertCircle, BookOpen, Clock3, Coffee, LayoutGrid, ShieldCheck } from "lucide-react";
+import { AlertCircle, BookOpen, Clock3, Coffee, MapPin, ReceiptText, ShieldCheck, Store, Users } from "lucide-react";
 
 import { WorkspaceHeader } from "@/components/workspace-header";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
@@ -8,6 +8,7 @@ import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { isAppRole, roleHasPermission, roleLabels } from "@/lib/auth/permissions";
 import { requirePermission } from "@/lib/auth/session";
+import { requireActiveOutlet } from "@/lib/outlets/context";
 
 export const dynamic = "force-dynamic";
 
@@ -25,9 +26,10 @@ export default async function WorkspacePage({ searchParams }: WorkspacePageProps
     searchParams,
   ]);
   const role = isAppRole(session.user.role) ? session.user.role : "cashier";
+  const activeOutlet = await requireActiveOutlet(session);
   const canViewDesignSystem = roleHasPermission(role, { designSystem: ["view"] });
   const currentTime = new Intl.DateTimeFormat("id-ID", {
-    timeZone: "Asia/Jakarta",
+    timeZone: activeOutlet.timezone,
     hour: "2-digit",
     minute: "2-digit",
     weekday: "long",
@@ -36,9 +38,9 @@ export default async function WorkspacePage({ searchParams }: WorkspacePageProps
   }).format(new Date());
 
   return (
-    <div className="min-h-svh bg-background">
-      <WorkspaceHeader canViewDesignSystem={canViewDesignSystem} />
-      <main className="mx-auto max-w-7xl px-5 py-8 sm:px-8 sm:py-10 lg:px-10">
+    <div className="workspace-shell min-h-svh bg-background">
+      <WorkspaceHeader activeOutletId={activeOutlet.id} activeRoute="workspace" canManageStaff={role !== "cashier"} canViewDesignSystem={canViewDesignSystem} role={role} />
+      <main className="mx-auto max-w-7xl px-4 py-6 sm:px-8 sm:py-8 lg:px-10" id="main-content">
         {query.access === "denied" && (
           <Alert className="mb-6" variant="destructive">
             <AlertCircle aria-hidden="true" />
@@ -49,22 +51,20 @@ export default async function WorkspacePage({ searchParams }: WorkspacePageProps
           </Alert>
         )}
 
-        <section className="grid gap-6 lg:grid-cols-[minmax(0,1.35fr)_minmax(18rem,0.65fr)]">
-          <div>
-            <p className="font-mono text-xs font-semibold tracking-widest text-success uppercase">
-              Workspace terlindungi
-            </p>
-            <h1 className="mt-3 font-heading text-3xl font-semibold tracking-tight sm:text-4xl">
+        <section className="grid overflow-hidden rounded-2xl border bg-card lg:grid-cols-[minmax(0,1.35fr)_minmax(18rem,0.65fr)]">
+          <div className="border-l-4 border-primary p-5 sm:p-7">
+            <p className="text-sm font-medium text-muted-foreground">Ringkasan layanan</p>
+            <h1 className="mt-2 text-balance font-heading text-2xl font-semibold tracking-tight sm:text-3xl">
               Selamat datang, {session.user.name}.
             </h1>
-            <p className="mt-3 max-w-2xl text-base leading-7 text-muted-foreground">
-              Fondasi akses Glutong POS sudah aktif. Modul transaksi akan ditambahkan pada tahap berikutnya.
+            <p className="mt-3 max-w-2xl text-base leading-6 text-muted-foreground">
+              Katalog dan transaksi outlet siap digunakan sesuai cakupan akses Anda.
             </p>
           </div>
-          <Card className="border border-border shadow-none">
+          <Card className="rounded-none border-0 border-t bg-muted/35 shadow-none ring-0 lg:border-t-0 lg:border-l">
             <CardHeader>
-              <CardDescription>Akun aktif</CardDescription>
-              <CardTitle className="text-xl">{session.user.email}</CardTitle>
+              <CardDescription>Outlet aktif</CardDescription>
+              <CardTitle className="text-xl">{activeOutlet.name}</CardTitle>
             </CardHeader>
             <CardContent className="flex flex-wrap items-center gap-3">
               <Badge variant="secondary" className="font-mono uppercase">
@@ -72,13 +72,14 @@ export default async function WorkspacePage({ searchParams }: WorkspacePageProps
               </Badge>
               <span className="flex items-center gap-2 font-mono text-xs text-muted-foreground">
                 <Clock3 aria-hidden="true" className="size-4" />
-                {currentTime} WIB
+                {currentTime}
               </span>
+              <span className="flex items-center gap-2 font-mono text-xs text-muted-foreground"><MapPin aria-hidden="true" className="size-4" />{activeOutlet.code}</span>
             </CardContent>
           </Card>
         </section>
 
-        <section aria-labelledby="module-heading" className="mt-10">
+        <section aria-labelledby="module-heading" className="mt-8">
           <div className="flex items-end justify-between gap-4">
             <div>
               <h2 id="module-heading" className="font-heading text-2xl font-semibold">
@@ -86,7 +87,7 @@ export default async function WorkspacePage({ searchParams }: WorkspacePageProps
               </h2>
               <p className="mt-1 text-muted-foreground">Ruang yang disiapkan untuk operasional outlet.</p>
             </div>
-            <Badge variant="outline">Fondasi</Badge>
+            <Badge variant="outline">{roleLabels[role]}</Badge>
           </div>
 
           <div className="mt-5 grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
@@ -99,20 +100,16 @@ export default async function WorkspacePage({ searchParams }: WorkspacePageProps
                 </CardHeader>
               </Card>
             </Link>
-            <Card className="border border-border shadow-none">
-              <CardHeader>
+            <Link className="rounded-xl focus-visible:ring-3 focus-visible:ring-ring/40 focus-visible:outline-none" href="/pos">
+              <Card className="h-full border border-border shadow-none transition-colors hover:border-primary"><CardHeader>
                 <Coffee aria-hidden="true" className="mb-3 size-6 text-primary" />
                 <CardTitle>Kasir & pesanan</CardTitle>
-                <CardDescription>Alur transaksi akan hadir pada milestone POS.</CardDescription>
-              </CardHeader>
-            </Card>
-            <Card className="border border-border shadow-none">
-              <CardHeader>
-                <LayoutGrid aria-hidden="true" className="mb-3 size-6 text-success" />
-                <CardTitle>Outlet & shift</CardTitle>
-                <CardDescription>Konteks outlet dan shift akan diverifikasi sebelum melayani.</CardDescription>
-              </CardHeader>
-            </Card>
+                <CardDescription>Buat pesanan dine-in atau takeaway dan selesaikan pembayaran.</CardDescription>
+              </CardHeader></Card>
+            </Link>
+            <Link className="rounded-xl focus-visible:ring-3 focus-visible:ring-ring/40 focus-visible:outline-none" href="/transactions"><Card className="h-full border border-border shadow-none transition-colors hover:border-primary"><CardHeader><ReceiptText aria-hidden="true" className="mb-3 size-6 text-primary" /><CardTitle>Riwayat transaksi</CardTitle><CardDescription>Lihat struk dan rincian penjualan outlet aktif.</CardDescription></CardHeader></Card></Link>
+            <Link className="rounded-xl focus-visible:ring-3 focus-visible:ring-ring/40 focus-visible:outline-none" href="/outlets"><Card className="h-full border border-border shadow-none transition-colors hover:border-primary"><CardHeader><Store aria-hidden="true" className="mb-3 size-6 text-success" /><CardTitle>Outlet</CardTitle><CardDescription>Lihat lokasi, zona waktu, dan cakupan operasional.</CardDescription></CardHeader></Card></Link>
+            {role !== "cashier" && <Link className="rounded-xl focus-visible:ring-3 focus-visible:ring-ring/40 focus-visible:outline-none" href="/staff"><Card className="h-full border border-border shadow-none transition-colors hover:border-primary"><CardHeader><Users aria-hidden="true" className="mb-3 size-6 text-success" /><CardTitle>Staf & akses</CardTitle><CardDescription>Kelola role, penugasan outlet, dan status akun.</CardDescription></CardHeader></Card></Link>}
             <Card className="border border-border shadow-none">
               <CardHeader>
                 <ShieldCheck aria-hidden="true" className="mb-3 size-6 text-foreground" />

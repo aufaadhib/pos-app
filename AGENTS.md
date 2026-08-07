@@ -25,6 +25,7 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
 4. Semua halaman harus responsif untuk mobile, tablet, dan desktop.
 5. Pertahankan konsistensi warna, spacing, typography, dan state komponen.
 6. Jika komponen shadcn/ui belum tersedia, tambahkan melalui CLI shadcn.
+7. Saya memiliki tambahan referensi pallet yang saya suka beserta ui dan ux di web https://ui8.net/nija-works-feba73/products/clapos
 
 ## Next.js Architecture Rules
 

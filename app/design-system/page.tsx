@@ -11,6 +11,7 @@ import { Input } from "@/components/ui/input";
 import { Separator } from "@/components/ui/separator";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Spinner } from "@/components/ui/spinner";
+import { isAppRole } from "@/lib/auth/permissions";
 import { requirePermission } from "@/lib/auth/session";
 
 export const dynamic = "force-dynamic";
@@ -20,26 +21,25 @@ export const metadata: Metadata = {
 };
 
 const colorTokens = [
-  { name: "Service Porcelain", className: "bg-background" },
-  { name: "Aubergine Ink", className: "bg-foreground" },
-  { name: "Saffron Action", className: "bg-primary" },
+  { name: "Rice Canvas", className: "bg-background" },
+  { name: "Nori Ink", className: "bg-foreground" },
+  { name: "Paprika Action", className: "bg-primary" },
+  { name: "Sage Accent", className: "bg-accent" },
   { name: "Herb Success", className: "bg-success" },
-  { name: "Tomato Error", className: "bg-destructive" },
   { name: "Steel Border", className: "bg-border" },
 ] as const;
 
 export default async function DesignSystemPage() {
-  await requirePermission({ designSystem: ["view"] });
+  const session = await requirePermission({ designSystem: ["view"] });
+  const role = isAppRole(session.user.role) ? session.user.role : "cashier";
 
   return (
-    <div className="min-h-svh bg-background">
-      <WorkspaceHeader activeRoute="design-system" canViewDesignSystem />
-      <main className="mx-auto max-w-7xl px-5 py-8 sm:px-8 sm:py-10 lg:px-10">
+    <div className="workspace-shell min-h-svh bg-background">
+      <WorkspaceHeader activeOutletId={session.session.activeOutletId} activeRoute="design-system" canManageStaff canViewDesignSystem role={role} />
+      <main className="mx-auto max-w-7xl px-4 py-6 sm:px-8 sm:py-8 lg:px-10" id="main-content">
         <div className="max-w-3xl">
-          <p className="font-mono text-xs font-semibold tracking-widest text-success uppercase">
-            Owner only · UI reference
-          </p>
-          <h1 className="mt-3 font-heading text-4xl font-semibold tracking-tight sm:text-5xl">
+          <p className="text-sm font-medium text-muted-foreground">Referensi khusus pemilik</p>
+          <h1 className="mt-1 font-heading text-3xl font-semibold tracking-tight sm:text-4xl">
             Design system Glutong
           </h1>
           <p className="mt-4 text-lg leading-7 text-muted-foreground">

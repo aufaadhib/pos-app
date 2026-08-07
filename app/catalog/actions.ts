@@ -86,7 +86,7 @@ async function executeCatalogAction<Input>(
   mutation: (input: Input, actor: CatalogActor) => Promise<unknown>,
   successMessage: string,
 ): Promise<CatalogActionState> {
-  const session = await requirePermission({ catalog: ["manage"] });
+  const session = await requirePermission({ catalog: ["manageMaster"] });
   const parsed = schema.safeParse(Object.fromEntries(formData));
 
   if (!parsed.success) {
