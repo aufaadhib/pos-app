@@ -2,12 +2,15 @@ import "server-only";
 
 import {
   CatalogStatus,
+  PaymentMethod,
+  PaymentSettlementStatus,
   OutletStatus,
   Prisma,
   SaleAuditAction,
 } from "@/generated/prisma/client";
 import { prisma } from "@/lib/prisma";
 import { calculateSaleTotals } from "@/lib/pos/pricing";
+import { calculateChannelPrice, calculateExpectedSettlement } from "@/lib/delivery/pricing";
 import type { CheckoutInput } from "@/lib/pos/validation";
 import type { CheckoutActionState, PosActor } from "@/lib/pos/types";
 
@@ -24,12 +27,14 @@ type ResolvedItem = {
   modifierUnitAmount: Prisma.Decimal;
   unitPrice: Prisma.Decimal;
   lineTotal: Prisma.Decimal;
+  directUnitPrice: Prisma.Decimal;
   variants: Array<{
     variantGroupId: string;
     variantGroupName: string;
     optionId: string;
     optionName: string;
     priceAdjustment: Prisma.Decimal;
+    directPriceAdjustment: Prisma.Decimal;
   }>;
   modifiers: Array<{
     modifierGroupId: string;
@@ -37,7 +42,16 @@ type ResolvedItem = {
     optionId: string;
     optionName: string;
     priceAdjustment: Prisma.Decimal;
+    directPriceAdjustment: Prisma.Decimal;
   }>;
+};
+
+type ResolvedDeliveryChannel = {
+  id: string;
+  markupRate: Prisma.Decimal;
+  estimatedFeeRate: Prisma.Decimal;
+  roundingUnit: number;
+  settlementDelayHours: number;
 };
 
 export class PosError extends Error {
@@ -73,15 +87,24 @@ export async function createSale(input: CheckoutInput, actor: PosActor): Promise
         });
         if (!outlet) throw new PosError("FORBIDDEN", "Outlet aktif tidak tersedia untuk akun ini.");
 
-        const items = await resolveCheckoutItems(transaction, input);
+        const channel = input.source.type === "DELIVERY_PLATFORM"
+          ? await transaction.outletDeliveryChannel.findFirst({
+            where: { id: input.source.channelId, outletId: outlet.id, isActive: true },
+            select: { id: true, markupRate: true, estimatedFeeRate: true, roundingUnit: true, settlementDelayHours: true },
+          })
+          : null;
+        if (input.source.type === "DELIVERY_PLATFORM" && !channel) throw new PosError("INVALID_CART", "Channel pengantaran tidak aktif. Muat ulang menu.");
+
+        const items = await resolveCheckoutItems(transaction, input, channel);
         const subtotal = items.reduce((sum, item) => sum.add(item.lineTotal), new Prisma.Decimal(0));
+        const directEquivalentAmount = items.reduce((sum, item) => sum.add(item.directUnitPrice.mul(item.quantity)), new Prisma.Decimal(0));
         const totals = calculateSaleTotals({
           subtotal,
-          serviceChargeRate: outlet.serviceChargeRate,
+          serviceChargeRate: channel ? new Prisma.Decimal(0) : outlet.serviceChargeRate,
           taxRate: outlet.taxRate,
-          pricesIncludeTax: outlet.pricesIncludeTax,
+          pricesIncludeTax: channel ? true : outlet.pricesIncludeTax,
         });
-        const payment = resolvePayment(input, totals.total);
+        const payment = resolvePayment(input, totals.total, directEquivalentAmount, channel);
         const { businessDate, dateToken } = getBusinessDate(outlet.timezone);
         const sequence = await transaction.receiptSequence.upsert({
           where: { outletId_businessDate: { outletId: outlet.id, businessDate } },
@@ -97,14 +120,16 @@ export async function createSale(input: CheckoutInput, actor: PosActor): Promise
             receiptNumber,
             businessDate,
             dailySequence: sequence.lastValue,
-            orderType: input.orderType,
-            tableLabel: input.orderType === "DINE_IN" ? input.tableLabel : null,
+            orderType: channel ? "DELIVERY" : input.orderType,
+            tableLabel: !channel && input.orderType === "DINE_IN" ? input.tableLabel : null,
+            channelId: channel?.id ?? null,
+            externalOrderId: input.source.type === "DELIVERY_PLATFORM" ? input.source.externalOrderId : null,
             subtotal: totals.subtotal,
-            serviceChargeRate: outlet.serviceChargeRate,
+            serviceChargeRate: channel ? 0 : outlet.serviceChargeRate,
             serviceChargeAmount: totals.serviceChargeAmount,
             taxRate: outlet.taxRate,
             taxAmount: totals.taxAmount,
-            pricesIncludeTax: outlet.pricesIncludeTax,
+            pricesIncludeTax: channel ? true : outlet.pricesIncludeTax,
             total: totals.total,
             createdByUserId: actor.id,
             createdByName: actor.name,
@@ -121,8 +146,9 @@ export async function createSale(input: CheckoutInput, actor: PosActor): Promise
                 modifierUnitAmount: item.modifierUnitAmount,
                 unitPrice: item.unitPrice,
                 lineTotal: item.lineTotal,
-                variants: { create: item.variants },
-                modifiers: { create: item.modifiers },
+                directUnitPrice: item.directUnitPrice,
+                variants: { create: item.variants.map((variant) => ({ variantGroupId: variant.variantGroupId, variantGroupName: variant.variantGroupName, optionId: variant.optionId, optionName: variant.optionName, priceAdjustment: variant.priceAdjustment })) },
+                modifiers: { create: item.modifiers.map((modifier) => ({ modifierGroupId: modifier.modifierGroupId, modifierGroupName: modifier.modifierGroupName, optionId: modifier.optionId, optionName: modifier.optionName, priceAdjustment: modifier.priceAdjustment })) },
               })),
             },
             payment: { create: payment },
@@ -140,7 +166,9 @@ export async function createSale(input: CheckoutInput, actor: PosActor): Promise
               outletId: outlet.id,
               itemCount: items.length,
               total: sale.total.toFixed(2),
-              paymentMethod: input.payment.method,
+              paymentMethod: channel ? PaymentMethod.DELIVERY_PLATFORM : input.payment!.method,
+              deliveryChannelId: channel?.id ?? null,
+              externalOrderId: input.source.type === "DELIVERY_PLATFORM" ? input.source.externalOrderId : null,
             },
           },
         });
@@ -150,6 +178,9 @@ export async function createSale(input: CheckoutInput, actor: PosActor): Promise
       if (error instanceof Prisma.PrismaClientKnownRequestError && ["P2002", "P2034"].includes(error.code)) {
         const saved = await findIdempotentSale(input.checkoutToken, input.outletId, actor.id);
         if (saved) return saved;
+        if (error.code === "P2002" && input.source.type === "DELIVERY_PLATFORM" && String(error.meta?.target).includes("externalOrderId")) {
+          throw new PosError("INVALID_CART", "Nomor order platform sudah pernah digunakan.");
+        }
         if (attempt < 2) continue;
       }
       throw error;
@@ -159,7 +190,7 @@ export async function createSale(input: CheckoutInput, actor: PosActor): Promise
 }
 
 /** Rebuilds cart prices and selection rules from fresh catalog records inside checkout. */
-async function resolveCheckoutItems(transaction: Prisma.TransactionClient, input: CheckoutInput): Promise<ResolvedItem[]> {
+async function resolveCheckoutItems(transaction: Prisma.TransactionClient, input: CheckoutInput, channel: ResolvedDeliveryChannel | null): Promise<ResolvedItem[]> {
   const productIds = Array.from(new Set(input.items.map((item) => item.productId)));
   const products = await transaction.product.findMany({
     where: { id: { in: productIds }, status: CatalogStatus.ACTIVE, category: { status: CatalogStatus.ACTIVE } },
@@ -169,6 +200,7 @@ async function resolveCheckoutItems(transaction: Prisma.TransactionClient, input
       sku: true,
       basePrice: true,
       outletOverrides: { where: { outletId: input.outletId }, select: { isAvailable: true, priceOverride: true } },
+      channelPrices: { where: { channelId: channel?.id ?? "" }, select: { priceOverride: true } },
       variantGroups: {
         where: { status: CatalogStatus.ACTIVE },
         orderBy: { displayOrder: "asc" },
@@ -210,7 +242,10 @@ async function resolveCheckoutItems(transaction: Prisma.TransactionClient, input
     const product = productMap.get(cartItem.productId)!;
     const productOverride = product.outletOverrides[0];
     if (productOverride?.isAvailable === false) throw new PosError("INVALID_CART", `${product.name} sudah tidak tersedia.`);
-    const baseUnitPrice = productOverride?.priceOverride ?? product.basePrice;
+    const directBaseUnitPrice = productOverride?.priceOverride ?? product.basePrice;
+    const baseUnitPrice = channel
+      ? product.channelPrices[0]?.priceOverride ?? calculateChannelPrice(directBaseUnitPrice, channel.markupRate, channel.roundingUnit)
+      : directBaseUnitPrice;
     const selectedVariantIds = new Set(cartItem.variantOptionIds);
     const variants = product.variantGroups.map((group) => {
       const selected = group.options.filter((option) => option.outletOverrides[0]?.isAvailable !== false && selectedVariantIds.has(option.id));
@@ -221,7 +256,10 @@ async function resolveCheckoutItems(transaction: Prisma.TransactionClient, input
         variantGroupName: group.name,
         optionId: option.id,
         optionName: option.name,
-        priceAdjustment: option.outletOverrides[0]?.priceAdjustmentOverride ?? option.priceAdjustment,
+        directPriceAdjustment: option.outletOverrides[0]?.priceAdjustmentOverride ?? option.priceAdjustment,
+        priceAdjustment: channel
+          ? calculateChannelPrice(option.outletOverrides[0]?.priceAdjustmentOverride ?? option.priceAdjustment, channel.markupRate, channel.roundingUnit)
+          : option.outletOverrides[0]?.priceAdjustmentOverride ?? option.priceAdjustment,
       };
     });
     if (variants.length !== selectedVariantIds.size) throw new PosError("INVALID_CART", `Pilihan varian ${product.name} tidak valid.`);
@@ -237,13 +275,17 @@ async function resolveCheckoutItems(transaction: Prisma.TransactionClient, input
         modifierGroupName: relation.modifierGroup.name,
         optionId: option.id,
         optionName: option.name,
-        priceAdjustment: option.priceAdjustment,
+        directPriceAdjustment: option.priceAdjustment,
+        priceAdjustment: channel ? calculateChannelPrice(option.priceAdjustment, channel.markupRate, channel.roundingUnit) : option.priceAdjustment,
       }));
     });
     if (modifiers.length !== selectedModifierIds.size) throw new PosError("INVALID_CART", `Pilihan modifier ${product.name} tidak valid.`);
 
     const variantUnitAmount = variants.reduce((sum, value) => sum.add(value.priceAdjustment), new Prisma.Decimal(0));
     const modifierUnitAmount = modifiers.reduce((sum, value) => sum.add(value.priceAdjustment), new Prisma.Decimal(0));
+    const directUnitPrice = directBaseUnitPrice
+      .add(variants.reduce((sum, value) => sum.add(value.directPriceAdjustment), new Prisma.Decimal(0)))
+      .add(modifiers.reduce((sum, value) => sum.add(value.directPriceAdjustment), new Prisma.Decimal(0)));
     const unitPrice = baseUnitPrice.add(variantUnitAmount).add(modifierUnitAmount);
     if (!unitPrice.equals(new Prisma.Decimal(cartItem.expectedUnitPrice))) {
       throw new PosError("PRICE_CHANGED", `Harga ${product.name} berubah. Muat ulang menu sebelum checkout.`);
@@ -259,6 +301,7 @@ async function resolveCheckoutItems(transaction: Prisma.TransactionClient, input
       modifierUnitAmount,
       unitPrice,
       lineTotal: unitPrice.mul(cartItem.quantity),
+      directUnitPrice,
       variants,
       modifiers,
     };
@@ -266,14 +309,29 @@ async function resolveCheckoutItems(transaction: Prisma.TransactionClient, input
 }
 
 /** Validates one payment against the authoritative total and returns its database shape. */
-function resolvePayment(input: CheckoutInput, total: Prisma.Decimal) {
-  if (input.payment.method !== "CASH") {
-    return { method: input.payment.method, amount: total, reference: input.payment.reference || null };
+function resolvePayment(input: CheckoutInput, total: Prisma.Decimal, directEquivalentAmount: Prisma.Decimal, channel: ResolvedDeliveryChannel | null) {
+  if (channel && input.source.type === "DELIVERY_PLATFORM") {
+    const expected = calculateExpectedSettlement(total, channel.estimatedFeeRate);
+    return {
+      method: PaymentMethod.DELIVERY_PLATFORM,
+      amount: total,
+      reference: input.source.externalOrderId,
+      settlementStatus: PaymentSettlementStatus.PENDING,
+      expectedFeeRate: channel.estimatedFeeRate,
+      expectedFeeAmount: expected.fee,
+      expectedNetAmount: expected.net,
+      directEquivalentAmount,
+      expectedSettlementAt: new Date(Date.now() + channel.settlementDelayHours * 60 * 60 * 1000),
+    };
   }
-  const tenderedAmount = new Prisma.Decimal(input.payment.tenderedAmount!);
+  const payment = input.payment!;
+  if (payment.method !== "CASH") {
+    return { method: payment.method, amount: total, reference: payment.reference || null };
+  }
+  const tenderedAmount = new Prisma.Decimal(payment.tenderedAmount!);
   if (tenderedAmount.lessThan(total)) throw new PosError("PAYMENT_INVALID", "Uang diterima kurang dari total pembayaran.");
   return {
-    method: input.payment.method,
+    method: payment.method,
     amount: total,
     reference: null,
     tenderedAmount,

@@ -91,6 +91,9 @@ export async function getCatalogProducts(
       name: true,
       sku: true,
       description: true,
+      imageUrl: true,
+      imagePositionX: true,
+      imagePositionY: true,
       basePrice: true,
       displayOrder: true,
       status: true,
@@ -117,6 +120,9 @@ export async function getCatalogProduct(id: string) {
       name: true,
       sku: true,
       description: true,
+      imageUrl: true,
+      imagePositionX: true,
+      imagePositionY: true,
       basePrice: true,
       displayOrder: true,
       status: true,
@@ -134,6 +140,9 @@ function serializeCatalogProduct(product: {
   name: string;
   sku: string | null;
   description: string | null;
+  imageUrl: string | null;
+  imagePositionX: number;
+  imagePositionY: number;
   basePrice: Prisma.Decimal;
   displayOrder: number;
   status: "ACTIVE" | "ARCHIVED";
@@ -148,6 +157,9 @@ function serializeCatalogProduct(product: {
     name: product.name,
     sku: product.sku,
     description: product.description,
+    imageUrl: product.imageUrl,
+    imagePositionX: product.imagePositionX,
+    imagePositionY: product.imagePositionY,
     basePrice: product.basePrice.toFixed(2),
     displayOrder: product.displayOrder,
     status: product.status,

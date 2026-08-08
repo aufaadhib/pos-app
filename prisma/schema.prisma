@@ -98,6 +98,7 @@ enum CatalogEntityType {
 enum CatalogAuditAction {
   CREATE
   UPDATE
+  IMAGE_CHANGE
   PRICE_CHANGE
   AVAILABILITY_CHANGE
   ASSIGN
@@ -130,6 +131,9 @@ model Product {
   normalizedName  String
   sku             String?                 @unique
   description     String?                 @db.VarChar(280)
+  imageUrl        String?                 @db.Text
+  imagePositionX  Int                     @default(50)
+  imagePositionY  Int                     @default(50)
   basePrice       Decimal                 @db.Decimal(12, 2)
   displayOrder    Int                     @default(0)
   status          CatalogStatus           @default(ACTIVE)
@@ -140,6 +144,7 @@ model Product {
   variantGroups   ProductVariantGroup[]
   modifierGroups  ProductModifierGroup[]
   outletOverrides OutletProductOverride[]
+  channelPrices   ChannelProductPrice[]
 
   @@unique([categoryId, normalizedName])
   @@index([categoryId, status, displayOrder])
@@ -293,6 +298,9 @@ enum AdminAuditEntityType {
   STAFF
   STAFF_ASSIGNMENT
   SESSION
+  DELIVERY_CHANNEL
+  CHANNEL_PRODUCT_PRICE
+  SETTLEMENT
 }
 
 enum AdminAuditAction {
@@ -333,6 +341,7 @@ model Outlet {
   variantOptionOverrides OutletVariantOptionOverride[]
   sales                  Sale[]
   receiptSequences       ReceiptSequence[]
+  deliveryChannels       OutletDeliveryChannel[]
 
   @@index([status, name])
   @@map("outlet")
@@ -341,6 +350,7 @@ model Outlet {
 enum SaleOrderType {
   DINE_IN
   TAKEAWAY
+  DELIVERY
 }
 
 enum PaymentMethod {
@@ -349,10 +359,65 @@ enum PaymentMethod {
   DEBIT_CARD
   CREDIT_CARD
   BANK_TRANSFER
+  DELIVERY_PLATFORM
+}
+
+enum DeliveryProvider {
+  GOFOOD
+  GRABFOOD
+  SHOPEEFOOD
+}
+
+enum PaymentSettlementStatus {
+  NOT_APPLICABLE
+  PENDING
+  SETTLED
+}
+
+enum SettlementBatchStatus {
+  CONFIRMED
+  REVERSED
 }
 
 enum SaleAuditAction {
   CREATE
+  SETTLE
+  UNSETTLE
+}
+
+model OutletDeliveryChannel {
+  id                   String                @id @default(cuid())
+  outletId             String
+  provider             DeliveryProvider
+  isActive             Boolean               @default(false)
+  markupRate           Decimal               @default(0) @db.Decimal(5, 2)
+  estimatedFeeRate     Decimal               @default(0) @db.Decimal(5, 2)
+  roundingUnit         Int                   @default(500)
+  settlementDelayHours Int                   @default(24)
+  createdAt            DateTime              @default(now())
+  updatedAt            DateTime              @updatedAt
+  outlet               Outlet                @relation(fields: [outletId], references: [id], onDelete: Restrict)
+  productPrices        ChannelProductPrice[]
+  sales                Sale[]
+  settlements          PlatformSettlement[]
+
+  @@unique([outletId, provider])
+  @@index([outletId, isActive])
+  @@map("outlet_delivery_channel")
+}
+
+model ChannelProductPrice {
+  channelId     String
+  productId     String
+  priceOverride Decimal               @db.Decimal(12, 2)
+  createdAt     DateTime              @default(now())
+  updatedAt     DateTime              @updatedAt
+  channel       OutletDeliveryChannel @relation(fields: [channelId], references: [id], onDelete: Restrict)
+  product       Product               @relation(fields: [productId], references: [id], onDelete: Restrict)
+
+  @@id([channelId, productId])
+  @@index([productId, channelId])
+  @@map("channel_product_price")
 }
 
 model ReceiptSequence {
@@ -367,35 +432,40 @@ model ReceiptSequence {
 }
 
 model Sale {
-  id                  String         @id @default(cuid())
-  checkoutToken       String         @unique
+  id                  String                 @id @default(cuid())
+  checkoutToken       String                 @unique
   outletId            String
   receiptNumber       String
-  businessDate        DateTime       @db.Date
+  businessDate        DateTime               @db.Date
   dailySequence       Int
   orderType           SaleOrderType
-  tableLabel          String?        @db.VarChar(40)
-  subtotal            Decimal        @db.Decimal(14, 2)
-  serviceChargeRate   Decimal        @db.Decimal(5, 2)
-  serviceChargeAmount Decimal        @db.Decimal(14, 2)
-  taxRate             Decimal        @db.Decimal(5, 2)
-  taxAmount           Decimal        @db.Decimal(14, 2)
+  tableLabel          String?                @db.VarChar(40)
+  channelId           String?
+  externalOrderId     String?                @db.VarChar(80)
+  subtotal            Decimal                @db.Decimal(14, 2)
+  serviceChargeRate   Decimal                @db.Decimal(5, 2)
+  serviceChargeAmount Decimal                @db.Decimal(14, 2)
+  taxRate             Decimal                @db.Decimal(5, 2)
+  taxAmount           Decimal                @db.Decimal(14, 2)
   pricesIncludeTax    Boolean
-  total               Decimal        @db.Decimal(14, 2)
+  total               Decimal                @db.Decimal(14, 2)
   createdByUserId     String
   createdByName       String
   createdByEmail      String
-  completedAt         DateTime       @default(now())
-  createdAt           DateTime       @default(now())
-  outlet              Outlet         @relation(fields: [outletId], references: [id], onDelete: Restrict)
+  completedAt         DateTime               @default(now())
+  createdAt           DateTime               @default(now())
+  outlet              Outlet                 @relation(fields: [outletId], references: [id], onDelete: Restrict)
+  channel             OutletDeliveryChannel? @relation(fields: [channelId], references: [id], onDelete: Restrict)
   items               SaleItem[]
   payment             SalePayment?
   auditLogs           SaleAuditLog[]
 
   @@unique([outletId, receiptNumber])
   @@unique([outletId, businessDate, dailySequence])
+  @@unique([channelId, externalOrderId])
   @@index([outletId, completedAt])
   @@index([createdByUserId, completedAt])
+  @@index([channelId, completedAt])
   @@map("sale")
 }
 
@@ -412,6 +482,7 @@ model SaleItem {
   modifierUnitAmount Decimal            @db.Decimal(14, 2)
   unitPrice          Decimal            @db.Decimal(14, 2)
   lineTotal          Decimal            @db.Decimal(14, 2)
+  directUnitPrice    Decimal            @db.Decimal(14, 2)
   sale               Sale               @relation(fields: [saleId], references: [id], onDelete: Restrict)
   variants           SaleItemVariant[]
   modifiers          SaleItemModifier[]
@@ -450,18 +521,69 @@ model SaleItemModifier {
 }
 
 model SalePayment {
-  id             String        @id @default(cuid())
-  saleId         String        @unique
-  method         PaymentMethod
-  amount         Decimal       @db.Decimal(14, 2)
-  reference      String?       @db.VarChar(80)
-  tenderedAmount Decimal?      @db.Decimal(14, 2)
-  changeAmount   Decimal?      @db.Decimal(14, 2)
-  createdAt      DateTime      @default(now())
-  sale           Sale          @relation(fields: [saleId], references: [id], onDelete: Restrict)
+  id                     String                   @id @default(cuid())
+  saleId                 String                   @unique
+  method                 PaymentMethod
+  amount                 Decimal                  @db.Decimal(14, 2)
+  reference              String?                  @db.VarChar(80)
+  tenderedAmount         Decimal?                 @db.Decimal(14, 2)
+  changeAmount           Decimal?                 @db.Decimal(14, 2)
+  settlementStatus       PaymentSettlementStatus  @default(NOT_APPLICABLE)
+  expectedFeeRate        Decimal?                 @db.Decimal(5, 2)
+  expectedFeeAmount      Decimal?                 @db.Decimal(14, 2)
+  expectedNetAmount      Decimal?                 @db.Decimal(14, 2)
+  directEquivalentAmount Decimal?                 @db.Decimal(14, 2)
+  expectedSettlementAt   DateTime?
+  createdAt              DateTime                 @default(now())
+  sale                   Sale                     @relation(fields: [saleId], references: [id], onDelete: Restrict)
+  settlementItems        PlatformSettlementItem[]
 
   @@index([method, createdAt])
+  @@index([settlementStatus, expectedSettlementAt])
   @@map("sale_payment")
+}
+
+model PlatformSettlement {
+  id                      String                   @id @default(cuid())
+  channelId               String
+  reference               String                   @db.VarChar(80)
+  grossAmount             Decimal                  @db.Decimal(14, 2)
+  platformFeeAmount       Decimal                  @db.Decimal(14, 2)
+  merchantPromotionAmount Decimal                  @db.Decimal(14, 2)
+  otherAdjustmentAmount   Decimal                  @db.Decimal(14, 2)
+  otherAdjustmentNote     String?                  @db.VarChar(240)
+  netReceivedAmount       Decimal                  @db.Decimal(14, 2)
+  receivedAt              DateTime
+  status                  SettlementBatchStatus    @default(CONFIRMED)
+  confirmedByUserId       String
+  confirmedByName         String
+  confirmedByEmail        String
+  reversedAt              DateTime?
+  reversedByUserId        String?
+  reversedByEmail         String?
+  reversalReason          String?                  @db.VarChar(240)
+  createdAt               DateTime                 @default(now())
+  channel                 OutletDeliveryChannel    @relation(fields: [channelId], references: [id], onDelete: Restrict)
+  items                   PlatformSettlementItem[]
+
+  @@unique([channelId, reference])
+  @@index([channelId, receivedAt])
+  @@index([status, receivedAt])
+  @@map("platform_settlement")
+}
+
+model PlatformSettlementItem {
+  settlementId           String
+  salePaymentId          String
+  grossAmount            Decimal            @db.Decimal(14, 2)
+  directEquivalentAmount Decimal            @db.Decimal(14, 2)
+  expectedNetAmount      Decimal            @db.Decimal(14, 2)
+  settlement             PlatformSettlement @relation(fields: [settlementId], references: [id], onDelete: Restrict)
+  salePayment            SalePayment        @relation(fields: [salePaymentId], references: [id], onDelete: Restrict)
+
+  @@id([settlementId, salePaymentId])
+  @@index([salePaymentId])
+  @@map("platform_settlement_item")
 }
 
 model SaleAuditLog {

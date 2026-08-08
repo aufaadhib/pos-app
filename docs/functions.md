@@ -12,6 +12,7 @@ Dokumen ini mencatat function dan component function yang ditambahkan pada miles
 | `requirePermission()` | Satu object permission terpusat | Session valid | Memeriksa permission melalui Better Auth menggunakan user ID terbaru; mengalihkan akses gagal ke workspace. |
 | `requirePasswordReadySession()` | Tidak ada | Session valid | Mengalihkan akun dengan password sementara ke `/change-password` sebelum area operasional dapat dibuka. |
 | `seedInitialOwner()` | Environment bootstrap | Data user owner | Membuat owner hanya pada database kosong, no-op untuk owner identik, dan abort untuk akun yang bertentangan. Menulis user/account dan password hash melalui Better Auth. |
+| `seedDrinkMenu()` | Flag CLI `--development` | Jumlah produk dibuat/dilewati | Menambahkan kategori Minuman dan sembilan produk secara idempotent, menolak production, serta menulis audit memakai owner pertama. |
 | `createPrismaClient()` | `DATABASE_URL` dari environment | Prisma client dengan Neon adapter | Membentuk koneksi pooled untuk runtime; instance digunakan ulang saat development. |
 | `parseServerEnvironment()` | Object environment | Environment tervalidasi | Memvalidasi URL database, base URL auth, dan secret. Melempar error tanpa membocorkan nilai rahasia. |
 | `parseOwnerEnvironment()` | Object environment | Environment owner tervalidasi | Menambahkan validasi nama/email serta password bootstrap minimum 12 karakter. |
@@ -69,7 +70,7 @@ Dokumen ini mencatat function dan component function yang ditambahkan pada miles
 | `normalizeSku()` | SKU opsional | SKU uppercase atau `null` | Menyamakan format SKU sebelum validasi dan penyimpanan. |
 | `parseRupiahToMinorUnit()` | String Rupiah | String integer atau `null` | Memvalidasi nominal bulat tanpa operasi floating point. |
 | `formatRupiah()` | String decimal database | String mata uang IDR | Memformat harga untuk UI Bahasa Indonesia; tanpa side effect. |
-| `getProductMonogram()` | Nama produk | Inisial 1–2 huruf | Membentuk placeholder produk code-native; tanpa gambar eksternal. |
+| `getProductMonogram()` | Nama produk | Inisial 1–2 huruf | Membentuk fallback code-native ketika gambar produk tidak tersedia atau gagal dimuat. |
 | `getCatalogCategories()` | Flag untuk menyertakan arsip | Daftar DTO kategori | Membaca kategori beserta jumlah produk aktif/total secara dynamic. |
 | `getCatalogProducts()` | Search/filter/page dan hak melihat arsip | DTO halaman produk | Menjalankan pencarian nama/SKU case-insensitive dan pagination 20 item di server. |
 | `getCatalogProduct()` | Product ID | DTO produk atau `null` | Membaca detail produk yang sudah diserialisasi aman untuk UI. |
@@ -97,6 +98,11 @@ Dokumen ini mencatat function dan component function yang ditambahkan pada miles
 | `writeAudit()`, `writeChangeAudits()` | Snapshot, actor, action | `void` | Menulis audit dalam transaction yang sama; memisahkan perubahan harga dan urutan. |
 | `categorySnapshot()`, `productSnapshot()`, `getChangedFields()` | Record sebelum/sesudah | JSON dan daftar field | Menyerialisasi Decimal/Date secara aman serta menentukan jenis audit yang diperlukan. |
 | `serializeCatalogProduct()` | Record Prisma terpilih | DTO produk | Mengubah Decimal dan Date menjadi string sebelum data melewati batas Server Component. |
+| `validateProductImage()` | File upload | MIME dan ekstensi tervalidasi | Membatasi hasil JPEG/PNG/WebP hingga 3 MB dan mencocokkan MIME dengan signature biner sebelum upload. |
+| `saveProductImage()` | Product ID, file, actor | URL Blob | Mengunggah gambar baru, menyimpan URL dan audit secara atomic, mengompensasi blob baru jika database gagal, lalu membersihkan blob lama secara best-effort. |
+| `removeProductImage()` | Product ID dan actor | `void` | Mengosongkan URL serta menulis audit dalam transaction sebelum menghapus blob lama secara best-effort. |
+| `saveProductImagePosition()` | Product ID, posisi X/Y, actor | `void` | Menyimpan titik fokus 0–100 persen dan audit secara atomic untuk crop produk 1:1. |
+| `saveProductImageAction()`, `removeProductImageAction()`, `saveProductImagePositionAction()` | State dan FormData | `CatalogActionState` | Mengulang permission owner, validasi input, mutation gambar, dan revalidation katalog/POS di server. |
 
 ## Katalog lanjutan dan override outlet
 
@@ -125,7 +131,7 @@ Dokumen ini mencatat function dan component function yang ditambahkan pada miles
 | --- | --- | --- | --- |
 | `calculateSaleTotals()` | Subtotal Decimal, tarif layanan/pajak, flag harga inklusif | Snapshot total Decimal | Menghitung layanan, pajak, dan total dengan pembulatan half-up ke Rupiah tanpa floating point. |
 | `getPosMenu()` | Outlet, user, role | `PosMenu` atau `null` | Membaca maksimal 300 produk aktif beserta harga override, varian, dan modifier yang tersedia pada outlet. |
-| `getSalesPage()` | Outlet dan halaman | Halaman transaksi | Membaca 20 transaksi terbaru per halaman tanpa cache persisten. |
+| `getSalesPage()` | Outlet, halaman, filter sumber/settlement | Halaman transaksi | Membaca 20 transaksi terbaru per halaman tanpa cache persisten. |
 | `getSaleDetail()` | Sale ID dan outlet aktif | Detail struk atau `null` | Membatasi detail struk ke outlet aktif dan mengubah Decimal/timestamp menjadi DTO serializable. |
 | `createSale()` | Checkout tervalidasi dan actor | Hasil checkout | Menjalankan validasi harga fresh, nomor struk, sale, item, pembayaran, dan audit dalam transaction serializable; checkout token membuat retry idempoten. |
 | `resolveCheckoutItems()` | Prisma transaction dan cart | Snapshot item | Memvalidasi status produk, override, satu varian per grup, min/max modifier, serta harga yang dilihat kasir. |
@@ -133,10 +139,12 @@ Dokumen ini mencatat function dan component function yang ditambahkan pada miles
 | `getBusinessDate()` | Zona waktu outlet | Tanggal bisnis dan token struk | Mengubah waktu saat ini menjadi tanggal operasional outlet tanpa menyimpan waktu lokal sebagai UTC palsu. |
 | `findIdempotentSale()`, `serializeSaleResult()` | Token/record sale | Hasil action | Mengembalikan transaksi retry milik actor yang sama dan menolak token milik actor lain. |
 | `checkoutSaleAction()` | Payload Client Component | `CheckoutActionState` | Memvalidasi Zod, session, permission `pos:operate`, menjalankan service, lalu merevalidasi riwayat. |
-| `PosRegister()` | Menu outlet | Register interaktif | Mengelola pencarian, filter kategori, cart lokal, konfigurasi item, dan pembukaan checkout. |
+| `PosRegister()` | Menu outlet | Register interaktif | Mengelola toolbar pencarian, rail kategori yang dapat disembunyikan, grid produk dengan indikator jumlah, penggabungan item identik, cart lokal, konfigurasi item, dan pembukaan checkout. |
+| `hasSameCartConfiguration()`, `hasSameSelection()` | Dua konfigurasi cart | Boolean | Menggabungkan produk, varian, modifier, dan catatan yang sama; konfigurasi berbeda tetap menjadi baris terpisah. |
 | `ProductConfigurator()` | Produk dan callback cart | Dialog pilihan | Mengumpulkan satu pilihan per grup varian, modifier sesuai batas, jumlah, dan catatan item. |
 | `CartPanel()` | Cart, total preview, callback | Ticket rail | Menampilkan item, kontrol jumlah/hapus, pajak/layanan, dan CTA pembayaran pada desktop/mobile. |
-| `CheckoutDialog()` | Cart, menu, total, state dialog | Dialog pembayaran | Mengumpulkan jenis order, meja, metode, tunai/referensi, memanggil action, dan menampilkan toast. |
+| `CheckoutDialog()` | Cart, menu, total, state dialog | Dialog pembayaran dan struk | Mengumpulkan jenis order, meja, metode, tunai/referensi, memanggil action, lalu mempertahankan dialog untuk menampilkan transaksi berhasil tanpa berpindah halaman. |
+| `ReceiptPreview()` | Menu outlet, snapshot checkout, callback tutup | Struk transaksi | Menampilkan rincian pembayaran setelah checkout dan membuka dialog cetak browser dengan format termal 80 mm. |
 | `parseMoneyToMinor()`, `minorToMoney()`, `formatMinor()` | String atau integer minor unit | Bentuk uang lain | Menjaga kalkulasi preview sebagai integer minor unit dan memakai `Intl` hanya untuk tampilan. |
 | `calculateClientTotals()`, `parseRate()`, `roundDivide()`, `maxMinor()` | Minor unit dan tarif | Preview checkout | Menyamakan urutan serta pembulatan preview client dengan server tanpa menjadikannya sumber kebenaran. |
 | `formatRate()`, `productMonogram()` | Rate atau nama | Label UI | Membuat label persentase dan marker dua huruf tanpa asset gambar. |
@@ -144,6 +152,32 @@ Dokumen ini mencatat function dan component function yang ditambahkan pada miles
 | `PosPage()`, `TransactionsPage()`, `SaleDetailPage()` | Session, outlet, route/search params | Halaman dynamic | Memeriksa permission dan outlet aktif dekat sumber data sebelum merender register atau struk. |
 | `PosLoading()`, `TransactionsLoading()` | Tidak ada | Skeleton konten | Menampilkan loading hanya pada bagian yang mengambil data sehingga navigasi tetap interaktif. |
 | `formatSaleDate()`, `paymentLabel()` | Timestamp/metode | Label transaksi | Menampilkan waktu dalam zona outlet dan nama metode dalam Bahasa Indonesia. |
+| `orderLabel()`, `transactionPageHref()` | Sale dan filter aktif | Label/URL | Menampilkan sumber order serta mempertahankan filter ketika halaman transaksi berubah. |
+
+## Channel ojol dan settlement
+
+| Function | Input | Output | Tujuan dan side effect |
+| --- | --- | --- | --- |
+| `calculateChannelPrice()` | Harga direct, markup, unit pembulatan | Harga channel Decimal | Menaikkan harga secara proporsional dan membulatkan harga positif ke kelipatan Rp500 berikutnya. |
+| `calculateExpectedSettlement()` | Gross dan estimasi fee | Fee dan net Decimal | Menghitung estimasi penerimaan dengan pembulatan half-up ke Rupiah. |
+| `calculateSettlementNet()` | Gross, fee, promo, penyesuaian | Net Decimal | Menjadi satu rumus otoritatif untuk validasi transfer platform. |
+| `saveDeliveryChannel()` | Konfigurasi outlet dan actor | Channel tersimpan | Memvalidasi scope outlet, upsert konfigurasi, dan menulis audit dalam transaction. |
+| `saveChannelProductPrice()` | Channel, produk, harga opsional, actor | Override atau `null` | Menyimpan harga final kelipatan Rp500 yang lebih tinggi dari harga outlet, atau menghapus override. |
+| `createSettlementBatch()` | Transaksi pending, rincian transfer, actor | Batch settlement | Memastikan satu channel/outlet, menyeimbangkan net, menandai pembayaran settled, dan menulis audit atomically. |
+| `reverseSettlementBatch()` | Batch, alasan, actor owner | Batch reversed | Mengembalikan pembayaran ke pending tanpa menghapus batch atau jejak audit. |
+| `requireOutletAccess()` | Prisma transaction, outlet, actor | `void` | Menolak operasi di luar outlet penugasan manager; owner dapat mengakses seluruh outlet. |
+| `channelSnapshot()`, `settlementSnapshot()` | Record Decimal | JSON audit | Menserialisasi nilai keuangan tanpa melewatkan object Prisma internal. |
+| `getDeliveryManagement()` | Outlet, user, role | DTO pengelolaan | Membaca konfigurasi, maksimal 300 produk, 500 piutang terdekat, 20 batch terbaru, dan agregat keuangan fresh. |
+| `getSupportedDeliveryProviders()` | Tidak ada | Daftar provider | Menjaga tiga kartu provider tetap tersedia sebelum konfigurasi database dibuat. |
+| Action settlement | State dan FormData | `DeliveryActionState` | Mengulang Zod, session, permission, actor tepercaya, mutation, dan revalidation route di server. |
+| `DeliveryManagement()` | Outlet, DTO, permission | Workspace responsif | Menyusun ringkasan piutang, pengaturan channel/harga, rekonsiliasi, dan riwayat batch. |
+| `SettlementsPage()`, `SettlementsLayout()`, `SettlementsLoading()` | Session dan outlet aktif | Halaman/shell/skeleton | Menjaga authorization, navigasi persisten, dan loading hanya pada konten settlement. |
+| `ChannelConfigForm()`, `ProductPriceOverrideForm()` | Konfigurasi dan produk | Form owner | Mengubah markup/fee/delay serta pengecualian harga sambil memperlihatkan estimasi net dan selisih. |
+| `SettlementForm()` | Channel dan pembayaran pending | Form batch | Memilih transaksi, menghitung gross/net preview, dan mengirim rincian transfer aktual. |
+| `ReverseSettlementForm()` | Outlet dan batch | Form pembalikan | Mengumpulkan alasan eksplisit sebelum owner membalik settlement. |
+| `SummaryCard()`, `NumberField()`, `MoneyField()`, `ReadOnlyMoney()` | Nilai tampilan/form | Komponen UI | Menjaga metric serta input keuangan konsisten dan responsif tanpa dependency baru. |
+| `useActionToast()` | Action state | Side effect toast | Menampilkan hasil mutation menggunakan provider notifikasi global. |
+| `moneyValue()`, `formatRupiah()`, `formatDate()`, `toLocalDateTime()`, `toIsoDateTime()` | Nilai form/tanggal | String terformat | Menormalisasi input Rupiah dan waktu lokal browser sebelum melewati Server Action. |
 
 ## Interaksi pengguna
 
@@ -155,8 +189,8 @@ Dokumen ini mencatat function dan component function yang ditambahkan pada miles
 | `ThemeToggle()` | `className` opsional | Pemilih tema | Menampilkan pilihan terang/sistem/gelap dan menyimpan pilihan melalui `next-themes`. |
 | `handleThemeChange()` | Nama tema | `void` | Memperbarui dan menyimpan tema pengguna. |
 | `subscribeToHydration()` | Tidak ada | Unsubscribe function | Memberi `useSyncExternalStore` snapshot hydration tanpa effect/setState tambahan. |
-| `SignOutButton()` | Tidak ada | Tombol keluar | Menampilkan pending state selama logout. |
-| `handleSignOut()` | Tidak ada | Promise | Menghapus session lewat Better Auth lalu mengganti route ke `/sign-in`. |
+| `SignOutButton()` | Tidak ada | Tombol keluar | Menampilkan pending state dan feedback kegagalan logout. |
+| `handleSignOut()` | Tidak ada | Promise | Menghapus session lewat Better Auth lalu membuka ulang `/sign-in` agar state autentikasi bersih. |
 
 ## Route dan komposisi tampilan
 
@@ -170,7 +204,8 @@ Dokumen ini mencatat function dan component function yang ditambahkan pada miles
 | `proxy()` | `NextRequest` | `NextResponse` | Melakukan redirect optimistis dari keberadaan cookie saja; tidak menjadi kontrol authorization. |
 | `BrandMark()` | Opsi inverse/compact/class | Wordmark | Merender identitas code-native tanpa asset gambar eksternal. |
 | `ServiceTicketRail()` | Tidak ada | Ordered list | Menjelaskan urutan Masuk → Periksa → Melayani khusus layar login. |
-| `WorkspaceHeader()` | Role, permission navigasi, outlet aktif, route aktif | Shell navigasi responsif | Menyusun sidebar desktop/tablet landscape, app bar serta bottom navigation mobile, menampilkan label role aktual, pemilih outlet, tema, dan logout tanpa mengubah permission server. |
+| `WorkspaceHeader()` | Role, permission navigasi, outlet aktif, route aktif | Shell navigasi responsif | Menyusun sidebar desktop yang dapat diperkecil, app bar serta bottom navigation mobile, menampilkan label role aktual, pemilih outlet, tema, dan logout tanpa mengubah permission server. |
+| `WorkspaceSidebarPreference()` | Nilai awal sidebar dari cookie | Checkbox kontrol sidebar | Menyimpan pilihan kecil/besar selama satu tahun dan memulihkannya setelah navigasi cache, reload, atau berpindah layout. |
 | `CatalogLayout()` | Child route katalog | Shell katalog terlindungi | Membaca session fresh, menentukan navigasi sesuai role, dan mempertahankan `WorkspaceHeader` saat konten katalog melakukan streaming. |
 | `CatalogPage()` | URL search params | Boundary katalog | Segera merender `<Suspense>` dengan skeleton tanpa menunggu query katalog. |
 | `CatalogContent()` | URL search params | Konten katalog dynamic | Memvalidasi `catalog:view`, membaca kategori/produk fresh, lalu mengganti skeleton melalui streaming; tidak mengubah data. |
@@ -185,7 +220,11 @@ Dokumen ini mencatat function dan component function yang ditambahkan pada miles
 | `CatalogLoading()` | Tidak ada | Skeleton konten | Menjadi fallback route dan fallback `<Suspense>` hanya di dalam layout katalog, sehingga sidebar tetap interaktif selama data menunggu. |
 | `CatalogError()` | Error dan callback reset | Error boundary | Menyediakan pemulihan aman saat pembacaan katalog gagal. |
 | `CatalogTextField()`, `CatalogActionFeedback()`, `toFieldErrors()` | Props field/action | Kontrol form | Menyatukan relasi label, pesan Zod, dan feedback action di dialog katalog. |
-| `ProductMonogram()`, `CatalogEmptyState()` | Nama/status katalog | Presentasi | Menampilkan placeholder code-native dan arahan empty state sesuai role. |
+| `ProductImage()` | URL, nama, ukuran dan posisi fokus | Slot gambar atau monogram | Merender `next/image` pada kualitas 95 dengan `object-position` responsif, alt bermakna, dan fallback monogram. |
+| `ProductImageManager()`, `ProductImagePositionEditor()` | DTO produk | Form upload/hapus dan editor fokus | Mengelola satu gambar master serta posisi crop melalui drag, touch, atau tombol panah dengan pending state dan feedback toast. |
+| `compressProductImage()`, `findHighestQualityImage()`, `canvasToBlob()` | File di atas 3 MB | File dengan format asli maksimal 3 MB | Mempertahankan JPEG/PNG/WebP, resolusi hingga 4096px, mencari kualitas tertinggi untuk format lossy, dan baru mengecilkan dimensi bila masih diperlukan. |
+| `getProductImageClientError()`, `formatImageSize()` | File atau byte | Pesan/label ukuran | Memberi validasi format dan feedback ukuran kompresi tanpa menjadi pengganti validasi server. |
+| `CatalogEmptyState()` | Hak kelola dan kondisi katalog | Presentasi | Menampilkan arahan empty state sesuai role dan ketersediaan kategori. |
 | `singleValue()` | Search param tunggal/array | String opsional | Membatasi nilai URL sebelum masuk ke schema Zod. |
 | `runCatalogE2E()` | Environment test | Exit process | Membuat akun role sementara, menjalankan Playwright live, dan selalu membersihkan fixture. |
 | `createTemporaryTestAccount()`, `cleanupCatalogFixture()`, `delay()` | Fixture E2E | `void` | Menangani setup idempoten, retry Neon singkat, dan cleanup data test. |
@@ -211,7 +250,7 @@ Dokumen ini mencatat function dan component function yang ditambahkan pada miles
 | `Select*` | Props Base UI select | Primitive select | Menyediakan pilihan kategori yang keyboard-accessible dan tersambung ke form. |
 | `SearchableSelect()` | Nama field, opsi, nilai, dan state opsional | Combobox satu pilihan | Menampilkan input pencarian dengan panel selalu di bawah kontrol, memfilter label secara lokal, dan mengirim value terpilih melalui form; callback perubahan hanya berjalan bila diberikan. |
 | `ToastProvider()` | Tidak ada | React Toastify container | Memasang satu region notifikasi sukses responsif di kanan-bawah, menghormati safe area, dan menutup toast otomatis setelah empat detik. |
-| `useAutoCloseDialogAction()` | Server Action, initial state, dan flag penutupan | State/action form serta kontrol dialog | Menjalankan action, memanggil `toast.success()` pada hasil sukses, lalu menutup dialog bila diaktifkan; error tetap mempertahankan dialog dan pembuatan staf dapat menonaktifkan auto-close untuk menampilkan kredensial. |
+| `useAutoCloseDialogAction()` | Server Action, initial state, dan flag penutupan | State/action form serta kontrol dialog | Menjalankan action, menampilkan toast sukses/error, lalu menutup dialog hanya pada hasil sukses bila diaktifkan. |
 | `DropdownMenu*` | Props Base UI menu | Primitive menu | Menyediakan fondasi menu aksi terstruktur untuk pertumbuhan katalog. |
 | `Table*` | Props elemen tabel | Primitive tabel | Menjaga struktur semantik daftar produk pada desktop/tablet landscape. |
 | `Textarea()` | Props textarea native | Textarea | Input deskripsi dengan focus ring dan state invalid/disabled konsisten. |

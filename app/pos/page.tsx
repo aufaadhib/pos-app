@@ -17,5 +17,5 @@ export default async function PosPage() {
   const activeOutlet = await requireActiveOutlet(session);
   const menu = await getPosMenu(activeOutlet.id, session.user.id, session.user.role);
   if (!menu) redirect("/select-outlet");
-  return <main className="mx-auto max-w-[100rem] px-4 py-5 pb-40 sm:px-8 sm:py-8 lg:px-8 xl:pb-8" id="main-content"><PosRegister menu={menu} /></main>;
+  return <main className="max-w-none px-3 py-3 pb-40 sm:px-4 sm:py-4 xl:pb-4" id="main-content"><PosRegister menu={menu} /></main>;
 }

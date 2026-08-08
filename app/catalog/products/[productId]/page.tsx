@@ -10,6 +10,7 @@ import {
   VariantOptionDialog,
 } from "@/components/catalog/advanced-catalog";
 import { Badge } from "@/components/ui/badge";
+import { ProductImage } from "@/components/product-image";
 import { buttonVariants } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { requirePermission } from "@/lib/auth/session";
@@ -34,7 +35,7 @@ export default async function ProductOptionsPage({ params }: { params: Promise<{
     <main className="mx-auto max-w-7xl px-4 py-6 sm:px-8 sm:py-8 lg:px-10" id="main-content">
       <Link className={cn(buttonVariants({ variant: "ghost" }), "-ml-3 mb-4")} href="/catalog?scope=master"><ArrowLeft aria-hidden="true" />Kembali ke katalog</Link>
       <section className="rounded-2xl border bg-card p-5 sm:flex sm:items-end sm:justify-between sm:gap-8 sm:p-6">
-        <div><p className="text-sm font-medium text-muted-foreground">Editor opsi produk</p><h1 className="mt-1 font-heading text-2xl font-semibold tracking-tight sm:text-3xl">{product.name}</h1><p className="mt-2 text-sm text-muted-foreground">{product.categoryName} · Harga dasar {formatRupiah(product.basePrice)}</p></div>
+        <div className="flex min-w-0 items-center gap-4"><ProductImage className="size-16 rounded-xl sm:size-20" imageUrl={product.imageUrl} name={product.name} positionX={product.imagePositionX} positionY={product.imagePositionY} sizes="(max-width: 639px) 64px, 80px" /><div className="min-w-0"><p className="text-sm font-medium text-muted-foreground">Editor opsi produk</p><h1 className="mt-1 truncate font-heading text-2xl font-semibold tracking-tight sm:text-3xl">{product.name}</h1><p className="mt-2 text-sm text-muted-foreground">{product.categoryName} · Harga dasar {formatRupiah(product.basePrice)}</p></div></div>
         <Badge className="mt-4 sm:mt-0" variant={product.status === "ACTIVE" ? "secondary" : "outline"}>{product.status === "ACTIVE" ? "Produk aktif" : "Produk arsip"}</Badge>
       </section>
 

@@ -1,0 +1,6 @@
+import { Skeleton } from "@/components/ui/skeleton";
+
+/** Mirrors the modifier library cards instead of the parent catalog list. */
+export default function ModifiersLoading() {
+  return <main aria-busy="true" aria-label="Memuat pustaka modifier" className="mx-auto max-w-6xl px-4 py-6 sm:px-8 sm:py-8 lg:px-10" id="main-content"><span className="sr-only" role="status">Memuat pustaka modifier…</span><Skeleton className="mb-4 h-12 w-48 rounded-lg" /><section className="rounded-2xl border bg-card p-5 sm:flex sm:items-end sm:justify-between sm:p-6"><div className="w-full max-w-2xl space-y-3"><Skeleton className="h-4 w-32" /><Skeleton className="h-8 w-56" /><Skeleton className="h-5 w-full" /></div><Skeleton className="mt-5 h-12 w-36 sm:mt-0" /></section><section className="mt-6 grid gap-4 md:grid-cols-2">{Array.from({ length: 4 }, (_, index) => <div className="rounded-xl border bg-card p-6" key={index}><div className="flex justify-between gap-3"><div className="space-y-2"><Skeleton className="h-6 w-40" /><Skeleton className="h-4 w-52" /></div><div className="flex gap-2"><Skeleton className="size-9" /><Skeleton className="size-9" /></div></div><div className="mt-5 space-y-2">{Array.from({ length: 3 }, (_, optionIndex) => <Skeleton className="h-12 rounded-lg" key={optionIndex} />)}<Skeleton className="mt-3 h-10 w-32 rounded-lg" /></div></div>)}</section></main>;
+}

@@ -128,6 +128,54 @@
 @media (min-width: 64rem) {
   .workspace-shell {
     padding-left: 15rem;
+    transition: padding-left 200ms ease-out;
+  }
+
+  .workspace-shell:has(#workspace-sidebar-toggle:checked) {
+    padding-left: 4.75rem;
+  }
+
+  .workspace-shell:has(#workspace-sidebar-toggle:checked) .workspace-sidebar {
+    width: 4.75rem;
+  }
+
+  .workspace-shell:has(#workspace-sidebar-toggle:checked) .workspace-sidebar-label,
+  .workspace-shell:has(#workspace-sidebar-toggle:checked) .workspace-sidebar-theme,
+  .workspace-shell:has(#workspace-sidebar-toggle:checked) .workspace-sidebar-toggle-close {
+    display: none;
+  }
+
+  .workspace-shell:has(#workspace-sidebar-toggle:checked) .workspace-sidebar-toggle-open {
+    display: block;
+  }
+
+  .workspace-shell:has(#workspace-sidebar-toggle:checked) .workspace-sidebar-brand,
+  .workspace-shell:has(#workspace-sidebar-toggle:checked) .workspace-sidebar-outlet,
+  .workspace-shell:has(#workspace-sidebar-toggle:checked) .workspace-sidebar-nav a,
+  .workspace-shell:has(#workspace-sidebar-toggle:checked) .workspace-sidebar-footer > div {
+    justify-content: center;
+  }
+
+  .workspace-shell:has(#workspace-sidebar-toggle:checked) .workspace-sidebar-brand {
+    margin-inline: 0.5rem;
+  }
+
+  .workspace-shell:has(#workspace-sidebar-toggle:checked) .workspace-sidebar-account {
+    background: transparent;
+    padding: 0.125rem;
+  }
+
+  .workspace-shell:has(#workspace-sidebar-toggle:checked) .workspace-sidebar-brand > a {
+    display: none;
+  }
+
+  .workspace-shell:has(#workspace-sidebar-toggle:checked) .workspace-sidebar-outlet,
+  .workspace-shell:has(#workspace-sidebar-toggle:checked) .workspace-sidebar-nav a {
+    padding-inline: 0.5rem;
+  }
+
+  #workspace-sidebar-toggle:focus-visible ~ .workspace-sidebar .workspace-sidebar-brand label {
+    box-shadow: 0 0 0 3px color-mix(in srgb, var(--ring) 35%, transparent);
   }
 
   .workspace-shell > main {
@@ -173,8 +221,35 @@
     visibility: hidden;
   }
 
+  body:has(.thermal-receipt) > *:not([data-base-ui-portal]:has(.thermal-receipt)) {
+    display: none !important;
+  }
+
+  body:has(.thermal-receipt) > [data-base-ui-portal]:has(.thermal-receipt),
+  body:has(.thermal-receipt) [data-slot="dialog-content"]:has(.thermal-receipt) {
+    visibility: visible;
+  }
+
+  body:has(.thermal-receipt) [data-slot="dialog-overlay"] {
+    display: none !important;
+  }
+
+  body:has(.thermal-receipt) [data-slot="dialog-content"]:has(.thermal-receipt) {
+    position: static !important;
+    display: block !important;
+    width: 72mm !important;
+    max-height: none !important;
+    overflow: visible !important;
+    transform: none !important;
+    border: 0 !important;
+    padding: 0 !important;
+    box-shadow: none !important;
+  }
+
   .credential-slip,
-  .credential-slip * {
+  .credential-slip *,
+  .thermal-receipt,
+  .thermal-receipt * {
     visibility: visible;
   }
 
@@ -185,4 +260,24 @@
     background: #ffffff;
     color: #2c1d2b;
   }
+
+  .thermal-receipt {
+    position: static;
+    width: 72mm;
+    max-width: none;
+    page: thermal-receipt;
+    background: #ffffff;
+    color: #000000;
+    font-size: 11px;
+  }
+
+  .thermal-receipt * {
+    border-color: #000000;
+    color: #000000;
+  }
+}
+
+@page thermal-receipt {
+  size: 80mm auto;
+  margin: 4mm;
 }

@@ -97,6 +97,9 @@ export type CatalogProductItem = {
   name: string;
   sku: string | null;
   description: string | null;
+  imageUrl: string | null;
+  imagePositionX: number;
+  imagePositionY: number;
   basePrice: string;
   displayOrder: number;
   status: "ACTIVE" | "ARCHIVED";

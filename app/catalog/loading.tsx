@@ -1,8 +1,10 @@
 import { Skeleton } from "@/components/ui/skeleton";
 
+/** Mirrors catalog heading, filters, category rail, and product results. */
 export default function CatalogLoading() {
   return (
     <main className="mx-auto max-w-[90rem] px-4 py-8 sm:px-8 lg:px-10" aria-busy="true" aria-label="Memuat katalog" id="main-content">
+      <span className="sr-only" role="status">Memuat katalog…</span>
       <Skeleton className="h-9 w-64" />
       <Skeleton className="mt-3 h-5 w-full max-w-xl" />
       <Skeleton className="mt-8 h-16 w-full rounded-xl" />

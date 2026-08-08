@@ -1,12 +1,11 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { AlertCircle, BookOpen, Clock3, Coffee, MapPin, ReceiptText, ShieldCheck, Store, Users } from "lucide-react";
+import { AlertCircle, BookOpen, Clock3, Coffee, HandCoins, MapPin, ReceiptText, ShieldCheck, Store, Users } from "lucide-react";
 
-import { WorkspaceHeader } from "@/components/workspace-header";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { isAppRole, roleHasPermission, roleLabels } from "@/lib/auth/permissions";
+import { isAppRole, roleLabels } from "@/lib/auth/permissions";
 import { requirePermission } from "@/lib/auth/session";
 import { requireActiveOutlet } from "@/lib/outlets/context";
 
@@ -27,7 +26,6 @@ export default async function WorkspacePage({ searchParams }: WorkspacePageProps
   ]);
   const role = isAppRole(session.user.role) ? session.user.role : "cashier";
   const activeOutlet = await requireActiveOutlet(session);
-  const canViewDesignSystem = roleHasPermission(role, { designSystem: ["view"] });
   const currentTime = new Intl.DateTimeFormat("id-ID", {
     timeZone: activeOutlet.timezone,
     hour: "2-digit",
@@ -38,8 +36,6 @@ export default async function WorkspacePage({ searchParams }: WorkspacePageProps
   }).format(new Date());
 
   return (
-    <div className="workspace-shell min-h-svh bg-background">
-      <WorkspaceHeader activeOutletId={activeOutlet.id} activeRoute="workspace" canManageStaff={role !== "cashier"} canViewDesignSystem={canViewDesignSystem} role={role} />
       <main className="mx-auto max-w-7xl px-4 py-6 sm:px-8 sm:py-8 lg:px-10" id="main-content">
         {query.access === "denied" && (
           <Alert className="mb-6" variant="destructive">
@@ -108,6 +104,7 @@ export default async function WorkspacePage({ searchParams }: WorkspacePageProps
               </CardHeader></Card>
             </Link>
             <Link className="rounded-xl focus-visible:ring-3 focus-visible:ring-ring/40 focus-visible:outline-none" href="/transactions"><Card className="h-full border border-border shadow-none transition-colors hover:border-primary"><CardHeader><ReceiptText aria-hidden="true" className="mb-3 size-6 text-primary" /><CardTitle>Riwayat transaksi</CardTitle><CardDescription>Lihat struk dan rincian penjualan outlet aktif.</CardDescription></CardHeader></Card></Link>
+            {role !== "cashier" && <Link className="rounded-xl focus-visible:ring-3 focus-visible:ring-ring/40 focus-visible:outline-none" href="/settlements"><Card className="h-full border border-border shadow-none transition-colors hover:border-primary"><CardHeader><HandCoins aria-hidden="true" className="mb-3 size-6 text-primary" /><CardTitle>Ojol & settlement</CardTitle><CardDescription>Atur harga channel dan cocokkan dana platform yang masuk.</CardDescription></CardHeader></Card></Link>}
             <Link className="rounded-xl focus-visible:ring-3 focus-visible:ring-ring/40 focus-visible:outline-none" href="/outlets"><Card className="h-full border border-border shadow-none transition-colors hover:border-primary"><CardHeader><Store aria-hidden="true" className="mb-3 size-6 text-success" /><CardTitle>Outlet</CardTitle><CardDescription>Lihat lokasi, zona waktu, dan cakupan operasional.</CardDescription></CardHeader></Card></Link>
             {role !== "cashier" && <Link className="rounded-xl focus-visible:ring-3 focus-visible:ring-ring/40 focus-visible:outline-none" href="/staff"><Card className="h-full border border-border shadow-none transition-colors hover:border-primary"><CardHeader><Users aria-hidden="true" className="mb-3 size-6 text-success" /><CardTitle>Staf & akses</CardTitle><CardDescription>Kelola role, penugasan outlet, dan status akun.</CardDescription></CardHeader></Card></Link>}
             <Card className="border border-border shadow-none">
@@ -120,6 +117,5 @@ export default async function WorkspacePage({ searchParams }: WorkspacePageProps
           </div>
         </section>
       </main>
-    </div>
   );
 }

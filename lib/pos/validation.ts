@@ -10,7 +10,11 @@ const uniqueIdsSchema = z.array(idSchema).max(30).refine(
 export const checkoutSchema = z.object({
   checkoutToken: z.uuid(),
   outletId: idSchema,
-  orderType: z.enum(["DINE_IN", "TAKEAWAY"]),
+  source: z.discriminatedUnion("type", [
+    z.object({ type: z.literal("DIRECT") }),
+    z.object({ type: z.literal("DELIVERY_PLATFORM"), channelId: idSchema, externalOrderId: z.string().trim().min(1, "Nomor order platform wajib diisi.").max(80) }),
+  ]).default({ type: "DIRECT" }),
+  orderType: z.enum(["DINE_IN", "TAKEAWAY", "DELIVERY"]),
   tableLabel: z.string().trim().max(40).optional(),
   items: z.array(z.object({
     productId: idSchema,
@@ -24,12 +28,24 @@ export const checkoutSchema = z.object({
     method: z.enum(["CASH", "QRIS", "DEBIT_CARD", "CREDIT_CARD", "BANK_TRANSFER"]),
     tenderedAmount: moneySchema.optional(),
     reference: z.string().trim().max(80).optional(),
-  }),
+  }).optional(),
 }).superRefine((value, context) => {
-  if (value.orderType === "DINE_IN" && !value.tableLabel) {
+  if (value.source.type === "DIRECT" && value.orderType === "DELIVERY") {
+    context.addIssue({ code: "custom", path: ["orderType"], message: "Delivery hanya tersedia untuk order platform." });
+  }
+  if (value.source.type === "DELIVERY_PLATFORM" && value.orderType !== "DELIVERY") {
+    context.addIssue({ code: "custom", path: ["orderType"], message: "Order platform harus menggunakan jenis delivery." });
+  }
+  if (value.source.type === "DIRECT" && value.orderType === "DINE_IN" && !value.tableLabel) {
     context.addIssue({ code: "custom", path: ["tableLabel"], message: "Nomor atau nama meja wajib diisi." });
   }
-  if (value.payment.method === "CASH" && !value.payment.tenderedAmount) {
+  if (value.source.type === "DIRECT" && !value.payment) {
+    context.addIssue({ code: "custom", path: ["payment"], message: "Metode pembayaran wajib dipilih." });
+  }
+  if (value.source.type === "DELIVERY_PLATFORM" && value.payment) {
+    context.addIssue({ code: "custom", path: ["payment"], message: "Pembayaran platform ditentukan oleh server." });
+  }
+  if (value.source.type === "DIRECT" && value.payment?.method === "CASH" && !value.payment.tenderedAmount) {
     context.addIssue({ code: "custom", path: ["payment", "tenderedAmount"], message: "Uang diterima wajib diisi." });
   }
 });

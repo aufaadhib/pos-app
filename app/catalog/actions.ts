@@ -1,7 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import type { ZodType } from "zod";
+import { z, type ZodType } from "zod";
 
 import {
   archiveCategory,
@@ -14,6 +14,12 @@ import {
   updateCategory,
   updateProduct,
 } from "@/lib/catalog/service";
+import {
+  ProductImageError,
+  removeProductImage,
+  saveProductImage,
+  saveProductImagePosition,
+} from "@/lib/catalog/product-image-service";
 import type { CatalogActionState, CatalogActor } from "@/lib/catalog/types";
 import {
   catalogMutationTargetSchema,
@@ -23,6 +29,14 @@ import {
   updateProductSchema,
 } from "@/lib/catalog/validation";
 import { requirePermission } from "@/lib/auth/session";
+
+const productImageTargetSchema = z.object({
+  productId: z.string().trim().min(1, "Produk wajib dipilih."),
+});
+const productImagePositionSchema = productImageTargetSchema.extend({
+  positionX: z.coerce.number().int().min(0).max(100),
+  positionY: z.coerce.number().int().min(0).max(100),
+});
 
 export async function createCategoryAction(
   _previousState: CatalogActionState,
@@ -80,6 +94,53 @@ export async function restoreProductAction(
   return executeCatalogAction(catalogMutationTargetSchema, formData, restoreProduct, "Produk berhasil dipulihkan.");
 }
 
+/** Validates permission and uploads one master product image through Vercel Blob. */
+export async function saveProductImageAction(
+  _previousState: CatalogActionState,
+  formData: FormData,
+): Promise<CatalogActionState> {
+  const image = formData.get("image");
+  if (!image || typeof image === "string") {
+    return {
+      status: "error",
+      message: "Pilih gambar produk terlebih dahulu.",
+      fieldErrors: { image: ["Pilih gambar produk terlebih dahulu."] },
+    };
+  }
+  return executeProductImageAction(
+    productImageTargetSchema,
+    formData,
+    (input, actor) => saveProductImage(input.productId, image, actor),
+    "Gambar produk berhasil disimpan.",
+  );
+}
+
+/** Validates permission and removes one master product image from the catalog. */
+export async function removeProductImageAction(
+  _previousState: CatalogActionState,
+  formData: FormData,
+): Promise<CatalogActionState> {
+  return executeProductImageAction(
+    productImageTargetSchema,
+    formData,
+    (input, actor) => removeProductImage(input.productId, actor),
+    "Gambar produk berhasil dihapus.",
+  );
+}
+
+/** Validates permission and saves the responsive crop focal point for a product image. */
+export async function saveProductImagePositionAction(
+  _previousState: CatalogActionState,
+  formData: FormData,
+): Promise<CatalogActionState> {
+  return executeProductImageAction(
+    productImagePositionSchema,
+    formData,
+    (input, actor) => saveProductImagePosition(input.productId, input.positionX, input.positionY, actor),
+    "Posisi gambar berhasil disimpan.",
+  );
+}
+
 async function executeCatalogAction<Input>(
   schema: ZodType<Input>,
   formData: FormData,
@@ -115,6 +176,46 @@ async function executeCatalogAction<Input>(
     return {
       status: "error",
       message: "Perubahan belum dapat disimpan. Coba beberapa saat lagi.",
+    };
+  }
+}
+
+/** Runs a product image mutation with owner permission, trusted actor data, and fresh route output. */
+async function executeProductImageAction<Input>(
+  schema: ZodType<Input>,
+  formData: FormData,
+  mutation: (input: Input, actor: CatalogActor) => Promise<unknown>,
+  successMessage: string,
+): Promise<CatalogActionState> {
+  const session = await requirePermission({ catalog: ["manageMaster"] });
+  const parsed = schema.safeParse(Object.fromEntries(formData));
+  if (!parsed.success) {
+    return {
+      status: "error",
+      message: "Produk tidak valid.",
+      fieldErrors: parsed.error.flatten().fieldErrors,
+    };
+  }
+
+  try {
+    await mutation(parsed.data, {
+      id: session.user.id,
+      email: session.user.email,
+    });
+    revalidatePath("/catalog");
+    revalidatePath("/pos");
+    return { status: "success", message: successMessage };
+  } catch (error) {
+    if (error instanceof ProductImageError) {
+      return {
+        status: error.code === "CONFLICT" ? "conflict" : "error",
+        message: error.message,
+      };
+    }
+    console.error("Product image mutation failed", error);
+    return {
+      status: "error",
+      message: "Gambar belum dapat disimpan. Coba beberapa saat lagi.",
     };
   }
 }

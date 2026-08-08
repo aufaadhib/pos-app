@@ -1,7 +1,9 @@
 import "server-only";
 
-import { CatalogStatus, OutletStatus } from "@/generated/prisma/client";
+import { CatalogStatus, type DeliveryProvider, OutletStatus, type PaymentSettlementStatus, Prisma } from "@/generated/prisma/client";
 import type { AppRole } from "@/lib/auth/permissions";
+import { calculateChannelPrice } from "@/lib/delivery/pricing";
+import { deliveryProviderLabels } from "@/lib/delivery/types";
 import { prisma } from "@/lib/prisma";
 import type { PosMenu, SaleDetail, SalePage } from "@/lib/pos/types";
 
@@ -24,6 +26,11 @@ export async function getPosMenu(outletId: string, userId: string, role: AppRole
       taxRate: true,
       serviceChargeRate: true,
       pricesIncludeTax: true,
+      deliveryChannels: {
+        where: { isActive: true },
+        orderBy: { provider: "asc" },
+        select: { id: true, provider: true, markupRate: true, estimatedFeeRate: true, roundingUnit: true, settlementDelayHours: true },
+      },
     },
   });
   if (!outlet) return null;
@@ -42,9 +49,13 @@ export async function getPosMenu(outletId: string, userId: string, role: AppRole
       name: true,
       sku: true,
       description: true,
+      imageUrl: true,
+      imagePositionX: true,
+      imagePositionY: true,
       basePrice: true,
       category: { select: { name: true } },
       outletOverrides: { where: { outletId }, select: { priceOverride: true } },
+      channelPrices: { where: { channel: { outletId, isActive: true } }, select: { channelId: true, priceOverride: true } },
       variantGroups: {
         where: { status: CatalogStatus.ACTIVE },
         orderBy: [{ displayOrder: "asc" }, { name: "asc" }],
@@ -90,6 +101,8 @@ export async function getPosMenu(outletId: string, userId: string, role: AppRole
 
   const products = records.slice(0, posProductLimit).map((product) => {
     const productOverride = product.outletOverrides[0];
+    const directBasePrice = productOverride?.priceOverride ?? product.basePrice;
+    const exactChannelPrices = new Map(product.channelPrices.map((price) => [price.channelId, price.priceOverride]));
     return {
       id: product.id,
       categoryId: product.categoryId,
@@ -97,7 +110,14 @@ export async function getPosMenu(outletId: string, userId: string, role: AppRole
       name: product.name,
       sku: product.sku,
       description: product.description,
-      effectiveBasePrice: (productOverride?.priceOverride ?? product.basePrice).toFixed(2),
+      imageUrl: product.imageUrl,
+      imagePositionX: product.imagePositionX,
+      imagePositionY: product.imagePositionY,
+      effectiveBasePrice: directBasePrice.toFixed(2),
+      channelBasePrices: outlet.deliveryChannels.map((channel) => ({
+        channelId: channel.id,
+        basePrice: (exactChannelPrices.get(channel.id) ?? calculateChannelPrice(directBasePrice, channel.markupRate, channel.roundingUnit)).toFixed(2),
+      })),
       variantGroups: product.variantGroups.map((group) => ({
         id: group.id,
         name: group.name,
@@ -107,6 +127,10 @@ export async function getPosMenu(outletId: string, userId: string, role: AppRole
             id: option.id,
             name: option.name,
             priceAdjustment: (override?.priceAdjustmentOverride ?? option.priceAdjustment).toFixed(2),
+            channelPriceAdjustments: outlet.deliveryChannels.map((channel) => ({
+              channelId: channel.id,
+              priceAdjustment: calculateChannelPrice(override?.priceAdjustmentOverride ?? option.priceAdjustment, channel.markupRate, channel.roundingUnit).toFixed(2),
+            })),
           }];
         }),
       })),
@@ -119,6 +143,10 @@ export async function getPosMenu(outletId: string, userId: string, role: AppRole
           id: option.id,
           name: option.name,
           priceAdjustment: option.priceAdjustment.toFixed(2),
+          channelPriceAdjustments: outlet.deliveryChannels.map((channel) => ({
+            channelId: channel.id,
+            priceAdjustment: calculateChannelPrice(option.priceAdjustment, channel.markupRate, channel.roundingUnit).toFixed(2),
+          })),
         })),
       })),
     };
@@ -130,10 +158,22 @@ export async function getPosMenu(outletId: string, userId: string, role: AppRole
   ])).values());
   return {
     outlet: {
-      ...outlet,
+      id: outlet.id,
+      code: outlet.code,
+      name: outlet.name,
+      timezone: outlet.timezone,
+      pricesIncludeTax: outlet.pricesIncludeTax,
       taxRate: outlet.taxRate.toFixed(2),
       serviceChargeRate: outlet.serviceChargeRate.toFixed(2),
     },
+    deliveryChannels: outlet.deliveryChannels.map((channel) => ({
+      id: channel.id,
+      provider: channel.provider,
+      label: deliveryProviderLabels[channel.provider],
+      markupRate: channel.markupRate.toFixed(2),
+      estimatedFeeRate: channel.estimatedFeeRate.toFixed(2),
+      settlementDelayHours: channel.settlementDelayHours,
+    })),
     categories,
     products,
     truncated: records.length > posProductLimit,
@@ -141,12 +181,17 @@ export async function getPosMenu(outletId: string, userId: string, role: AppRole
 }
 
 /** Reads one outlet's newest completed sales with bounded pagination. */
-export async function getSalesPage(outletId: string, page: number): Promise<SalePage> {
-  const totalItems = await prisma.sale.count({ where: { outletId } });
+export async function getSalesPage(outletId: string, page: number, filters: { source?: "DIRECT" | DeliveryProvider; settlementStatus?: PaymentSettlementStatus } = {}): Promise<SalePage> {
+  const where: Prisma.SaleWhereInput = {
+    outletId,
+    ...(filters.source === "DIRECT" ? { channelId: null } : filters.source ? { channel: { provider: filters.source } } : {}),
+    ...(filters.settlementStatus ? { payment: { settlementStatus: filters.settlementStatus } } : {}),
+  };
+  const totalItems = await prisma.sale.count({ where });
   const totalPages = Math.max(1, Math.ceil(totalItems / salePageSize));
   const currentPage = Math.min(Math.max(1, page), totalPages);
   const sales = await prisma.sale.findMany({
-    where: { outletId },
+    where,
     orderBy: { completedAt: "desc" },
     skip: (currentPage - 1) * salePageSize,
     take: salePageSize,
@@ -158,7 +203,9 @@ export async function getSalesPage(outletId: string, page: number): Promise<Sale
       total: true,
       createdByName: true,
       completedAt: true,
-      payment: { select: { method: true } },
+      externalOrderId: true,
+      channel: { select: { provider: true } },
+      payment: { select: { method: true, settlementStatus: true, expectedSettlementAt: true } },
       items: { select: { quantity: true } },
     },
   });
@@ -171,6 +218,10 @@ export async function getSalesPage(outletId: string, page: number): Promise<Sale
       total: sale.total.toFixed(2),
       itemCount: sale.items.reduce((sum, item) => sum + item.quantity, 0),
       paymentMethod: sale.payment!.method,
+      deliveryProvider: sale.channel?.provider ?? null,
+      externalOrderId: sale.externalOrderId,
+      settlementStatus: sale.payment!.settlementStatus,
+      expectedSettlementAt: sale.payment!.expectedSettlementAt?.toISOString() ?? null,
       createdByName: sale.createdByName,
       completedAt: sale.completedAt.toISOString(),
     })),
@@ -198,8 +249,21 @@ export async function getSaleDetail(id: string, outletId: string): Promise<SaleD
       total: true,
       createdByName: true,
       completedAt: true,
+      externalOrderId: true,
+      channel: { select: { provider: true } },
       outlet: { select: { name: true, code: true } },
-      payment: { select: { method: true, reference: true, tenderedAmount: true, changeAmount: true } },
+      payment: { select: {
+        method: true,
+        reference: true,
+        tenderedAmount: true,
+        changeAmount: true,
+        settlementStatus: true,
+        expectedSettlementAt: true,
+        expectedFeeAmount: true,
+        expectedNetAmount: true,
+        directEquivalentAmount: true,
+        settlementItems: { where: { settlement: { status: "CONFIRMED" } }, take: 1, select: { settlement: { select: { reference: true, receivedAt: true } } } },
+      } },
       items: {
         orderBy: { id: "asc" },
         select: {
@@ -225,6 +289,10 @@ export async function getSaleDetail(id: string, outletId: string): Promise<SaleD
     total: sale.total.toFixed(2),
     itemCount: sale.items.reduce((sum, item) => sum + item.quantity, 0),
     paymentMethod: sale.payment.method,
+    deliveryProvider: sale.channel?.provider ?? null,
+    externalOrderId: sale.externalOrderId,
+    settlementStatus: sale.payment.settlementStatus,
+    expectedSettlementAt: sale.payment.expectedSettlementAt?.toISOString() ?? null,
     createdByName: sale.createdByName,
     completedAt: sale.completedAt.toISOString(),
     outletName: sale.outlet.name,
@@ -238,6 +306,11 @@ export async function getSaleDetail(id: string, outletId: string): Promise<SaleD
     paymentReference: sale.payment.reference,
     tenderedAmount: sale.payment.tenderedAmount?.toFixed(2) ?? null,
     changeAmount: sale.payment.changeAmount?.toFixed(2) ?? null,
+    expectedFeeAmount: sale.payment.expectedFeeAmount?.toFixed(2) ?? null,
+    expectedNetAmount: sale.payment.expectedNetAmount?.toFixed(2) ?? null,
+    directEquivalentAmount: sale.payment.directEquivalentAmount?.toFixed(2) ?? null,
+    settlementReference: sale.payment.settlementItems[0]?.settlement.reference ?? null,
+    settledAt: sale.payment.settlementItems[0]?.settlement.receivedAt.toISOString() ?? null,
     items: sale.items.map((item) => ({
       id: item.id,
       productName: item.productName,

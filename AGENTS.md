@@ -73,6 +73,21 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
 17. Untuk data fresh yang lambat, gunakan `<Suspense>` dan streaming dengan loading state yang bermakna, bukan menyimpan data sensitif atau transaksional ke cache hanya untuk mempercepat tampilan.
 18. Uji perilaku rendering, caching, dan revalidation menggunakan production build karena perilakunya pada development dapat berbeda.
 
+## Lazy Loading, Streaming, and Skeleton Rules
+
+1. Gunakan lazy loading hanya untuk Client Component atau library berat yang tidak diperlukan pada render awal, seperti editor, chart, image cropper, dialog kompleks, atau receipt preview. Gunakan `next/dynamic` atau dynamic `import()` dan jangan menambahkan dependency baru hanya untuk lazy loading.
+2. Jangan lazy-load komponen kecil, navigasi utama, kontrol kritis, atau konten above-the-fold. Server Component sudah di-code-split otomatis; jangan memindahkan data fetching ke client hanya demi lazy loading.
+3. Gunakan `ssr: false` hanya di dalam Client Component dan hanya untuk komponen yang benar-benar bergantung pada browser API serta tidak dapat dirender di server.
+4. Tempatkan `<Suspense>` sedekat mungkin dengan komponen async yang lambat. Header, sidebar, bottom navigation, filter stabil, dan layout bersama harus berada di luar boundary agar tetap terlihat dan interaktif.
+5. Gunakan `loading.tsx` hanya jika seluruh route segment memang membutuhkan fallback. Jika hanya tabel, katalog, ringkasan, atau panel tertentu yang fetching data, gunakan `<Suspense>` lokal agar bagian lain tidak ikut menjadi skeleton.
+6. Mulai query independen secara paralel dan stream hasilnya melalui boundary terpisah untuk mencegah request waterfall. Jangan membuat boundary terpisah jika seluruh data harus tampil sebagai satu unit yang konsisten.
+7. Gunakan komponen `Skeleton` shadcn/ui dan buat bentuk, jumlah baris, aspect ratio, serta tinggi skeleton mendekati konten akhir pada mobile, tablet, dan desktop untuk mencegah layout shift.
+8. Skeleton hanya boleh menggantikan area yang benar-benar belum siap. Jangan gunakan spinner atau skeleton satu halaman penuh ketika hanya satu tombol, kartu, tabel, atau panel yang sedang memuat.
+9. Saat mutation atau revalidation, pertahankan data lama yang masih valid dan tampilkan pending state pada kontrol atau baris yang terdampak. Jangan mengosongkan seluruh halaman dan jangan menambahkan delay loading buatan.
+10. Tandai container yang memuat dengan `aria-busy`, berikan status loading yang dapat dibaca screen reader, jadikan bentuk skeleton dekoratif `aria-hidden`, dan hormati preferensi reduced motion.
+11. Untuk gambar, gunakan `next/image` dengan dimensi atau aspect ratio yang sudah dicadangkan. Pertahankan lazy loading default dan gunakan preload hanya untuk gambar LCP yang benar-benar terlihat pada render awal.
+12. Verifikasi loading state menggunakan throttling jaringan dan production build. Pastikan tidak ada content layout shift, hydration mismatch, request waterfall, atau shared layout yang ikut berkedip ketika berpindah halaman.
+
 ## Authentication and Authorization Rules
 
 1. Gunakan Better Auth dengan Prisma adapter. Jangan membuat sistem authentication atau session sendiri dan jangan menambahkan library authentication kedua.
@@ -100,5 +115,5 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
 3. Sebelum membuat tabel, kolom, relasi, query, API route, method, atau function baru, periksa implementasi yang sudah ada dan ikuti konvensi proyek.
 4. Dokumentasikan setiap method atau function baru, termasuk tujuan, input, output, dan side effect pentingnya, lalu jelaskan method atau function tersebut kepada pengguna.
 5. Buat test untuk business rule penting, authorization, transaction, database constraint, dan alur pengguna yang kritis.
-6. Sebelum pekerjaan dianggap selesai, jalankan `npm run lint`, `npx tsc --noEmit`, `npm run build`, dan test relevan yang sudah dikonfigurasi.
-7. Pastikan setiap perubahan UI tetap responsif pada mobile, tablet, dan desktop.
+6. Pastikan setiap perubahan UI tetap responsif pada mobile, tablet, dan desktop.
+<!-- 7. Sebelum pekerjaan dianggap selesai, jalankan `npm run lint`, `npx tsc --noEmit`, `npm run build`, dan test relevan yang sudah dikonfigurasi. -->

@@ -1,0 +1,3 @@
+ALTER TYPE "CatalogAuditAction" ADD VALUE 'IMAGE_CHANGE';
+
+ALTER TABLE "product" ADD COLUMN "imageUrl" TEXT;

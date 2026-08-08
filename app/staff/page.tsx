@@ -3,7 +3,6 @@ import Link from "next/link";
 import { ChevronLeft, ChevronRight, Search, ShieldCheck, UserRound } from "lucide-react";
 
 import { StaffAccountActions, StaffFormDialog } from "@/components/staff/staff-dialogs";
-import { WorkspaceHeader } from "@/components/workspace-header";
 import { Badge } from "@/components/ui/badge";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { Card, CardHeader } from "@/components/ui/card";
@@ -24,9 +23,7 @@ export default async function StaffPage({ searchParams }: { searchParams: Promis
   const canManage = roleHasPermission(role, { staff: ["manage"] });
   const search = staffSearchSchema.parse({ q: singleValue(rawSearch.q), role: singleValue(rawSearch.role), status: singleValue(rawSearch.status), outlet: singleValue(rawSearch.outlet), page: singleValue(rawSearch.page) });
   const [staffPage, outlets] = await Promise.all([getStaff(search, { id: session.user.id, role }), getManageableOutlets(session.user.id, role)]);
-  return <div className="workspace-shell min-h-svh bg-background">
-    <WorkspaceHeader activeRoute="staff" activeOutletId={session.session.activeOutletId} canManageStaff canViewDesignSystem={role === "owner"} role={role} />
-    <main className="mx-auto max-w-[90rem] px-4 py-6 sm:px-8 sm:py-8 lg:px-10" id="main-content">
+  return <main className="mx-auto max-w-[90rem] px-4 py-6 sm:px-8 sm:py-8 lg:px-10" id="main-content">
       <section className="rounded-2xl border bg-card p-5 sm:flex sm:items-end sm:justify-between sm:gap-8 sm:p-6"><div><p className="text-sm font-medium text-muted-foreground">Tim & penugasan</p><h1 className="mt-1 font-heading text-2xl font-semibold tracking-tight sm:text-3xl">Staf & akses</h1><p className="mt-2 max-w-2xl leading-6 text-muted-foreground">Setiap orang memperoleh role dan cakupan outlet yang eksplisit. Akses di luar penugasan ditolak dari server.</p></div>{canManage && <div className="mt-5 sm:mt-0"><StaffFormDialog actorRole={role} outlets={outlets} /></div>}</section>
       <form className="mt-4 grid gap-3 rounded-xl border bg-card p-3 md:grid-cols-[1fr_10rem_10rem_13rem_auto]" method="get">
         <label className="relative"><span className="sr-only">Cari staf</span><Search aria-hidden="true" className="absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground" /><Input className="pl-10" defaultValue={search.q} name="q" placeholder="Cari nama atau email" /></label>
@@ -48,8 +45,7 @@ export default async function StaffPage({ searchParams }: { searchParams: Promis
       </section>}
       <StaffPagination page={staffPage.page} search={search} totalPages={staffPage.totalPages} />
       <aside className="mt-8 flex items-start gap-3 rounded-xl border bg-muted/35 p-4 text-sm text-muted-foreground"><ShieldCheck aria-hidden="true" className="mt-0.5 size-5 shrink-0 text-success" /><p>Kata sandi sementara hanya ditampilkan sekali. Reset password mencabut seluruh session staf dan mewajibkan penggantian pada login berikutnya.</p></aside>
-    </main>
-  </div>;
+    </main>;
 }
 
 function FilterSelect({ defaultValue, label, name, options }: { defaultValue: string; label: string; name: string; options: [string,string][] }) { return <label><span className="sr-only">{label}</span><SearchableSelect aria-label={label} defaultValue={defaultValue} name={name} options={options.map(([value, text]) => ({ label: text, value }))} placeholder={`Cari ${label.toLocaleLowerCase("id-ID")}`} /></label>; }

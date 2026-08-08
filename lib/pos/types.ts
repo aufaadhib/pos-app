@@ -2,6 +2,7 @@ export type PosMenuOption = {
   id: string;
   name: string;
   priceAdjustment: string;
+  channelPriceAdjustments: Array<{ channelId: string; priceAdjustment: string }>;
 };
 
 export type PosMenuProduct = {
@@ -11,7 +12,11 @@ export type PosMenuProduct = {
   name: string;
   sku: string | null;
   description: string | null;
+  imageUrl: string | null;
+  imagePositionX: number;
+  imagePositionY: number;
   effectiveBasePrice: string;
+  channelBasePrices: Array<{ channelId: string; basePrice: string }>;
   variantGroups: Array<{
     id: string;
     name: string;
@@ -36,19 +41,32 @@ export type PosMenu = {
     serviceChargeRate: string;
     pricesIncludeTax: boolean;
   };
+  deliveryChannels: Array<{
+    id: string;
+    provider: "GOFOOD" | "GRABFOOD" | "SHOPEEFOOD";
+    label: string;
+    markupRate: string;
+    estimatedFeeRate: string;
+    settlementDelayHours: number;
+  }>;
   categories: Array<{ id: string; name: string }>;
   products: PosMenuProduct[];
   truncated: boolean;
 };
 
-export type CheckoutActionState = {
-  status: "success" | "error";
-  message: string;
-  saleId?: string;
-  receiptNumber?: string;
-  total?: string;
-  changeAmount?: string | null;
-};
+export type CheckoutActionState =
+  | {
+    status: "success";
+    message: string;
+    saleId: string;
+    receiptNumber: string;
+    total: string;
+    changeAmount: string | null;
+  }
+  | {
+    status: "error";
+    message: string;
+  };
 
 export type PosActor = {
   id: string;
@@ -60,11 +78,15 @@ export type PosActor = {
 export type SaleListItem = {
   id: string;
   receiptNumber: string;
-  orderType: "DINE_IN" | "TAKEAWAY";
+  orderType: "DINE_IN" | "TAKEAWAY" | "DELIVERY";
   tableLabel: string | null;
   total: string;
   itemCount: number;
-  paymentMethod: "CASH" | "QRIS" | "DEBIT_CARD" | "CREDIT_CARD" | "BANK_TRANSFER";
+  paymentMethod: "CASH" | "QRIS" | "DEBIT_CARD" | "CREDIT_CARD" | "BANK_TRANSFER" | "DELIVERY_PLATFORM";
+  deliveryProvider: "GOFOOD" | "GRABFOOD" | "SHOPEEFOOD" | null;
+  externalOrderId: string | null;
+  settlementStatus: "NOT_APPLICABLE" | "PENDING" | "SETTLED";
+  expectedSettlementAt: string | null;
   createdByName: string;
   completedAt: string;
 };
@@ -88,6 +110,11 @@ export type SaleDetail = SaleListItem & {
   paymentReference: string | null;
   tenderedAmount: string | null;
   changeAmount: string | null;
+  expectedFeeAmount: string | null;
+  expectedNetAmount: string | null;
+  directEquivalentAmount: string | null;
+  settlementReference: string | null;
+  settledAt: string | null;
   items: Array<{
     id: string;
     productName: string;

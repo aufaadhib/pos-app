@@ -20,6 +20,8 @@ export function useAutoCloseDialogAction<State extends { message: string; status
     if (result.status === "success") {
       toast.success(result.message)
       if (closeOnSuccess) setOpen(false)
+    } else if (result.status !== "idle") {
+      toast.error(result.message)
     }
     return result
   }, [action, closeOnSuccess])

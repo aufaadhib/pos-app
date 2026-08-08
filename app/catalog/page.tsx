@@ -11,6 +11,7 @@ import {
   ProductFormDialog,
 } from "@/components/catalog/catalog-dialogs";
 import { CatalogScopeSelect, OutletCatalogProductCard } from "@/components/catalog/advanced-catalog";
+import { ProductImage } from "@/components/product-image";
 import { Badge } from "@/components/ui/badge";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -27,7 +28,7 @@ import {
 import { isAppRole, roleHasPermission } from "@/lib/auth/permissions";
 import { requirePermission } from "@/lib/auth/session";
 import { getAccessibleCatalogOutlet, getOutletCatalogProducts } from "@/lib/catalog/advanced-queries";
-import { formatRupiah, getProductMonogram } from "@/lib/catalog/normalization";
+import { formatRupiah } from "@/lib/catalog/normalization";
 import { getCatalogCategories, getCatalogProducts } from "@/lib/catalog/queries";
 import type { CatalogProductItem } from "@/lib/catalog/types";
 import { catalogSearchSchema } from "@/lib/catalog/validation";
@@ -179,7 +180,7 @@ async function CatalogContent({ searchParams }: CatalogPageProps) {
                         <TableHead>Kategori</TableHead>
                         <TableHead>SKU</TableHead>
                         <TableHead className="text-right">Harga dasar</TableHead>
-                        {canManage && <TableHead className="w-36 text-right">Aksi</TableHead>}
+                        {canManage && <TableHead className="w-56 pr-4 text-right">Aksi</TableHead>}
                       </TableRow>
                     </TableHeader>
                     <TableBody>
@@ -301,7 +302,7 @@ function ProductTableRow({ canManage, categories, product }: { canManage: boolea
     <TableRow className={product.status === "ARCHIVED" ? "opacity-65" : undefined}>
       <TableCell className="pl-4">
         <div className="flex items-center gap-3">
-          <ProductMonogram name={product.name} />
+          <ProductImage className="size-11 rounded-lg" imageUrl={product.imageUrl} name={product.name} positionX={product.imagePositionX} positionY={product.imagePositionY} sizes="44px" />
           <div className="min-w-0 whitespace-normal">
             <p className="font-semibold">{product.name}</p>
             {product.description && <p className="mt-0.5 line-clamp-1 text-xs text-muted-foreground">{product.description}</p>}
@@ -312,7 +313,7 @@ function ProductTableRow({ canManage, categories, product }: { canManage: boolea
       <TableCell className="font-mono text-xs text-muted-foreground">{product.sku ?? "—"}</TableCell>
       <TableCell className="text-right font-mono font-semibold">{formatRupiah(product.basePrice)}</TableCell>
       {canManage && (
-        <TableCell>
+        <TableCell className="w-56 pr-4">
           <div className="flex justify-end gap-1">
             <Link aria-label={`Atur opsi ${product.name}`} className={buttonVariants({ size: "icon", variant: "ghost" })} href={`/catalog/products/${product.id}`}><Settings2 aria-hidden="true" /></Link>
             <ProductFormDialog categories={categories} product={product} />
@@ -329,7 +330,7 @@ function ProductCard({ canManage, categories, product }: { canManage: boolean; c
     <Card className={cn("border shadow-none", product.status === "ARCHIVED" && "opacity-70")}>
       <CardContent className="p-4">
         <div className="flex items-start gap-3">
-          <ProductMonogram name={product.name} />
+          <ProductImage className="size-14 rounded-lg" imageUrl={product.imageUrl} name={product.name} positionX={product.imagePositionX} positionY={product.imagePositionY} sizes="56px" />
           <div className="min-w-0 flex-1">
             <div className="flex flex-wrap items-center gap-2"><p className="font-heading font-semibold">{product.name}</p>{product.status === "ARCHIVED" && <Badge variant="outline">Arsip</Badge>}</div>
             <p className="mt-1 text-xs text-muted-foreground">{product.categoryName} · <span className="font-mono">{product.sku ?? "Tanpa SKU"}</span></p>
@@ -341,10 +342,6 @@ function ProductCard({ canManage, categories, product }: { canManage: boolean; c
       </CardContent>
     </Card>
   );
-}
-
-function ProductMonogram({ name }: { name: string }) {
-  return <span aria-hidden="true" className="flex size-11 shrink-0 items-center justify-center rounded-lg bg-accent font-heading text-sm font-bold text-accent-foreground">{getProductMonogram(name)}</span>;
 }
 
 function CategoryRailLink({ active, archived, count, href, label }: { active: boolean; archived?: boolean; count: number; href: string; label: string }) {

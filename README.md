@@ -29,7 +29,7 @@ npm run seed:owner
 
 Seed hanya berjalan jika database kosong. Jika hanya owner dengan email yang sama sudah tersedia, seed menjadi no-op. Jika ada akun berbeda, seed berhenti agar tidak mengambil alih database. Setelah seed berhasil, hapus `INITIAL_OWNER_PASSWORD` dari environment.
 
-Public sign-up dinonaktifkan. Email verification mandiri, shift, stok, void/refund, dan gambar belum termasuk milestone ini.
+Public sign-up dinonaktifkan. Email verification mandiri, shift, stok, dan void/refund belum termasuk milestone ini.
 
 ## Katalog produk
 
@@ -57,6 +57,16 @@ Migration `add_advanced_catalog` menambahkan katalog master dengan grup varian m
 - Varian memilih satu opsi per grup; modifier mendukung minimum/maksimum pilihan.
 - Pajak dan layanan ditampilkan sebagai konfigurasi outlet. Perhitungan total dilakukan pada milestone transaksi.
 
+## Gambar produk
+
+Migration `add_product_image` menambahkan satu URL gambar pada produk master dan action audit `IMAGE_CHANGE`. Migration `add_product_image_focal_point` menambahkan posisi fokus X/Y agar crop 1:1 tetap tepat pada setiap ukuran kartu. Gambar berlaku untuk seluruh outlet dan hanya owner yang dapat mengunggah, mengganti, mengatur posisi, atau menghapusnya dari dialog edit produk.
+
+1. Buat public Blob store di Vercel dan hubungkan store tersebut ke project.
+2. Tambahkan `BLOB_READ_WRITE_TOKEN` ke `.env` lokal dan environment deployment.
+3. Jalankan `npm run db:migrate` lalu `npm run db:generate`.
+
+Upload menerima JPEG, PNG, atau WebP. File hingga 3 MB dikirim tanpa perubahan; file yang lebih besar dikompres di browser tanpa mengganti format aslinya. Server tetap memvalidasi MIME, signature, dan hasil maksimum 3 MB. Setelah upload, tahan lalu geser foto di dalam frame crop 1:1 seperti pengaturan foto profil, kemudian simpan posisi. Token Blob divalidasi saat operasi gambar dijalankan sehingga aplikasi tetap dapat dimulai sebelum store dibuat. File runtime tidak disimpan di `public`; folder tersebut hanya untuk asset yang ikut Git/build.
+
 ## Transaksi POS
 
 Migration `add_pos_transactions` menambahkan struk berurutan harian per outlet, snapshot item/varian/modifier, pembayaran, dan audit transaksi.
@@ -69,6 +79,18 @@ Migration `add_pos_transactions` menambahkan struk berurutan harian per outlet, 
 - Dine-in wajib memiliki nomor/nama meja; takeaway tidak menyimpan meja.
 - Pajak serta layanan memakai `Decimal` dan dibulatkan half-up ke Rupiah per komponen.
 - Belum ada diskon, split payment, order tertahan, shift wajib, pengurangan stok, atau hard delete transaksi.
+
+## Ojol dan settlement
+
+Migration `add_delivery_channels_and_settlements` menambahkan harga GoFood, GrabFood, dan ShopeeFood per outlet, snapshot harga pembanding penjualan langsung, piutang platform, serta rekonsiliasi transfer secara batch.
+
+- Owner mengatur markup, estimasi fee, waktu cair, status channel, dan override harga produk.
+- Harga channel selalu di atas harga outlet dan dibulatkan naik ke Rp500; fee serta selisih tetap dihitung presisi dengan `Decimal`.
+- Kasir memilih sumber order sebelum menambahkan item dan wajib memasukkan nomor order platform yang unik.
+- Order platform menggunakan harga final termasuk pajak, tanpa service charge lokal, dan otomatis berstatus settlement `PENDING`.
+- Owner dan manager dapat mencocokkan banyak order dalam satu transfer. Gross dikurangi fee, promo merchant, dan penyesuaian harus sama persis dengan net yang masuk.
+- Hanya owner yang dapat membalik settlement; batch tidak dihapus dan seluruh transaksi memperoleh audit.
+- Tahap ini belum mengambil order/API atau laporan CSV langsung dari platform dan belum menghitung HPP bahan.
 
 ## Menjalankan aplikasi
 
@@ -83,6 +105,7 @@ Route utama:
 - `/pos` — register kasir untuk outlet aktif.
 - `/transactions` — riwayat struk outlet aktif.
 - `/transactions/[saleId]` — rincian snapshot transaksi yang sudah dibayar.
+- `/settlements` — konfigurasi harga ojol, piutang platform, dan rekonsiliasi batch untuk owner/manager.
 - `/catalog` — katalog master untuk owner dan menu outlet efektif untuk manager/kasir.
 - `/catalog/products/[productId]` — editor varian dan pemasangan modifier khusus owner.
 - `/catalog/modifiers` — pustaka modifier reusable khusus owner.
@@ -141,7 +164,8 @@ Runner admin membuat dua outlet dan tiga akun sementara, menjalankan journey CRU
 - `npm run db:studio` membuka Prisma Studio.
 - `npm run auth:generate -- -y` menyelaraskan model Better Auth ke schema Prisma.
 - `npm run seed:owner` membuat owner bootstrap secara aman.
+- `npm run seed:drinks -- --development` menambahkan kategori Minuman dan sembilan produk umum rumah makan sate tanpa mengubah data existing.
 
-Dokumentasi rujukan: [Neon connection pooling](https://neon.com/docs/connect/connection-pooling), [Prisma PostgreSQL](https://www.prisma.io/docs/orm/core-concepts/supported-databases/postgresql), dan [Better Auth Prisma adapter](https://www.better-auth.com/docs/adapters/prisma).
+Dokumentasi rujukan: [Neon connection pooling](https://neon.com/docs/connect/connection-pooling), [Prisma PostgreSQL](https://www.prisma.io/docs/orm/core-concepts/supported-databases/postgresql), [Better Auth Prisma adapter](https://www.better-auth.com/docs/adapters/prisma), dan [Vercel Blob server uploads](https://vercel.com/docs/vercel-blob/server-upload).
 
 Daftar tujuan, input, output, dan side effect function baru tersedia di [`docs/functions.md`](docs/functions.md).

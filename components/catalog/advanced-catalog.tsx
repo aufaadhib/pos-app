@@ -53,6 +53,7 @@ import type {
   VariantGroupItem,
   VariantOptionItem,
 } from "@/lib/catalog/types";
+import { ProductImage } from "@/components/product-image";
 import { initialCatalogActionState } from "@/lib/catalog/types";
 import type { OutletItem } from "@/lib/outlets/types";
 
@@ -236,7 +237,7 @@ export function OutletCatalogProductCard({ canManage, outletId, product }: { can
   return (
     <Card className={product.isAvailable ? "border shadow-none" : "border border-dashed opacity-70 shadow-none"}>
       <CardHeader className="gap-3 sm:flex-row sm:items-start sm:justify-between">
-        <div><div className="flex flex-wrap items-center gap-2"><CardTitle>{product.name}</CardTitle><Badge variant={product.isAvailable ? "secondary" : "outline"}>{product.isAvailable ? "Tersedia" : "Tidak tersedia"}</Badge>{product.hasPriceOverride && <Badge variant="outline">Harga outlet</Badge>}</div><p className="mt-1 text-sm text-muted-foreground">{product.categoryName} · {product.sku ?? "Tanpa SKU"}</p></div>
+        <div className="flex min-w-0 items-start gap-3"><ProductImage className="size-12 rounded-lg" imageUrl={product.imageUrl} name={product.name} positionX={product.imagePositionX} positionY={product.imagePositionY} sizes="48px" /><div><div className="flex flex-wrap items-center gap-2"><CardTitle>{product.name}</CardTitle><Badge variant={product.isAvailable ? "secondary" : "outline"}>{product.isAvailable ? "Tersedia" : "Tidak tersedia"}</Badge>{product.hasPriceOverride && <Badge variant="outline">Harga outlet</Badge>}</div><p className="mt-1 text-sm text-muted-foreground">{product.categoryName} · {product.sku ?? "Tanpa SKU"}</p></div></div>
         <p className="font-mono font-semibold">{formatRupiah(product.effectiveBasePrice)}</p>
       </CardHeader>
       <CardContent className="grid gap-4">
