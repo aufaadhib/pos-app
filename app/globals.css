@@ -121,7 +121,7 @@
   }
 }
 
-.workspace-shell > main {
+.workspace-shell > main:not(.pos-main) {
   padding-bottom: calc(6.5rem + env(safe-area-inset-bottom));
 }
 
@@ -178,7 +178,7 @@
     box-shadow: 0 0 0 3px color-mix(in srgb, var(--ring) 35%, transparent);
   }
 
-  .workspace-shell > main {
+  .workspace-shell > main:not(.pos-main) {
     padding-bottom: 2.5rem;
   }
 }

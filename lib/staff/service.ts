@@ -97,6 +97,12 @@ export async function updateStaff(input: UpdateStaffInput, actor: AdminActor) {
     const previousOutletIds = current.outletAssignments.map((assignment) => assignment.outletId);
     const addedOutletIds = input.outletIds.filter((id) => !previousOutletIds.includes(id));
     const removedOutletIds = previousOutletIds.filter((id) => !input.outletIds.includes(id));
+    if (removedOutletIds.length > 0) {
+      const openShift = await transaction.cashShift.findUnique({ where: { openUserKey: current.id }, select: { outletId: true } });
+      if (openShift && removedOutletIds.includes(openShift.outletId)) {
+        throw new StaffError("CONFLICT", "Staf masih memiliki shift terbuka pada outlet yang akan dilepas.");
+      }
+    }
 
     const update = await transaction.user.updateMany({
       where: { id: current.id, updatedAt: current.updatedAt },
@@ -236,6 +242,10 @@ async function changeStaffStatus(target: StaffMutationTarget, actor: AdminActor,
     assertVersion(current.updatedAt, target.expectedUpdatedAt);
     if (Boolean(current.banned) === banned) {
       throw new StaffError("CONFLICT", banned ? "Staf sudah dinonaktifkan." : "Staf sudah aktif.");
+    }
+    if (banned) {
+      const openShift = await transaction.cashShift.findUnique({ where: { openUserKey: current.id }, select: { id: true } });
+      if (openShift) throw new StaffError("CONFLICT", "Staf masih memiliki shift terbuka. Tutup shift sebelum menonaktifkan akun.");
     }
     const update = await transaction.user.updateMany({
       where: { id: current.id, updatedAt: current.updatedAt },

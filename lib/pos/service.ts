@@ -9,8 +9,11 @@ import {
   SaleAuditAction,
 } from "@/generated/prisma/client";
 import { prisma } from "@/lib/prisma";
+import { isTransactionWriteConflict } from "@/lib/prisma-errors";
 import { calculateSaleTotals } from "@/lib/pos/pricing";
 import { calculateChannelPrice, calculateExpectedSettlement } from "@/lib/delivery/pricing";
+import { requireOpenCashShift } from "@/lib/shifts/service";
+import { getOutletBusinessDate } from "@/lib/time/business-date";
 import type { CheckoutInput } from "@/lib/pos/validation";
 import type { CheckoutActionState, PosActor } from "@/lib/pos/types";
 
@@ -86,6 +89,7 @@ export async function createSale(input: CheckoutInput, actor: PosActor): Promise
           },
         });
         if (!outlet) throw new PosError("FORBIDDEN", "Outlet aktif tidak tersedia untuk akun ini.");
+        const shift = await requireOpenCashShift(transaction, outlet.id, actor.id);
 
         const channel = input.source.type === "DELIVERY_PLATFORM"
           ? await transaction.outletDeliveryChannel.findFirst({
@@ -105,20 +109,21 @@ export async function createSale(input: CheckoutInput, actor: PosActor): Promise
           pricesIncludeTax: channel ? true : outlet.pricesIncludeTax,
         });
         const payment = resolvePayment(input, totals.total, directEquivalentAmount, channel);
-        const { businessDate, dateToken } = getBusinessDate(outlet.timezone);
+        const business = getOutletBusinessDate(outlet.timezone);
         const sequence = await transaction.receiptSequence.upsert({
-          where: { outletId_businessDate: { outletId: outlet.id, businessDate } },
-          create: { outletId: outlet.id, businessDate, lastValue: 1 },
+          where: { outletId_businessDate: { outletId: outlet.id, businessDate: business.date } },
+          create: { outletId: outlet.id, businessDate: business.date, lastValue: 1 },
           update: { lastValue: { increment: 1 } },
           select: { lastValue: true },
         });
-        const receiptNumber = `${outlet.code}-${dateToken}-${String(sequence.lastValue).padStart(4, "0")}`;
+        const receiptNumber = `${outlet.code}-${business.token}-${String(sequence.lastValue).padStart(4, "0")}`;
         const sale = await transaction.sale.create({
           data: {
             checkoutToken: input.checkoutToken,
             outletId: outlet.id,
+            shiftId: shift.id,
             receiptNumber,
-            businessDate,
+            businessDate: business.date,
             dailySequence: sequence.lastValue,
             orderType: channel ? "DELIVERY" : input.orderType,
             tableLabel: !channel && input.orderType === "DINE_IN" ? input.tableLabel : null,
@@ -175,10 +180,15 @@ export async function createSale(input: CheckoutInput, actor: PosActor): Promise
         return serializeSaleResult(sale);
       }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable, maxWait: 5_000, timeout: 15_000 });
     } catch (error) {
-      if (error instanceof Prisma.PrismaClientKnownRequestError && ["P2002", "P2034"].includes(error.code)) {
+      if (isTransactionWriteConflict(error)) {
         const saved = await findIdempotentSale(input.checkoutToken, input.outletId, actor.id);
         if (saved) return saved;
-        if (error.code === "P2002" && input.source.type === "DELIVERY_PLATFORM" && String(error.meta?.target).includes("externalOrderId")) {
+        if (attempt < 2) continue;
+      }
+      if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002") {
+        const saved = await findIdempotentSale(input.checkoutToken, input.outletId, actor.id);
+        if (saved) return saved;
+        if (input.source.type === "DELIVERY_PLATFORM" && String(error.meta?.target).includes("externalOrderId")) {
           throw new PosError("INVALID_CART", "Nomor order platform sudah pernah digunakan.");
         }
         if (attempt < 2) continue;
@@ -337,19 +347,6 @@ function resolvePayment(input: CheckoutInput, total: Prisma.Decimal, directEquiv
     tenderedAmount,
     changeAmount: tenderedAmount.sub(total),
   };
-}
-
-/** Converts the current instant into a stable outlet-local business date and receipt token. */
-function getBusinessDate(timezone: string) {
-  const parts = new Intl.DateTimeFormat("en-CA", {
-    timeZone: timezone,
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
-  }).formatToParts(new Date());
-  const values = Object.fromEntries(parts.map((part) => [part.type, part.value]));
-  const date = `${values.year}-${values.month}-${values.day}`;
-  return { businessDate: new Date(`${date}T00:00:00.000Z`), dateToken: date.replaceAll("-", "") };
 }
 
 /** Finds an earlier checkout response without exposing another actor's transaction. */

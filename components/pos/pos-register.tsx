@@ -7,6 +7,7 @@ import { toast } from "react-toastify";
 import { checkoutSaleAction } from "@/app/pos/actions";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { CurrencyInput } from "@/components/ui/currency-input";
 import {
   Dialog,
   DialogContent,
@@ -103,8 +104,8 @@ export function PosRegister({ menu }: { menu: PosMenu }) {
   }
 
   return (
-    <div className="overflow-hidden rounded-2xl border bg-card shadow-sm xl:grid xl:h-[calc(100svh-2rem)] xl:min-h-[42rem] xl:grid-cols-[minmax(0,1fr)_22rem]">
-      <section className="flex min-h-0 min-w-0 flex-col xl:h-full" aria-labelledby="menu-heading">
+    <div className="flex min-h-0 flex-1 overflow-hidden rounded-2xl border bg-card shadow-sm xl:grid xl:grid-cols-[minmax(0,1fr)_22rem]">
+      <section className="flex h-full min-h-0 min-w-0 flex-1 flex-col" aria-labelledby="menu-heading">
         <header className="border-b bg-card p-3 sm:p-4">
           <div className="flex items-center gap-3">
             <Button aria-controls="pos-category-rail" aria-expanded={categoryRailOpen} aria-label={categoryRailOpen ? "Sembunyikan kategori" : "Tampilkan kategori"} className="hidden xl:inline-flex" onClick={() => setCategoryRailOpen((value) => !value)} size="icon" type="button" variant="ghost">
@@ -131,13 +132,13 @@ export function PosRegister({ menu }: { menu: PosMenu }) {
           </div>}
         </header>
 
-        <div className="flex min-h-0 flex-1 xl:overflow-hidden">
-          {categoryRailOpen && <aside aria-label="Kategori menu" className="hidden min-h-0 w-28 shrink-0 flex-col border-r bg-card p-2 xl:flex xl:h-full" id="pos-category-rail">
-            <button aria-current={categoryId === "all" ? "true" : undefined} className={cn("relative flex min-h-20 flex-col items-center justify-center gap-2 rounded-xl border px-2 py-3 text-center text-xs font-semibold transition-colors focus-visible:ring-3 focus-visible:ring-ring/40 focus-visible:outline-none", categoryId === "all" ? "border-primary bg-primary/8 text-primary" : "border-transparent bg-muted/55 text-muted-foreground hover:bg-muted hover:text-foreground")} onClick={() => setCategoryId("all")} type="button"><LayoutGrid aria-hidden="true" className="size-5" /><span>Semua menu</span></button>
-            <div className="mt-2 grid min-h-0 flex-1 content-start gap-2 overflow-y-auto">{menu.categories.map((category) => <button aria-current={categoryId === category.id ? "true" : undefined} className={cn("relative flex min-h-20 flex-col items-center justify-center gap-2 rounded-xl border px-2 py-3 text-center text-xs font-semibold transition-colors focus-visible:ring-3 focus-visible:ring-ring/40 focus-visible:outline-none", categoryId === category.id ? "border-primary bg-primary/8 text-primary" : "border-transparent bg-muted/55 text-muted-foreground hover:bg-muted hover:text-foreground")} key={category.id} onClick={() => setCategoryId(category.id)} type="button"><span aria-hidden="true" className="grid size-8 place-items-center rounded-lg bg-background font-heading text-sm ring-1 ring-foreground/10">{getProductMonogram(category.name)}</span><span className="line-clamp-2">{category.name}</span></button>)}</div>
+        <div className="flex min-h-0 flex-1 overflow-hidden">
+          {categoryRailOpen && <aside aria-label="Kategori menu" className="hidden min-h-0 w-28 shrink-0 flex-col overflow-hidden border-r bg-card p-2 xl:flex xl:h-full" id="pos-category-rail">
+            <button aria-current={categoryId === "all" ? "true" : undefined} className={cn("relative flex min-h-20 w-full min-w-0 max-w-full flex-col items-center justify-center gap-2 overflow-hidden rounded-xl border px-2 py-3 text-center text-xs font-semibold transition-colors focus-visible:ring-3 focus-visible:ring-ring/40 focus-visible:outline-none", categoryId === "all" ? "border-primary bg-primary/8 text-primary" : "border-transparent bg-muted/55 text-muted-foreground hover:bg-muted hover:text-foreground")} onClick={() => setCategoryId("all")} type="button"><LayoutGrid aria-hidden="true" className="size-5" /><span className="w-full min-w-0">Semua menu</span></button>
+            <div className="mt-2 grid min-h-0 w-full min-w-0 flex-1 content-start gap-2 overflow-x-hidden overflow-y-auto">{menu.categories.map((category) => <button aria-current={categoryId === category.id ? "true" : undefined} className={cn("relative flex min-h-20 w-full min-w-0 max-w-full flex-col items-center justify-center gap-2 overflow-hidden rounded-xl border px-2 py-3 text-center text-xs font-semibold transition-colors focus-visible:ring-3 focus-visible:ring-ring/40 focus-visible:outline-none", categoryId === category.id ? "border-primary bg-primary/8 text-primary" : "border-transparent bg-muted/55 text-muted-foreground hover:bg-muted hover:text-foreground")} key={category.id} onClick={() => setCategoryId(category.id)} type="button"><span aria-hidden="true" className="grid size-8 shrink-0 place-items-center rounded-lg bg-background font-heading text-sm ring-1 ring-foreground/10">{getProductMonogram(category.name)}</span><span className="line-clamp-2 w-full min-w-0 break-words">{category.name}</span></button>)}</div>
           </aside>}
 
-          <div aria-label="Daftar menu" className="min-h-0 min-w-0 flex-1 bg-muted/20 p-3 sm:p-4 xl:h-full xl:overflow-y-scroll xl:[scrollbar-gutter:stable]" role="region" tabIndex={0}>
+          <div aria-label="Daftar menu" className="h-full min-h-0 min-w-0 flex-1 overflow-y-auto overscroll-contain bg-muted/20 p-3 pb-20 [scrollbar-gutter:stable] sm:p-4 sm:pb-20 xl:pb-4" role="region" tabIndex={0}>
             <div aria-label="Filter kategori" className="flex gap-2 overflow-x-auto pb-2 xl:hidden">
               <Button className="shrink-0" onClick={() => setCategoryId("all")} size="sm" variant={categoryId === "all" ? "default" : "outline"}>Semua</Button>
               {menu.categories.map((category) => <Button className="shrink-0" key={category.id} onClick={() => setCategoryId(category.id)} size="sm" variant={categoryId === category.id ? "default" : "outline"}>{category.name}</Button>)}
@@ -167,7 +168,7 @@ export function PosRegister({ menu }: { menu: PosMenu }) {
         </div>
       </section>
 
-      <aside className="hidden min-h-0 flex-col border-l bg-card xl:flex" aria-label="Pesanan saat ini">
+      <aside className="hidden h-full min-h-0 flex-col border-l bg-card xl:flex" aria-label="Pesanan saat ini">
         <div className="border-b p-3">
           <RegisterClock timeZone={menu.outlet.timezone} />
         </div>
@@ -298,7 +299,7 @@ function CheckoutDialog({ cart, channel, menu, totals, open, onOpenChange, onSuc
 
   /** Closes the checkout flow and resets transient fields for the next order. */
   function handleOpenChange(value: boolean) {
-    if (pending) return;
+    if (pending && !receipt) return;
     if (!value) {
       setReceipt(null);
       setOrderType("DINE_IN");
@@ -356,7 +357,7 @@ function CheckoutDialog({ cart, channel, menu, totals, open, onOpenChange, onSuc
       <fieldset><legend className="mb-2 font-heading font-semibold">Jenis pesanan</legend><div className="grid grid-cols-2 gap-2"><Button onClick={() => setOrderType("DINE_IN")} type="button" variant={orderType === "DINE_IN" ? "default" : "outline"}>{orderType === "DINE_IN" && <Check />}Dine-in</Button><Button onClick={() => setOrderType("TAKEAWAY")} type="button" variant={orderType === "TAKEAWAY" ? "default" : "outline"}>{orderType === "TAKEAWAY" && <Check />}Takeaway</Button></div></fieldset>
       {orderType === "DINE_IN" && <label className="grid gap-2" htmlFor="table-label"><span className="font-heading font-semibold">Nomor atau nama meja <span className="text-destructive">*</span></span><Input id="table-label" maxLength={40} onChange={(event) => setTableLabel(event.target.value)} placeholder="Contoh: A-07" value={tableLabel} /></label>}
       <fieldset><legend className="mb-2 font-heading font-semibold">Metode pembayaran</legend><div className="grid grid-cols-2 gap-2 sm:grid-cols-3">{([['CASH','Tunai'],['QRIS','QRIS'],['DEBIT_CARD','Debit'],['CREDIT_CARD','Kredit'],['BANK_TRANSFER','Transfer']] as const).map(([value,label]) => <Button className="min-w-0" key={value} onClick={() => setMethod(value)} type="button" variant={method === value ? "default" : "outline"}>{label}</Button>)}</div></fieldset>
-      {method === "CASH" ? <label className="grid gap-2" htmlFor="tendered"><span className="font-heading font-semibold">Uang diterima (Rp) <span className="text-destructive">*</span></span><Input id="tendered" inputMode="numeric" onChange={(event) => setTendered(event.target.value.replace(/\D/g, ""))} placeholder="50000" value={tendered} /><span className="text-sm text-muted-foreground">Kembalian: {formatMinor(tendered ? maxMinor(parseMoneyToMinor(tendered) - totals.total, 0n) : 0n)}</span></label> : <label className="grid gap-2" htmlFor="payment-reference"><span className="font-heading font-semibold">Referensi pembayaran <span className="font-sans text-xs font-normal text-muted-foreground">Opsional</span></span><Input id="payment-reference" maxLength={80} onChange={(event) => setReference(event.target.value)} placeholder="Nomor referensi" value={reference} /></label>}
+      {method === "CASH" ? <label className="grid gap-2" htmlFor="tendered"><span className="font-heading font-semibold">Uang diterima (Rp) <span className="text-destructive">*</span></span><CurrencyInput id="tendered" onValueChange={setTendered} placeholder="50.000" value={tendered} /><span className="text-sm text-muted-foreground">Kembalian: {formatMinor(tendered ? maxMinor(parseMoneyToMinor(tendered) - totals.total, 0n) : 0n)}</span></label> : <label className="grid gap-2" htmlFor="payment-reference"><span className="font-heading font-semibold">Referensi pembayaran <span className="font-sans text-xs font-normal text-muted-foreground">Opsional</span></span><Input id="payment-reference" maxLength={80} onChange={(event) => setReference(event.target.value)} placeholder="Nomor referensi" value={reference} /></label>}
     </>}
     <div className="rounded-xl border border-t-4 border-t-primary bg-muted/25 p-4"><div className="flex items-center justify-between"><span className="font-semibold">Total pembayaran</span><span className="font-mono text-xl font-semibold text-primary">{formatMinor(totals.total)}</span></div></div>
   </div><DialogFooter><Button disabled={pending} onClick={submitCheckout} type="button">{pending && <Spinner />}{pending ? "Menyimpan…" : "Konfirmasi pembayaran"}</Button></DialogFooter></>}</DialogContent></Dialog>;

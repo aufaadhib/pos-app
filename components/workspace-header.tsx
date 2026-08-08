@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { cookies } from "next/headers";
-import { BookOpen, HandCoins, House, MapPin, Palette, PanelLeftClose, PanelLeftOpen, ReceiptText, ShoppingBasket, Store, Users } from "lucide-react";
+import { BookOpen, HandCoins, House, MapPin, Palette, PanelLeftClose, PanelLeftOpen, ReceiptText, ShoppingBasket, Store, Users, WalletCards } from "lucide-react";
 
 import { BrandMark } from "@/components/brand-mark";
 import { FullscreenToggle } from "@/components/fullscreen-toggle";
@@ -8,13 +8,15 @@ import { SignOutButton } from "@/components/sign-out-button";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { WorkspaceSidebarPreference } from "@/components/workspace-sidebar-preference";
 import { roleLabels, type AppRole } from "@/lib/auth/permissions";
+import { getCurrentSession } from "@/lib/auth/session";
+import { hasCurrentCashShift } from "@/lib/shifts/queries";
 import { cn } from "@/lib/utils";
 
 type WorkspaceHeaderProps = {
   canViewDesignSystem?: boolean;
   canManageStaff?: boolean;
   activeOutletId?: string | null;
-  activeRoute?: "workspace" | "pos" | "transactions" | "settlements" | "catalog" | "outlets" | "staff" | "design-system";
+  activeRoute?: "workspace" | "pos" | "shifts" | "transactions" | "settlements" | "catalog" | "outlets" | "staff" | "design-system";
   defaultSidebarCollapsed?: boolean;
   role: AppRole;
 };
@@ -28,6 +30,8 @@ export async function WorkspaceHeader({
   role,
 }: WorkspaceHeaderProps) {
   const storedSidebarState = (await cookies()).get("glutong_sidebar_collapsed")?.value;
+  const session = await getCurrentSession();
+  const hasOpenShift = session ? await hasCurrentCashShift(session.user.id) : false;
   const sidebarCollapsed = storedSidebarState === "1"
     ? true
     : storedSidebarState === "0"
@@ -36,6 +40,7 @@ export async function WorkspaceHeader({
   const navigationItems = [
     { href: "/workspace", label: "Beranda", route: "workspace", icon: House, visible: true },
     { href: "/pos", label: "Kasir", route: "pos", icon: ShoppingBasket, visible: true },
+    { href: "/shifts", label: "Shift", route: "shifts", icon: WalletCards, visible: true },
     { href: "/transactions", label: "Transaksi", route: "transactions", icon: ReceiptText, visible: true },
     { href: "/settlements", label: "Ojol & settlement", route: "settlements", icon: HandCoins, visible: role !== "cashier" },
     { href: "/catalog", label: "Katalog", route: "catalog", icon: BookOpen, visible: true },
@@ -43,7 +48,7 @@ export async function WorkspaceHeader({
     { href: "/staff", label: "Staf", route: "staff", icon: Users, visible: canManageStaff },
     { href: "/design-system", label: "Sistem UI", route: "design-system", icon: Palette, visible: canViewDesignSystem },
   ].filter((item) => item.visible);
-  const mobileNavigationItems = navigationItems.filter((item) => ["workspace", "pos", "transactions", "catalog", "outlets"].includes(item.route));
+  const mobileNavigationItems = navigationItems.filter((item) => ["workspace", "pos", "shifts", "transactions", "catalog"].includes(item.route));
 
   return (
     <>
@@ -56,7 +61,7 @@ export async function WorkspaceHeader({
           <Link aria-label={activeOutletId ? "Ganti outlet aktif" : "Pilih outlet aktif"} className="grid size-11 place-items-center rounded-lg text-muted-foreground hover:bg-muted hover:text-foreground focus-visible:ring-3 focus-visible:ring-ring/40 focus-visible:outline-none" href="/select-outlet"><MapPin aria-hidden="true" className="size-5" /></Link>
           <FullscreenToggle className="hidden sm:inline-flex" compact />
           <ThemeToggle className="[&_[data-slot=button]]:size-9" />
-          <SignOutButton />
+          <SignOutButton hasOpenShift={hasOpenShift} />
         </div>
       </header>
 
@@ -80,7 +85,7 @@ export async function WorkspaceHeader({
         <div className="workspace-sidebar-footer shrink-0 border-t p-3">
           <FullscreenToggle className="mb-2 w-full" />
           <ThemeToggle className="workspace-sidebar-theme w-full justify-center shadow-none" />
-          <div className="workspace-sidebar-account mt-2 flex items-center justify-between rounded-xl bg-muted/60 px-3 py-2"><span className="workspace-sidebar-label text-xs font-medium text-muted-foreground">{roleLabels[role]}</span><SignOutButton /></div>
+          <div className="workspace-sidebar-account mt-2 flex items-center justify-between rounded-xl bg-muted/60 px-3 py-2"><span className="workspace-sidebar-label text-xs font-medium text-muted-foreground">{roleLabels[role]}</span><SignOutButton hasOpenShift={hasOpenShift} /></div>
         </div>
       </aside>
 

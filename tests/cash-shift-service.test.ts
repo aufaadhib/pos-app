@@ -1,0 +1,105 @@
+import { beforeEach, describe, expect, it, vi } from "vitest";
+
+import { Prisma } from "@/generated/prisma/client";
+
+const mocks = vi.hoisted(() => ({
+  auditCreate: vi.fn(),
+  cashMovementCreate: vi.fn(),
+  cashMovementFindUnique: vi.fn(),
+  cashMovementGroupBy: vi.fn(),
+  cashShiftCreate: vi.fn(),
+  cashShiftFindFirst: vi.fn(),
+  cashShiftFindUnique: vi.fn(),
+  cashShiftUpdateMany: vi.fn(),
+  outletFindFirst: vi.fn(),
+  paymentAggregate: vi.fn(),
+  transaction: vi.fn(),
+}));
+
+vi.mock("server-only", () => ({}));
+vi.mock("@/lib/prisma", () => ({
+  prisma: {
+    cashShift: { findUnique: mocks.cashShiftFindUnique },
+    cashMovement: { findUnique: mocks.cashMovementFindUnique },
+    $transaction: mocks.transaction,
+  },
+}));
+
+import {
+  addCashMovement,
+  CashShiftError,
+  closeCashShift,
+  forceCloseCashShift,
+  openCashShift,
+} from "@/lib/shifts/service";
+
+const actor = { id: "cashier-1", name: "Kasir", email: "cashier@example.com", role: "cashier" as const };
+const transactionClient = {
+  outlet: { findFirst: mocks.outletFindFirst },
+  cashShift: { create: mocks.cashShiftCreate, findFirst: mocks.cashShiftFindFirst, updateMany: mocks.cashShiftUpdateMany },
+  cashMovement: { create: mocks.cashMovementCreate, groupBy: mocks.cashMovementGroupBy },
+  salePayment: { aggregate: mocks.paymentAggregate },
+  cashShiftAuditLog: { create: mocks.auditCreate },
+};
+
+describe("cash shift service", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mocks.cashShiftFindUnique.mockResolvedValue(null);
+    mocks.cashMovementFindUnique.mockResolvedValue(null);
+    mocks.outletFindFirst.mockResolvedValue({ id: "outlet-1", timezone: "Asia/Jakarta" });
+    mocks.cashShiftCreate.mockResolvedValue({ id: "shift-1" });
+    mocks.cashMovementCreate.mockResolvedValue({ id: "movement-1" });
+    mocks.cashShiftFindFirst.mockResolvedValue({ id: "shift-1", outletId: "outlet-1", openingCash: new Prisma.Decimal(100000), openedByUserId: actor.id });
+    mocks.cashShiftUpdateMany.mockResolvedValue({ count: 1 });
+    mocks.paymentAggregate.mockResolvedValue({ _sum: { amount: new Prisma.Decimal(250000) } });
+    mocks.cashMovementGroupBy.mockResolvedValue([
+      { direction: "IN", _sum: { amount: new Prisma.Decimal(50000) } },
+      { direction: "OUT", _sum: { amount: new Prisma.Decimal(25000) } },
+    ]);
+    mocks.transaction.mockImplementation(async (callback) => callback(transactionClient));
+  });
+
+  it("opens one shift and audits its opening balance atomically", async () => {
+    const result = await openCashShift({ outletId: "outlet-1", openingCash: "100000", openToken: "a5df2f12-bf3e-4a1e-9b12-1dd4c931cd36" }, actor);
+    expect(result).toMatchObject({ status: "success", shiftId: "shift-1" });
+    expect(mocks.cashShiftCreate).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ openUserKey: actor.id, openingCash: expect.objectContaining({}) }) }));
+    expect(mocks.auditCreate).toHaveBeenCalledOnce();
+  });
+
+  it("retries a Neon driver transaction write conflict", async () => {
+    mocks.transaction
+      .mockRejectedValueOnce({ name: "DriverAdapterError", cause: { kind: "TransactionWriteConflict" } })
+      .mockImplementationOnce(async (callback) => callback(transactionClient));
+
+    const result = await openCashShift({ outletId: "outlet-1", openingCash: "100000", openToken: "e5df2f12-bf3e-4a1e-9b12-1dd4c931cd36" }, actor);
+
+    expect(result.status).toBe("success");
+    expect(mocks.transaction).toHaveBeenCalledTimes(2);
+  });
+
+  it("appends an owned cash movement with an idempotency token", async () => {
+    const result = await addCashMovement({
+      shiftId: "shift-1",
+      outletId: "outlet-1",
+      operationToken: "b5df2f12-bf3e-4a1e-9b12-1dd4c931cd36",
+      direction: "IN",
+      category: "ADDITIONAL_FLOAT",
+      amount: "50000",
+      reason: "Tambahan pecahan kecil",
+    }, actor);
+    expect(result.status).toBe("success");
+    expect(mocks.cashMovementCreate).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ operationToken: expect.any(String), actorUserId: actor.id }) }));
+  });
+
+  it("stores a stable expected cash snapshot when closing", async () => {
+    const result = await closeCashShift({ shiftId: "shift-1", outletId: "outlet-1", actualCash: "380000", closeToken: "c5df2f12-bf3e-4a1e-9b12-1dd4c931cd36" }, actor);
+    expect(result).toMatchObject({ status: "success", expectedCash: "375000.00", actualCash: "380000.00", cashDifference: "5000.00" });
+    expect(mocks.cashShiftUpdateMany).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ status: "CLOSED", openUserKey: null, expectedCash: expect.objectContaining({}) }) }));
+  });
+
+  it("rejects force-close from a cashier", async () => {
+    await expect(forceCloseCashShift({ shiftId: "shift-1", outletId: "outlet-1", actualCash: "0", closeToken: "d5df2f12-bf3e-4a1e-9b12-1dd4c931cd36", reason: "Kasir lupa menutup shift" }, actor)).rejects.toBeInstanceOf(CashShiftError);
+    expect(mocks.transaction).not.toHaveBeenCalled();
+  });
+});

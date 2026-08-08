@@ -28,6 +28,7 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { CurrencyInput } from "@/components/ui/currency-input";
 import {
   Dialog,
   DialogContent,
@@ -121,7 +122,7 @@ export function VariantOptionDialog({ groupId, option }: { groupId: string; opti
           <FieldGroup>
             <CatalogInput defaultValue={option?.name} errors={state.fieldErrors?.name} label="Nama opsi" maxLength={60} name="name" placeholder="Large" />
             <div className="grid gap-5 sm:grid-cols-2">
-              <CatalogInput defaultValue={option?.priceAdjustment.split(".")[0] ?? "0"} errors={state.fieldErrors?.priceAdjustment} inputMode="numeric" label="Tambahan harga (Rp)" name="priceAdjustment" />
+              <CatalogMoneyInput defaultValue={option?.priceAdjustment.split(".")[0] ?? "0"} errors={state.fieldErrors?.priceAdjustment} label="Tambahan harga (Rp)" name="priceAdjustment" />
               <CatalogInput defaultValue={String(option?.displayOrder ?? 0)} errors={state.fieldErrors?.displayOrder} label="Urutan" min={0} name="displayOrder" type="number" />
             </div>
           </FieldGroup>
@@ -175,7 +176,7 @@ export function ModifierOptionDialog({ groupId, option }: { groupId: string; opt
           <FieldGroup>
             <CatalogInput defaultValue={option?.name} errors={state.fieldErrors?.name} label="Nama opsi" maxLength={60} name="name" placeholder="Extra shot" />
             <div className="grid gap-5 sm:grid-cols-2">
-              <CatalogInput defaultValue={option?.priceAdjustment.split(".")[0] ?? "0"} errors={state.fieldErrors?.priceAdjustment} inputMode="numeric" label="Tambahan harga (Rp)" name="priceAdjustment" />
+              <CatalogMoneyInput defaultValue={option?.priceAdjustment.split(".")[0] ?? "0"} errors={state.fieldErrors?.priceAdjustment} label="Tambahan harga (Rp)" name="priceAdjustment" />
               <CatalogInput defaultValue={String(option?.displayOrder ?? 0)} errors={state.fieldErrors?.displayOrder} label="Urutan" min={0} name="displayOrder" type="number" />
             </div>
           </FieldGroup>
@@ -258,19 +259,25 @@ export function OutletCatalogProductCard({ canManage, outletId, product }: { can
 /** Submits one product-level availability and price override without closing the surrounding card. */
 function OutletProductOverrideForm({ outletId, product }: { outletId: string; product: OutletCatalogProductItem }) {
   const { state, action, pending } = useAutoCloseDialogAction(saveOutletProductOverrideAction, initialCatalogActionState, false);
-  return <form action={action} className="grid gap-3 rounded-xl border bg-background p-3 sm:grid-cols-[minmax(9rem,.7fr)_minmax(10rem,1fr)_auto] sm:items-end"><input name="outletId" type="hidden" value={outletId} /><input name="productId" type="hidden" value={product.id} />{product.overrideUpdatedAt && <input name="expectedUpdatedAt" type="hidden" value={product.overrideUpdatedAt} />}<Field><FieldLabel htmlFor={`availability-${outletId}-${product.id}`}>Ketersediaan</FieldLabel><SearchableSelect defaultValue={String(product.isAvailable)} id={`availability-${outletId}-${product.id}`} name="isAvailable" options={[{ label: "Tersedia", value: "true" }, { label: "Tidak tersedia", value: "false" }]} placeholder="Pilih status" /></Field><CatalogInput defaultValue={product.hasPriceOverride ? product.effectiveBasePrice.split(".")[0] : ""} errors={state.fieldErrors?.priceOverride} inputMode="numeric" label={`Harga override · master ${formatRupiah(product.basePrice)}`} name="priceOverride" placeholder="Kosong = harga master" /><Button disabled={pending} type="submit">{pending && <Spinner />}{pending ? "Menyimpan…" : "Simpan"}</Button>{state.status === "error" || state.status === "conflict" ? <p className="text-sm text-destructive sm:col-span-3" role="alert">{state.message}</p> : null}</form>;
+  return <form action={action} className="grid gap-3 rounded-xl border bg-background p-3 sm:grid-cols-[minmax(9rem,.7fr)_minmax(10rem,1fr)_auto] sm:items-end"><input name="outletId" type="hidden" value={outletId} /><input name="productId" type="hidden" value={product.id} />{product.overrideUpdatedAt && <input name="expectedUpdatedAt" type="hidden" value={product.overrideUpdatedAt} />}<Field><FieldLabel htmlFor={`availability-${outletId}-${product.id}`}>Ketersediaan</FieldLabel><SearchableSelect defaultValue={String(product.isAvailable)} id={`availability-${outletId}-${product.id}`} name="isAvailable" options={[{ label: "Tersedia", value: "true" }, { label: "Tidak tersedia", value: "false" }]} placeholder="Pilih status" /></Field><CatalogMoneyInput defaultValue={product.hasPriceOverride ? product.effectiveBasePrice.split(".")[0] : ""} errors={state.fieldErrors?.priceOverride} label={`Harga override · master ${formatRupiah(product.basePrice)}`} name="priceOverride" placeholder="Kosong = harga master" /><Button disabled={pending} type="submit">{pending && <Spinner />}{pending ? "Menyimpan…" : "Simpan"}</Button>{state.status === "error" || state.status === "conflict" ? <p className="text-sm text-destructive sm:col-span-3" role="alert">{state.message}</p> : null}</form>;
 }
 
 /** Submits one variant option override while preserving inherited master defaults. */
 function OutletVariantOverrideForm({ outletId, option }: { outletId: string; option: OutletCatalogProductItem["variantGroups"][number]["options"][number] }) {
   const { state, action, pending } = useAutoCloseDialogAction(saveOutletVariantOverrideAction, initialCatalogActionState, false);
-  return <form action={action} className="grid gap-2 rounded-lg border bg-card p-3 sm:grid-cols-[minmax(8rem,.7fr)_minmax(10rem,1fr)_auto] sm:items-end"><input name="outletId" type="hidden" value={outletId} /><input name="variantOptionId" type="hidden" value={option.id} />{option.overrideUpdatedAt && <input name="expectedUpdatedAt" type="hidden" value={option.overrideUpdatedAt} />}<Field><FieldLabel htmlFor={`variant-availability-${outletId}-${option.id}`}>{option.name}</FieldLabel><SearchableSelect defaultValue={String(option.isAvailable)} id={`variant-availability-${outletId}-${option.id}`} name="isAvailable" options={[{ label: "Tersedia", value: "true" }, { label: "Tidak tersedia", value: "false" }]} placeholder="Pilih status" /></Field><CatalogInput defaultValue={option.hasPriceOverride ? option.effectivePriceAdjustment.split(".")[0] : ""} errors={state.fieldErrors?.priceAdjustmentOverride} inputMode="numeric" label={`Tambahan · master ${formatRupiah(option.priceAdjustment)}`} name="priceAdjustmentOverride" placeholder="Kosong = master" /><Button disabled={pending} size="sm" type="submit">{pending ? <Spinner /> : "Simpan"}</Button>{state.status === "error" || state.status === "conflict" ? <p className="text-xs text-destructive sm:col-span-3" role="alert">{state.message}</p> : null}</form>;
+  return <form action={action} className="grid gap-2 rounded-lg border bg-card p-3 sm:grid-cols-[minmax(8rem,.7fr)_minmax(10rem,1fr)_auto] sm:items-end"><input name="outletId" type="hidden" value={outletId} /><input name="variantOptionId" type="hidden" value={option.id} />{option.overrideUpdatedAt && <input name="expectedUpdatedAt" type="hidden" value={option.overrideUpdatedAt} />}<Field><FieldLabel htmlFor={`variant-availability-${outletId}-${option.id}`}>{option.name}</FieldLabel><SearchableSelect defaultValue={String(option.isAvailable)} id={`variant-availability-${outletId}-${option.id}`} name="isAvailable" options={[{ label: "Tersedia", value: "true" }, { label: "Tidak tersedia", value: "false" }]} placeholder="Pilih status" /></Field><CatalogMoneyInput defaultValue={option.hasPriceOverride ? option.effectivePriceAdjustment.split(".")[0] : ""} errors={state.fieldErrors?.priceAdjustmentOverride} label={`Tambahan · master ${formatRupiah(option.priceAdjustment)}`} name="priceAdjustmentOverride" placeholder="Kosong = master" /><Button disabled={pending} size="sm" type="submit">{pending ? <Spinner /> : "Simpan"}</Button>{state.status === "error" || state.status === "conflict" ? <p className="text-xs text-destructive sm:col-span-3" role="alert">{state.message}</p> : null}</form>;
 }
 
 /** Connects an advanced-catalog input to its visible label and server field errors. */
 function CatalogInput({ errors, label, name, ...props }: React.ComponentProps<typeof Input> & { errors?: string[]; label: string; name: string }) {
   const id = `advanced-${name}-${String(props.defaultValue ?? "new").replace(/\W/g, "-")}`;
   return <Field data-invalid={Boolean(errors)}><FieldLabel htmlFor={id}>{label}</FieldLabel><Input aria-invalid={Boolean(errors)} id={id} name={name} {...props} /><FieldError errors={toFieldErrors(errors)} /></Field>;
+}
+
+/** Connects a formatted Rupiah input to raw server form data and field errors. */
+function CatalogMoneyInput({ errors, label, name, ...props }: React.ComponentProps<typeof CurrencyInput> & { errors?: string[]; label: string; name: string }) {
+  const id = `advanced-${name}-${String(props.defaultValue ?? "new").replace(/\W/g, "-")}`;
+  return <Field data-invalid={Boolean(errors)}><FieldLabel htmlFor={id}>{label}</FieldLabel><CurrencyInput aria-invalid={Boolean(errors)} id={id} name={name} {...props} /><FieldError errors={toFieldErrors(errors)} /></Field>;
 }
 
 /** Renders non-success action feedback inline so users retain a recovery path. */

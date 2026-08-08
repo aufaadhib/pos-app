@@ -12,6 +12,7 @@
     "test:e2e": "playwright test",
     "test:e2e:catalog-live": "tsx scripts/run-catalog-e2e.ts",
     "test:e2e:admin-live": "tsx scripts/run-admin-e2e.ts",
+    "test:e2e:shift-live": "tsx scripts/run-shift-e2e.ts",
     "db:generate": "prisma generate",
     "db:migrate": "prisma migrate dev",
     "db:studio": "prisma studio",

@@ -237,6 +237,7 @@ export async function getSaleDetail(id: string, outletId: string): Promise<SaleD
     where: { id, outletId },
     select: {
       id: true,
+      shiftId: true,
       receiptNumber: true,
       orderType: true,
       tableLabel: true,
@@ -283,6 +284,7 @@ export async function getSaleDetail(id: string, outletId: string): Promise<SaleD
   if (!sale?.payment) return null;
   return {
     id: sale.id,
+    shiftId: sale.shiftId,
     receiptNumber: sale.receiptNumber,
     orderType: sale.orderType,
     tableLabel: sale.tableLabel,

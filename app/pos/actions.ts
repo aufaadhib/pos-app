@@ -7,6 +7,7 @@ import { requirePermission } from "@/lib/auth/session";
 import { PosError, createSale } from "@/lib/pos/service";
 import type { CheckoutActionState } from "@/lib/pos/types";
 import { checkoutSchema } from "@/lib/pos/validation";
+import { CashShiftError } from "@/lib/shifts/service";
 
 /** Validates, authorizes, and commits one internal POS checkout request. */
 export async function checkoutSaleAction(rawInput: unknown): Promise<CheckoutActionState> {
@@ -26,7 +27,7 @@ export async function checkoutSaleAction(rawInput: unknown): Promise<CheckoutAct
     revalidatePath("/transactions");
     return result;
   } catch (error) {
-    if (error instanceof PosError) return { status: "error", message: error.message };
+    if (error instanceof PosError || error instanceof CashShiftError) return { status: "error", message: error.message };
     console.error("POS checkout failed", error);
     return { status: "error", message: "Transaksi belum dapat disimpan. Coba lagi." };
   }

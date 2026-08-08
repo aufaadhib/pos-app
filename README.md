@@ -2,6 +2,8 @@
 
 Fondasi aplikasi POS untuk kafe/restoran: login staf dengan Better Auth, RBAC, Prisma 7, Neon PostgreSQL, workspace terlindungi, katalog master multi-outlet, transaksi outlet, varian, modifier, penugasan staf, dan design system responsif.
 
+Rencana pengembangan berikutnya tersedia di [`docs/roadmap.md`](docs/roadmap.md).
+
 ## Menyiapkan Neon
 
 1. Masuk ke [Neon Console](https://console.neon.tech/) dan buat project bernama **Glutong POS**.
@@ -29,7 +31,7 @@ npm run seed:owner
 
 Seed hanya berjalan jika database kosong. Jika hanya owner dengan email yang sama sudah tersedia, seed menjadi no-op. Jika ada akun berbeda, seed berhenti agar tidak mengambil alih database. Setelah seed berhasil, hapus `INITIAL_OWNER_PASSWORD` dari environment.
 
-Public sign-up dinonaktifkan. Email verification mandiri, shift, stok, dan void/refund belum termasuk milestone ini.
+Public sign-up dinonaktifkan. Email verification mandiri, stok, dan void/refund belum termasuk milestone ini.
 
 ## Katalog produk
 
@@ -78,7 +80,19 @@ Migration `add_pos_transactions` menambahkan struk berurutan harian per outlet, 
 - Tunai menyimpan uang diterima dan kembalian. Satu transaksi hanya memakai satu metode pembayaran.
 - Dine-in wajib memiliki nomor/nama meja; takeaway tidak menyimpan meja.
 - Pajak serta layanan memakai `Decimal` dan dibulatkan half-up ke Rupiah per komponen.
-- Belum ada diskon, split payment, order tertahan, shift wajib, pengurangan stok, atau hard delete transaksi.
+- Belum ada diskon, split payment, order tertahan, pengurangan stok, atau hard delete transaksi.
+
+## Shift kasir dan tutup kas
+
+Migration `add_cash_shifts` menambahkan shift kasir, pergerakan kas, audit shift, dan relasi nullable dari transaksi lama ke shift. Checkout baru oleh owner, manager, maupun kasir wajib memakai shift pribadi yang aktif pada outlet session.
+
+- Satu user hanya dapat membuka satu shift secara global; shift tetap aktif melewati tengah malam dan tanggal bisnis mengikuti tanggal lokal saat dibuka.
+- Saldo kas seharusnya dihitung dari saldo awal + penjualan tunai + kas masuk - kas keluar. QRIS, kartu, transfer, dan platform delivery tetap diringkas tetapi tidak masuk cash drawer.
+- Input Rupiah untuk saldo, movement, hitung fisik, dan uang diterima otomatis memakai pemisah ribuan titik; server tetap menerima digit mentah dan menghitung dengan `Decimal`.
+- Kasir menutup shift dengan blind count. Expected cash dan selisih baru tampil setelah penutupan berhasil.
+- Owner/manager dapat menutup paksa shift dalam cakupan outlet dengan kas aktual dan alasan wajib.
+- Pergantian outlet, arsip outlet, deaktivasi staf, dan perubahan assignment diblokir selama shift terdampak masih terbuka. Logout tetap diizinkan setelah peringatan.
+- `/shifts` menampilkan shift outlet aktif, riwayat, pembayaran per metode, movement, transaksi, dan audit tanpa persistent cache.
 
 ## Ojol dan settlement
 
@@ -103,6 +117,8 @@ Route utama:
 - `/sign-in` — login email dan kata sandi.
 - `/workspace` — workspace semua role yang sah.
 - `/pos` — register kasir untuk outlet aktif.
+- `/shifts` — shift pribadi, shift terbuka, dan riwayat outlet aktif.
+- `/shifts/[shiftId]` — rincian rekonsiliasi, pembayaran, movement, transaksi, dan audit shift.
 - `/transactions` — riwayat struk outlet aktif.
 - `/transactions/[saleId]` — rincian snapshot transaksi yang sudah dibayar.
 - `/settlements` — konfigurasi harga ojol, piutang platform, dan rekonsiliasi batch untuk owner/manager.
@@ -156,6 +172,15 @@ npm run test:e2e:admin-live
 ```
 
 Runner admin membuat dua outlet dan tiga akun sementara, menjalankan journey CRUD/authorization, menyimpan screenshot ke `.artifacts/admin`, lalu membersihkan seluruh fixture.
+
+Untuk menguji alur live buka shift, checkout tunai/QRIS, movement, blind close, rekonsiliasi, serta viewport tablet/mobile:
+
+```powershell
+$env:E2E_ALLOW_TEST_USERS="true"
+npm run test:e2e:shift-live
+```
+
+Runner shift memakai server Next.js dan folder build terisolasi, membuat fixture sementara pada database development/test, menyimpan screenshot ke `.artifacts/shifts`, lalu membersihkan seluruh data finansial dan akun fixture. Jangan jalankan flag ini pada database production.
 
 ## Script database dan auth
 

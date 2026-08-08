@@ -1,4 +1,4 @@
-import { render, screen } from "@testing-library/react";
+import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -24,7 +24,9 @@ describe("POS register layout", () => {
     const user = userEvent.setup();
     render(<PosRegister menu={menu} />);
 
-    expect(screen.getByRole("complementary", { name: "Kategori menu" })).toBeInTheDocument();
+    const categoryRail = screen.getByRole("complementary", { name: "Kategori menu" });
+    expect(categoryRail).toBeInTheDocument();
+    expect(within(categoryRail).getByRole("button", { name: "Kopi" }).parentElement).toHaveClass("overflow-x-hidden");
     await user.click(screen.getByRole("button", { name: "Sembunyikan kategori" }));
     expect(screen.queryByRole("complementary", { name: "Kategori menu" })).not.toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "Tampilkan kategori" }));
@@ -33,7 +35,7 @@ describe("POS register layout", () => {
 
   it("keeps the product menu inside its own desktop scroll region", () => {
     render(<PosRegister menu={menu} />);
-    expect(screen.getByRole("region", { name: "Daftar menu" })).toHaveClass("min-h-0", "xl:h-full", "xl:overflow-y-scroll");
+    expect(screen.getByRole("region", { name: "Daftar menu" })).toHaveClass("h-full", "min-h-0", "overflow-y-auto", "overscroll-contain");
   });
 
   it("merges an identical product and shows its quantity on the menu card", async () => {

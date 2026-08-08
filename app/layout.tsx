@@ -15,6 +15,7 @@ const bodyFont = Atkinson_Hyperlegible_Next({
   variable: "--font-atkinson",
   subsets: ["latin"],
   display: "swap",
+  fallback: ["Arial"],
   adjustFontFallback: false,
 });
 

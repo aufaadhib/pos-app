@@ -100,6 +100,10 @@ async function changeOutletStatus(
     if (current.status === status) {
       throw new OutletError("INVALID_STATUS", status === OutletStatus.ACTIVE ? "Outlet sudah aktif." : "Outlet sudah diarsipkan.");
     }
+    if (status === OutletStatus.ARCHIVED) {
+      const openShift = await transaction.cashShift.findFirst({ where: { outletId: current.id, status: "OPEN" }, select: { id: true } });
+      if (openShift) throw new OutletError("CONFLICT", "Outlet masih memiliki shift terbuka. Tutup seluruh shift sebelum mengarsipkan outlet.");
+    }
     const update = await transaction.outlet.updateMany({
       where: { id: current.id, updatedAt: current.updatedAt },
       data: {
@@ -141,6 +145,10 @@ export async function selectActiveOutlet(
       },
     });
     if (!outlet) throw new OutletError("FORBIDDEN", "Outlet tidak tersedia untuk akun Anda.");
+    const openShift = await transaction.cashShift.findUnique({ where: { openUserKey: actor.id }, select: { outletId: true } });
+    if (openShift && openShift.outletId !== outlet.id) {
+      throw new OutletError("CONFLICT", "Tutup shift aktif sebelum berpindah outlet.");
+    }
     await transaction.session.update({
       where: { id: session.id, userId: session.userId },
       data: { activeOutletId: outlet.id },

@@ -154,6 +154,26 @@ Dokumen ini mencatat function dan component function yang ditambahkan pada miles
 | `formatSaleDate()`, `paymentLabel()` | Timestamp/metode | Label transaksi | Menampilkan waktu dalam zona outlet dan nama metode dalam Bahasa Indonesia. |
 | `orderLabel()`, `transactionPageHref()` | Sale dan filter aktif | Label/URL | Menampilkan sumber order serta mempertahankan filter ketika halaman transaksi berubah. |
 
+## Shift kasir dan tutup kas
+
+| Function | Input | Output | Tujuan dan side effect |
+| --- | --- | --- | --- |
+| `getOutletBusinessDate()` | Timestamp dan zona waktu outlet | Tanggal UTC untuk kolom PostgreSQL `date` | Menetapkan tanggal bisnis dari kalender lokal outlet tanpa menutup shift saat tengah malam. |
+| `openCashShift()` | Outlet, saldo awal, token, actor | `ShiftActionState` | Membuka satu shift pribadi global, menyimpan saldo `Decimal`, dan menulis audit dalam transaction serializable. |
+| `requireOpenCashShift()` | Prisma transaction, user, outlet | Shift aktif | Menjadi guard checkout atomik dan menolak transaksi tanpa shift atau pada outlet yang berbeda. |
+| `addCashMovement()` | Shift, arah, kategori, nominal, alasan, token, actor | `ShiftActionState` | Menambahkan movement immutable hanya pada shift terbuka milik actor dan menulis audit. |
+| `closeCashShift()`, `forceCloseCashShift()` | Shift, kas aktual, token, actor, alasan paksa | Hasil rekonsiliasi | Menjalankan blind close, menyimpan expected/actual/difference, melepaskan kunci shift user, dan mengaudit penutupan. |
+| `calculateExpectedCash()` | Transaction, shift, saldo awal | Total tunai `Decimal` | Menghitung saldo awal + penjualan tunai + kas masuk - kas keluar; pembayaran non-tunai tidak memengaruhi drawer. |
+| `isTransactionWriteConflict()` | Error Prisma/adapter | Boolean | Mengenali `P2034` dan `DriverAdapterError` Neon agar transaksi serializable dapat di-retry. |
+| `getCurrentCashShift()`, `hasCurrentCashShift()` | User ID | Shift aktif atau boolean | Membaca shift global user secara fresh untuk gate POS dan peringatan logout. |
+| `getCashShiftPage()` | Outlet, actor, halaman, status | Halaman shift | Membatasi data sesuai role/outlet, memisahkan shift terbuka dan riwayat, serta memakai pagination. |
+| `getCashShiftDetail()` | Shift, outlet, actor, halaman transaksi | Detail shift | Merangkum pembayaran, movement, audit, dan transaksi; total shift sendiri disembunyikan selama masih terbuka. |
+| Action shift | State dan FormData | `ShiftActionState` | Memvalidasi session, permission, Zod, actor tepercaya, mutation idempoten, lalu merevalidasi layar terdampak. |
+| `OpenShiftCard()`, `WrongOutletShiftCard()`, `PosShiftBar()` | Outlet atau shift aktif | Gate/status POS | Mewajibkan pembukaan shift, memblokir outlet yang salah, dan menyediakan kontrol kas responsif. |
+| `CashMovementDialog()`, `CloseShiftDialog()`, `ForceCloseShiftDialog()` | Shift dan permission | Dialog mutation | Mengumpulkan movement, blind count, atau alasan force-close dengan token idempotensi baru. |
+| `ShiftsPage()`, `CashShiftDetailPage()` | Session, outlet, route/search params | Halaman dynamic | Menyusun riwayat serta rincian shift yang fresh untuk mobile, tablet, dan desktop. |
+| `runShiftE2E()` | Flag database test | Exit process | Menjalankan alur live shift pada server/folder build terisolasi, mengambil screenshot responsif, dan membersihkan fixture. |
+
 ## Channel ojol dan settlement
 
 | Function | Input | Output | Tujuan dan side effect |
@@ -237,6 +257,7 @@ Dokumen ini mencatat function dan component function yang ditambahkan pada miles
 | `cn()` | Daftar class/value kondisional | String class | Menggabungkan `clsx` dan `tailwind-merge`; tanpa side effect. |
 | `Button()` | Props Base UI dan variant CVA | Tombol | Primitive tombol dengan `data-slot`, focus ring, variant, dan target sentuh utama 48px. |
 | `Input()` | Props input native | Input Base UI | Primitive input dengan label eksternal, state invalid/disabled, dan focus ring. |
+| `CurrencyInput()` | Nilai raw, nama field, opsi negatif | Input Rupiah dan hidden raw value | Memformat ribuan dengan titik saat mengetik tanpa floating point atau dependency tambahan. |
 | `FieldSet()`, `FieldLegend()`, `FieldGroup()`, `Field()`, `FieldContent()`, `FieldLabel()`, `FieldTitle()`, `FieldDescription()`, `FieldSeparator()`, `FieldError()` | Props elemen masing-masing | Struktur form | Primitive shadcn untuk relasi label, deskripsi, error ARIA, orientasi, dan pengelompokan field. |
 | `Card()`, `CardHeader()`, `CardFooter()`, `CardTitle()`, `CardAction()`, `CardDescription()`, `CardContent()` | Props div masing-masing | Struktur card | Primitive surface yang konsisten; tanpa side effect. |
 | `Alert()`, `AlertTitle()`, `AlertDescription()`, `AlertAction()` | Props div dan variant | Pesan status | Primitive `role=alert` untuk status normal atau destruktif. |

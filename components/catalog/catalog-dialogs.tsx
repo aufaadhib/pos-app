@@ -20,6 +20,7 @@ import {
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { ProductImage } from "@/components/product-image";
 import { Button } from "@/components/ui/button";
+import { CurrencyInput } from "@/components/ui/currency-input";
 import {
   Dialog,
   DialogContent,
@@ -438,13 +439,12 @@ export function ProductFormDialog({ categories, product, defaultCategoryId }: Pr
               <FieldError errors={toFieldErrors(state.fieldErrors?.description)} />
             </Field>
             <div className="grid gap-5 sm:grid-cols-2">
-              <CatalogTextField
+              <CatalogMoneyField
                 defaultValue={product?.basePrice.split(".")[0]}
                 errors={state.fieldErrors?.basePrice}
-                inputMode="numeric"
                 label="Harga dasar (Rp)"
                 name="basePrice"
-                placeholder="25000"
+                placeholder="25.000"
               />
               <CatalogTextField
                 defaultValue={String(product?.displayOrder ?? 0)}
@@ -513,6 +513,22 @@ function CatalogTextField({
     <Field data-invalid={Boolean(errors)}>
       <FieldLabel htmlFor={id}>{label}</FieldLabel>
       <Input aria-invalid={Boolean(errors)} id={id} name={name} {...props} />
+      <FieldError errors={toFieldErrors(errors)} />
+    </Field>
+  );
+}
+
+function CatalogMoneyField({
+  errors,
+  label,
+  name,
+  ...props
+}: React.ComponentProps<typeof CurrencyInput> & { errors?: string[]; label: string; name: string }) {
+  const id = `catalog-${name}-${String(props.defaultValue ?? "new").replace(/\W/g, "-")}`;
+  return (
+    <Field data-invalid={Boolean(errors)}>
+      <FieldLabel htmlFor={id}>{label}</FieldLabel>
+      <CurrencyInput aria-invalid={Boolean(errors)} id={id} name={name} {...props} />
       <FieldError errors={toFieldErrors(errors)} />
     </Field>
   );

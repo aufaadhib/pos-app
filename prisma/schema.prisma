@@ -23,6 +23,10 @@ model User {
   sessions           Session[]
   accounts           Account[]
   outletAssignments  UserOutletAssignment[]
+  openedCashShifts   CashShift[]            @relation("CashShiftOpenedBy")
+  closedCashShifts   CashShift[]            @relation("CashShiftClosedBy")
+  cashMovements      CashMovement[]         @relation("CashMovementActor")
+  cashShiftAuditLogs CashShiftAuditLog[]    @relation("CashShiftAuditActor")
 
   @@map("user")
 }
@@ -342,6 +346,7 @@ model Outlet {
   sales                  Sale[]
   receiptSequences       ReceiptSequence[]
   deliveryChannels       OutletDeliveryChannel[]
+  cashShifts             CashShift[]
 
   @@index([status, name])
   @@map("outlet")
@@ -383,6 +388,36 @@ enum SaleAuditAction {
   CREATE
   SETTLE
   UNSETTLE
+}
+
+enum CashShiftStatus {
+  OPEN
+  CLOSED
+}
+
+enum CashShiftCloseMode {
+  SELF
+  FORCED
+}
+
+enum CashMovementDirection {
+  IN
+  OUT
+}
+
+enum CashMovementCategory {
+  ADDITIONAL_FLOAT
+  CASH_DROP
+  OPERATING_EXPENSE
+  OTHER
+}
+
+enum CashShiftAuditAction {
+  OPEN
+  CASH_IN
+  CASH_OUT
+  CLOSE
+  FORCE_CLOSE
 }
 
 model OutletDeliveryChannel {
@@ -435,6 +470,7 @@ model Sale {
   id                  String                 @id @default(cuid())
   checkoutToken       String                 @unique
   outletId            String
+  shiftId             String?
   receiptNumber       String
   businessDate        DateTime               @db.Date
   dailySequence       Int
@@ -455,6 +491,7 @@ model Sale {
   completedAt         DateTime               @default(now())
   createdAt           DateTime               @default(now())
   outlet              Outlet                 @relation(fields: [outletId], references: [id], onDelete: Restrict)
+  shift               CashShift?             @relation(fields: [shiftId], references: [id], onDelete: Restrict)
   channel             OutletDeliveryChannel? @relation(fields: [channelId], references: [id], onDelete: Restrict)
   items               SaleItem[]
   payment             SalePayment?
@@ -464,9 +501,82 @@ model Sale {
   @@unique([outletId, businessDate, dailySequence])
   @@unique([channelId, externalOrderId])
   @@index([outletId, completedAt])
+  @@index([shiftId, completedAt])
   @@index([createdByUserId, completedAt])
   @@index([channelId, completedAt])
   @@map("sale")
+}
+
+model CashShift {
+  id             String              @id @default(cuid())
+  outletId       String
+  businessDate   DateTime            @db.Date
+  status         CashShiftStatus     @default(OPEN)
+  openUserKey    String?             @unique
+  openToken      String              @unique
+  openingCash    Decimal             @db.Decimal(14, 2)
+  openedByUserId String
+  openedByName   String
+  openedByEmail  String
+  openedAt       DateTime            @default(now())
+  closeMode      CashShiftCloseMode?
+  closeToken     String?             @unique
+  closedByUserId String?
+  closedByName   String?
+  closedByEmail  String?
+  expectedCash   Decimal?            @db.Decimal(14, 2)
+  actualCash     Decimal?            @db.Decimal(14, 2)
+  cashDifference Decimal?            @db.Decimal(14, 2)
+  closeReason    String?             @db.VarChar(240)
+  closedAt       DateTime?
+  createdAt      DateTime            @default(now())
+  updatedAt      DateTime            @updatedAt
+  outlet         Outlet              @relation(fields: [outletId], references: [id], onDelete: Restrict)
+  openedBy       User                @relation("CashShiftOpenedBy", fields: [openedByUserId], references: [id], onDelete: Restrict)
+  closedBy       User?               @relation("CashShiftClosedBy", fields: [closedByUserId], references: [id], onDelete: Restrict)
+  sales          Sale[]
+  movements      CashMovement[]
+  auditLogs      CashShiftAuditLog[]
+
+  @@index([outletId, status, openedAt])
+  @@index([openedByUserId, openedAt])
+  @@map("cash_shift")
+}
+
+model CashMovement {
+  id             String                @id @default(cuid())
+  shiftId        String
+  operationToken String                @unique
+  direction      CashMovementDirection
+  category       CashMovementCategory
+  amount         Decimal               @db.Decimal(14, 2)
+  reason         String                @db.VarChar(240)
+  actorUserId    String
+  actorName      String
+  actorEmail     String
+  createdAt      DateTime              @default(now())
+  shift          CashShift             @relation(fields: [shiftId], references: [id], onDelete: Restrict)
+  actor          User                  @relation("CashMovementActor", fields: [actorUserId], references: [id], onDelete: Restrict)
+
+  @@index([shiftId, createdAt])
+  @@index([actorUserId, createdAt])
+  @@map("cash_movement")
+}
+
+model CashShiftAuditLog {
+  id          String               @id @default(cuid())
+  shiftId     String
+  action      CashShiftAuditAction
+  actorUserId String
+  actorEmail  String
+  after       Json
+  createdAt   DateTime             @default(now())
+  shift       CashShift            @relation(fields: [shiftId], references: [id], onDelete: Restrict)
+  actor       User                 @relation("CashShiftAuditActor", fields: [actorUserId], references: [id], onDelete: Restrict)
+
+  @@index([shiftId, createdAt])
+  @@index([actorUserId, createdAt])
+  @@map("cash_shift_audit_log")
 }
 
 model SaleItem {

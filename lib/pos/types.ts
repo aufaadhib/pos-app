@@ -99,6 +99,7 @@ export type SalePage = {
 };
 
 export type SaleDetail = SaleListItem & {
+  shiftId: string | null;
   outletName: string;
   outletCode: string;
   subtotal: string;
