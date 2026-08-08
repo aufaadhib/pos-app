@@ -208,6 +208,7 @@ async function completeCashShift(
         cashSales: totals.cashSales.toFixed(2),
         cashIn: totals.cashIn.toFixed(2),
         cashOut: totals.cashOut.toFixed(2),
+        cashRefunds: totals.cashRefunds.toFixed(2),
         reason,
         closedAt: closedAt.toISOString(),
       });
@@ -229,11 +230,15 @@ async function completeCashShift(
   }
 }
 
-/** Calculates cash sales and manual movements for one shift inside a trusted transaction. */
-async function calculateExpectedCash(transaction: Prisma.TransactionClient, shiftId: string, openingCash: Prisma.Decimal) {
-  const [cashSalesAggregate, movements] = await Promise.all([
+/** Calculates cash sales, cash refunds, and manual movements for one shift inside a trusted transaction. */
+export async function calculateExpectedCash(transaction: Prisma.TransactionClient, shiftId: string, openingCash: Prisma.Decimal) {
+  const [cashSalesAggregate, cashRefundAggregate, movements] = await Promise.all([
     transaction.salePayment.aggregate({
       where: { method: PaymentMethod.CASH, sale: { shiftId } },
+      _sum: { amount: true },
+    }),
+    transaction.saleRefund.aggregate({
+      where: { method: PaymentMethod.CASH, cashShiftId: shiftId },
       _sum: { amount: true },
     }),
     transaction.cashMovement.groupBy({
@@ -243,9 +248,10 @@ async function calculateExpectedCash(transaction: Prisma.TransactionClient, shif
     }),
   ]);
   const cashSales = cashSalesAggregate._sum.amount ?? new Prisma.Decimal(0);
+  const cashRefunds = cashRefundAggregate._sum.amount ?? new Prisma.Decimal(0);
   const cashIn = movements.find((movement) => movement.direction === CashMovementDirection.IN)?._sum.amount ?? new Prisma.Decimal(0);
   const cashOut = movements.find((movement) => movement.direction === CashMovementDirection.OUT)?._sum.amount ?? new Prisma.Decimal(0);
-  return { cashSales, cashIn, cashOut, expectedCash: openingCash.add(cashSales).add(cashIn).sub(cashOut) };
+  return { cashSales, cashRefunds, cashIn, cashOut, expectedCash: openingCash.add(cashSales).add(cashIn).sub(cashOut).sub(cashRefunds) };
 }
 
 /** Verifies one active outlet against the actor's owner or assignment scope. */

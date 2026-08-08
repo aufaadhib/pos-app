@@ -62,6 +62,7 @@ export type CashShiftDetail = CashShiftListItem & {
   closedByEmail: string | null;
   closeReason: string | null;
   cashSales: string | null;
+  cashRefunds: string | null;
   cashIn: string | null;
   cashOut: string | null;
   paymentSummaries: PaymentSummary[] | null;

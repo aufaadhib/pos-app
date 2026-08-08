@@ -7,6 +7,7 @@ import {
   PaymentSettlementStatus,
   Prisma,
   SaleAuditAction,
+  SaleStatus,
   SettlementBatchStatus,
 } from "@/generated/prisma/client";
 import type { AppRole } from "@/lib/auth/permissions";
@@ -127,7 +128,11 @@ export async function createSettlementBatch(input: SettlementBatchInput, actor: 
         where: {
           id: { in: input.paymentIds },
           settlementStatus: PaymentSettlementStatus.PENDING,
-          sale: { outletId: input.outletId, channelId: channel.id },
+          sale: {
+            outletId: input.outletId,
+            channelId: channel.id,
+            status: { in: [SaleStatus.COMPLETED, SaleStatus.PARTIALLY_REFUNDED] },
+          },
         },
         select: {
           id: true,
@@ -135,10 +140,20 @@ export async function createSettlementBatch(input: SettlementBatchInput, actor: 
           amount: true,
           directEquivalentAmount: true,
           expectedNetAmount: true,
+          sale: { select: { refunds: { select: { amount: true, directEquivalentAmount: true, expectedNetAmount: true } } } },
         },
       });
       if (payments.length !== input.paymentIds.length) throw new DeliveryError("CONFLICT", "Ada transaksi yang sudah diselesaikan atau tidak termasuk channel ini.");
-      const gross = payments.reduce((sum, payment) => sum.add(payment.amount), new Prisma.Decimal(0));
+      const outstandingPayments = payments.map((payment) => ({
+        ...payment,
+        amount: payment.amount.sub(sumRefundField(payment.sale.refunds, "amount")),
+        directEquivalentAmount: payment.directEquivalentAmount!.sub(sumRefundField(payment.sale.refunds, "directEquivalentAmount")),
+        expectedNetAmount: payment.expectedNetAmount!.sub(sumRefundField(payment.sale.refunds, "expectedNetAmount")),
+      }));
+      if (outstandingPayments.some((payment) => payment.amount.lessThanOrEqualTo(0))) {
+        throw new DeliveryError("CONFLICT", "Ada transaksi yang sudah direfund penuh. Muat ulang daftar settlement.");
+      }
+      const gross = outstandingPayments.reduce((sum, payment) => sum.add(payment.amount), new Prisma.Decimal(0));
       const platformFee = new Prisma.Decimal(input.platformFeeAmount);
       const merchantPromotion = new Prisma.Decimal(input.merchantPromotionAmount);
       const otherAdjustment = new Prisma.Decimal(input.otherAdjustmentAmount);
@@ -160,7 +175,7 @@ export async function createSettlementBatch(input: SettlementBatchInput, actor: 
         confirmedByUserId: actor.id,
         confirmedByName: actor.name,
         confirmedByEmail: actor.email,
-        items: { create: payments.map((payment) => ({
+        items: { create: outstandingPayments.map((payment) => ({
           salePaymentId: payment.id,
           grossAmount: payment.amount,
           directEquivalentAmount: payment.directEquivalentAmount!,
@@ -172,7 +187,7 @@ export async function createSettlementBatch(input: SettlementBatchInput, actor: 
         data: { settlementStatus: PaymentSettlementStatus.SETTLED },
       });
       if (updated.count !== payments.length) throw new DeliveryError("CONFLICT", "Status settlement berubah. Muat ulang data.");
-      await transaction.saleAuditLog.createMany({ data: payments.map((payment) => ({
+      await transaction.saleAuditLog.createMany({ data: outstandingPayments.map((payment) => ({
         saleId: payment.saleId,
         action: SaleAuditAction.SETTLE,
         actorUserId: actor.id,
@@ -193,6 +208,14 @@ export async function createSettlementBatch(input: SettlementBatchInput, actor: 
     if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002") throw new DeliveryError("CONFLICT", "Referensi settlement sudah digunakan.");
     throw error;
   }
+}
+
+/** Sums one nullable refunded payment snapshot without converting Decimal values to numbers. */
+function sumRefundField(
+  refunds: Array<{ amount: Prisma.Decimal; directEquivalentAmount: Prisma.Decimal | null; expectedNetAmount: Prisma.Decimal | null }>,
+  field: "amount" | "directEquivalentAmount" | "expectedNetAmount",
+) {
+  return refunds.reduce((sum, refund) => sum.add(refund[field] ?? 0), new Prisma.Decimal(0));
 }
 
 /** Reverses a confirmed batch without deleting its financial history. */

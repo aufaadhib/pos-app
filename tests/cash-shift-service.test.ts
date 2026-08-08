@@ -13,6 +13,7 @@ const mocks = vi.hoisted(() => ({
   cashShiftUpdateMany: vi.fn(),
   outletFindFirst: vi.fn(),
   paymentAggregate: vi.fn(),
+  refundAggregate: vi.fn(),
   transaction: vi.fn(),
 }));
 
@@ -39,6 +40,7 @@ const transactionClient = {
   cashShift: { create: mocks.cashShiftCreate, findFirst: mocks.cashShiftFindFirst, updateMany: mocks.cashShiftUpdateMany },
   cashMovement: { create: mocks.cashMovementCreate, groupBy: mocks.cashMovementGroupBy },
   salePayment: { aggregate: mocks.paymentAggregate },
+  saleRefund: { aggregate: mocks.refundAggregate },
   cashShiftAuditLog: { create: mocks.auditCreate },
 };
 
@@ -53,6 +55,7 @@ describe("cash shift service", () => {
     mocks.cashShiftFindFirst.mockResolvedValue({ id: "shift-1", outletId: "outlet-1", openingCash: new Prisma.Decimal(100000), openedByUserId: actor.id });
     mocks.cashShiftUpdateMany.mockResolvedValue({ count: 1 });
     mocks.paymentAggregate.mockResolvedValue({ _sum: { amount: new Prisma.Decimal(250000) } });
+    mocks.refundAggregate.mockResolvedValue({ _sum: { amount: new Prisma.Decimal(0) } });
     mocks.cashMovementGroupBy.mockResolvedValue([
       { direction: "IN", _sum: { amount: new Prisma.Decimal(50000) } },
       { direction: "OUT", _sum: { amount: new Prisma.Decimal(25000) } },
@@ -96,6 +99,12 @@ describe("cash shift service", () => {
     const result = await closeCashShift({ shiftId: "shift-1", outletId: "outlet-1", actualCash: "380000", closeToken: "c5df2f12-bf3e-4a1e-9b12-1dd4c931cd36" }, actor);
     expect(result).toMatchObject({ status: "success", expectedCash: "375000.00", actualCash: "380000.00", cashDifference: "5000.00" });
     expect(mocks.cashShiftUpdateMany).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ status: "CLOSED", openUserKey: null, expectedCash: expect.objectContaining({}) }) }));
+  });
+
+  it("subtracts cash refunds paid from the active drawer", async () => {
+    mocks.refundAggregate.mockResolvedValue({ _sum: { amount: new Prisma.Decimal(50000) } });
+    const result = await closeCashShift({ shiftId: "shift-1", outletId: "outlet-1", actualCash: "325000", closeToken: "f5df2f12-bf3e-4a1e-9b12-1dd4c931cd36" }, actor);
+    expect(result).toMatchObject({ status: "success", expectedCash: "325000.00", cashDifference: "0.00" });
   });
 
   it("rejects force-close from a cashier", async () => {

@@ -1,6 +1,6 @@
 import "server-only";
 
-import { CatalogStatus, type DeliveryProvider, OutletStatus, type PaymentSettlementStatus, Prisma } from "@/generated/prisma/client";
+import { CatalogStatus, type DeliveryProvider, OutletStatus, type PaymentSettlementStatus, Prisma, type SaleStatus } from "@/generated/prisma/client";
 import type { AppRole } from "@/lib/auth/permissions";
 import { calculateChannelPrice } from "@/lib/delivery/pricing";
 import { deliveryProviderLabels } from "@/lib/delivery/types";
@@ -181,11 +181,12 @@ export async function getPosMenu(outletId: string, userId: string, role: AppRole
 }
 
 /** Reads one outlet's newest completed sales with bounded pagination. */
-export async function getSalesPage(outletId: string, page: number, filters: { source?: "DIRECT" | DeliveryProvider; settlementStatus?: PaymentSettlementStatus } = {}): Promise<SalePage> {
+export async function getSalesPage(outletId: string, page: number, filters: { source?: "DIRECT" | DeliveryProvider; settlementStatus?: PaymentSettlementStatus; status?: SaleStatus } = {}): Promise<SalePage> {
   const where: Prisma.SaleWhereInput = {
     outletId,
     ...(filters.source === "DIRECT" ? { channelId: null } : filters.source ? { channel: { provider: filters.source } } : {}),
     ...(filters.settlementStatus ? { payment: { settlementStatus: filters.settlementStatus } } : {}),
+    ...(filters.status ? { status: filters.status } : {}),
   };
   const totalItems = await prisma.sale.count({ where });
   const totalPages = Math.max(1, Math.ceil(totalItems / salePageSize));
@@ -201,12 +202,14 @@ export async function getSalesPage(outletId: string, page: number, filters: { so
       orderType: true,
       tableLabel: true,
       total: true,
+      status: true,
       createdByName: true,
       completedAt: true,
       externalOrderId: true,
       channel: { select: { provider: true } },
       payment: { select: { method: true, settlementStatus: true, expectedSettlementAt: true } },
       items: { select: { quantity: true } },
+      refunds: { select: { amount: true } },
     },
   });
   return {
@@ -224,6 +227,8 @@ export async function getSalesPage(outletId: string, page: number, filters: { so
       expectedSettlementAt: sale.payment!.expectedSettlementAt?.toISOString() ?? null,
       createdByName: sale.createdByName,
       completedAt: sale.completedAt.toISOString(),
+      status: sale.status,
+      refundedAmount: sale.refunds.reduce((sum, refund) => sum.add(refund.amount), new Prisma.Decimal(0)).toFixed(2),
     })),
     page: currentPage,
     totalPages,
@@ -239,6 +244,7 @@ export async function getSaleDetail(id: string, outletId: string): Promise<SaleD
       id: true,
       shiftId: true,
       receiptNumber: true,
+      businessDate: true,
       orderType: true,
       tableLabel: true,
       subtotal: true,
@@ -248,6 +254,7 @@ export async function getSaleDetail(id: string, outletId: string): Promise<SaleD
       taxAmount: true,
       pricesIncludeTax: true,
       total: true,
+      status: true,
       createdByName: true,
       completedAt: true,
       externalOrderId: true,
@@ -279,12 +286,27 @@ export async function getSaleDetail(id: string, outletId: string): Promise<SaleD
           modifiers: { select: { modifierGroupName: true, optionName: true, priceAdjustment: true } },
         },
       },
+      refunds: {
+        orderBy: { createdAt: "desc" },
+        select: {
+          id: true,
+          type: true,
+          amount: true,
+          reason: true,
+          providerReference: true,
+          actorName: true,
+          cashShiftId: true,
+          createdAt: true,
+          items: { select: { saleItemId: true, quantity: true, lineAmount: true, saleItem: { select: { productName: true } } } },
+        },
+      },
     },
   });
   if (!sale?.payment) return null;
   return {
     id: sale.id,
     shiftId: sale.shiftId,
+    businessDate: sale.businessDate.toISOString().slice(0, 10),
     receiptNumber: sale.receiptNumber,
     orderType: sale.orderType,
     tableLabel: sale.tableLabel,
@@ -297,6 +319,9 @@ export async function getSaleDetail(id: string, outletId: string): Promise<SaleD
     expectedSettlementAt: sale.payment.expectedSettlementAt?.toISOString() ?? null,
     createdByName: sale.createdByName,
     completedAt: sale.completedAt.toISOString(),
+    status: sale.status,
+    refundedAmount: sale.refunds.reduce((sum, refund) => sum.add(refund.amount), new Prisma.Decimal(0)).toFixed(2),
+    remainingAmount: sale.total.sub(sale.refunds.reduce((sum, refund) => sum.add(refund.amount), new Prisma.Decimal(0))).toFixed(2),
     outletName: sale.outlet.name,
     outletCode: sale.outlet.code,
     subtotal: sale.subtotal.toFixed(2),
@@ -323,6 +348,23 @@ export async function getSaleDetail(id: string, outletId: string): Promise<SaleD
       lineTotal: item.lineTotal.toFixed(2),
       variants: item.variants.map((value) => ({ groupName: value.variantGroupName, optionName: value.optionName, priceAdjustment: value.priceAdjustment.toFixed(2) })),
       modifiers: item.modifiers.map((value) => ({ groupName: value.modifierGroupName, optionName: value.optionName, priceAdjustment: value.priceAdjustment.toFixed(2) })),
+      refundedQuantity: sale.refunds.reduce((sum, refund) => sum + (refund.items.find((value) => value.saleItemId === item.id)?.quantity ?? 0), 0),
+    })),
+    refunds: sale.refunds.map((refund) => ({
+      id: refund.id,
+      type: refund.type,
+      amount: refund.amount.toFixed(2),
+      reason: refund.reason,
+      providerReference: refund.providerReference,
+      actorName: refund.actorName,
+      cashShiftId: refund.cashShiftId,
+      createdAt: refund.createdAt.toISOString(),
+      items: refund.items.map((item) => ({
+        saleItemId: item.saleItemId,
+        productName: item.saleItem.productName,
+        quantity: item.quantity,
+        lineAmount: item.lineAmount.toFixed(2),
+      })),
     })),
   };
 }

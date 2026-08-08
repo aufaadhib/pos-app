@@ -89,6 +89,8 @@ export type SaleListItem = {
   expectedSettlementAt: string | null;
   createdByName: string;
   completedAt: string;
+  status: "COMPLETED" | "PARTIALLY_REFUNDED" | "REFUNDED" | "VOIDED";
+  refundedAmount: string;
 };
 
 export type SalePage = {
@@ -100,6 +102,8 @@ export type SalePage = {
 
 export type SaleDetail = SaleListItem & {
   shiftId: string | null;
+  businessDate: string;
+  remainingAmount: string;
   outletName: string;
   outletCode: string;
   subtotal: string;
@@ -126,5 +130,26 @@ export type SaleDetail = SaleListItem & {
     lineTotal: string;
     variants: Array<{ groupName: string; optionName: string; priceAdjustment: string }>;
     modifiers: Array<{ groupName: string; optionName: string; priceAdjustment: string }>;
+    refundedQuantity: number;
+  }>;
+  refunds: Array<{
+    id: string;
+    type: "VOID" | "REFUND";
+    amount: string;
+    reason: string;
+    providerReference: string | null;
+    actorName: string;
+    cashShiftId: string | null;
+    createdAt: string;
+    items: Array<{ saleItemId: string; productName: string; quantity: number; lineAmount: string }>;
   }>;
 };
+
+export type TransactionActionState = {
+  status: "idle" | "success" | "error" | "conflict";
+  message: string;
+  fieldErrors?: Record<string, string[] | undefined>;
+  refundId?: string;
+};
+
+export const initialTransactionActionState: TransactionActionState = { status: "idle", message: "" };

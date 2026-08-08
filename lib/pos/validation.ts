@@ -51,3 +51,40 @@ export const checkoutSchema = z.object({
 });
 
 export type CheckoutInput = z.infer<typeof checkoutSchema>;
+
+const correctionBaseSchema = z.object({
+  saleId: idSchema,
+  outletId: idSchema,
+  operationToken: z.uuid(),
+  reason: z.string().trim().min(5, "Alasan minimal 5 karakter.").max(240),
+  providerReference: z.preprocess(
+    (value) => typeof value === "string" && value.trim() === "" ? undefined : value,
+    z.string().trim().min(1).max(80).optional(),
+  ),
+});
+
+export const voidSaleSchema = correctionBaseSchema;
+
+export const refundSaleSchema = correctionBaseSchema.extend({
+  items: z.array(z.object({
+    saleItemId: idSchema,
+    quantity: z.number().int().min(1).max(99),
+  })).min(1, "Pilih minimal satu item.").max(100).refine(
+    (items) => new Set(items.map((item) => item.saleItemId)).size === items.length,
+    "Item refund tidak boleh duplikat.",
+  ),
+});
+
+export type VoidSaleInput = z.infer<typeof voidSaleSchema>;
+export type RefundSaleInput = z.infer<typeof refundSaleSchema>;
+
+/** Parses the JSON item payload from a refund form before applying the shared Zod boundary. */
+export function parseRefundSaleForm(formData: FormData) {
+  let items: unknown;
+  try {
+    items = JSON.parse(String(formData.get("items") ?? "null"));
+  } catch {
+    items = null;
+  }
+  return refundSaleSchema.safeParse({ ...Object.fromEntries(formData), items });
+}

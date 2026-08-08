@@ -31,7 +31,7 @@ npm run seed:owner
 
 Seed hanya berjalan jika database kosong. Jika hanya owner dengan email yang sama sudah tersedia, seed menjadi no-op. Jika ada akun berbeda, seed berhenti agar tidak mengambil alih database. Setelah seed berhasil, hapus `INITIAL_OWNER_PASSWORD` dari environment.
 
-Public sign-up dinonaktifkan. Email verification mandiri, stok, dan void/refund belum termasuk milestone ini.
+Public sign-up dinonaktifkan. Email verification mandiri dan stok belum termasuk milestone saat ini.
 
 ## Katalog produk
 
@@ -82,12 +82,23 @@ Migration `add_pos_transactions` menambahkan struk berurutan harian per outlet, 
 - Pajak serta layanan memakai `Decimal` dan dibulatkan half-up ke Rupiah per komponen.
 - Belum ada diskon, split payment, order tertahan, pengurangan stok, atau hard delete transaksi.
 
+### Void dan refund
+
+Migration `add_sale_voids_and_refunds` menambahkan status transaksi serta ledger koreksi append-only tanpa mengubah snapshot struk asli.
+
+- Owner dan manager dapat melakukan void penuh pada tanggal bisnis yang sama atau refund item/kuantitas; kasir hanya dapat melihat hasilnya.
+- Refund parsial dapat diulang sampai sisa kuantitas dan nilai habis. Alasan, actor, waktu, metode asal, dan audit selalu disimpan.
+- Refund tunai wajib memakai shift aktif pelaksana dan mengurangi expected cash shift tersebut. Shift asal yang sudah ditutup tidak dibuka atau diubah.
+- Refund QRIS, kartu, transfer, dan platform dicatat selesai manual dengan referensi bank/provider wajib; aplikasi belum memanggil API pembayaran.
+- Delivery pending hanya menyisakan nilai bersih pada settlement. Delivery settled harus melalui reversal settlement sebelum dapat direfund.
+- Cancellation sebelum pembayaran dikerjakan bersama open order; pengembalian stok dikerjakan bersama stock movement.
+
 ## Shift kasir dan tutup kas
 
 Migration `add_cash_shifts` menambahkan shift kasir, pergerakan kas, audit shift, dan relasi nullable dari transaksi lama ke shift. Checkout baru oleh owner, manager, maupun kasir wajib memakai shift pribadi yang aktif pada outlet session.
 
 - Satu user hanya dapat membuka satu shift secara global; shift tetap aktif melewati tengah malam dan tanggal bisnis mengikuti tanggal lokal saat dibuka.
-- Saldo kas seharusnya dihitung dari saldo awal + penjualan tunai + kas masuk - kas keluar. QRIS, kartu, transfer, dan platform delivery tetap diringkas tetapi tidak masuk cash drawer.
+- Saldo kas seharusnya dihitung dari saldo awal + penjualan tunai + kas masuk - kas keluar - refund tunai. QRIS, kartu, transfer, dan platform delivery tetap diringkas tetapi tidak masuk cash drawer.
 - Input Rupiah untuk saldo, movement, hitung fisik, dan uang diterima otomatis memakai pemisah ribuan titik; server tetap menerima digit mentah dan menghitung dengan `Decimal`.
 - Kasir menutup shift dengan blind count. Expected cash dan selisih baru tampil setelah penutupan berhasil.
 - Owner/manager dapat menutup paksa shift dalam cakupan outlet dengan kas aktual dan alasan wajib.
@@ -102,7 +113,7 @@ Migration `add_delivery_channels_and_settlements` menambahkan harga GoFood, Grab
 - Harga channel selalu di atas harga outlet dan dibulatkan naik ke Rp500; fee serta selisih tetap dihitung presisi dengan `Decimal`.
 - Kasir memilih sumber order sebelum menambahkan item dan wajib memasukkan nomor order platform yang unik.
 - Order platform menggunakan harga final termasuk pajak, tanpa service charge lokal, dan otomatis berstatus settlement `PENDING`.
-- Owner dan manager dapat mencocokkan banyak order dalam satu transfer. Gross dikurangi fee, promo merchant, dan penyesuaian harus sama persis dengan net yang masuk.
+- Owner dan manager dapat mencocokkan banyak order dalam satu transfer. Gross sudah dikurangi refund pending, lalu fee, promo merchant, dan penyesuaian harus sama persis dengan net yang masuk.
 - Hanya owner yang dapat membalik settlement; batch tidak dihapus dan seluruh transaksi memperoleh audit.
 - Tahap ini belum mengambil order/API atau laporan CSV langsung dari platform dan belum menghitung HPP bahan.
 

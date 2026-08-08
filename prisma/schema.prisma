@@ -388,6 +388,20 @@ enum SaleAuditAction {
   CREATE
   SETTLE
   UNSETTLE
+  VOID
+  REFUND
+}
+
+enum SaleStatus {
+  COMPLETED
+  PARTIALLY_REFUNDED
+  REFUNDED
+  VOIDED
+}
+
+enum SaleRefundType {
+  VOID
+  REFUND
 }
 
 enum CashShiftStatus {
@@ -478,6 +492,7 @@ model Sale {
   tableLabel          String?                @db.VarChar(40)
   channelId           String?
   externalOrderId     String?                @db.VarChar(80)
+  status              SaleStatus             @default(COMPLETED)
   subtotal            Decimal                @db.Decimal(14, 2)
   serviceChargeRate   Decimal                @db.Decimal(5, 2)
   serviceChargeAmount Decimal                @db.Decimal(14, 2)
@@ -496,11 +511,12 @@ model Sale {
   items               SaleItem[]
   payment             SalePayment?
   auditLogs           SaleAuditLog[]
+  refunds             SaleRefund[]
 
   @@unique([outletId, receiptNumber])
   @@unique([outletId, businessDate, dailySequence])
   @@unique([channelId, externalOrderId])
-  @@index([outletId, completedAt])
+  @@index([outletId, status, completedAt])
   @@index([shiftId, completedAt])
   @@index([createdByUserId, completedAt])
   @@index([channelId, completedAt])
@@ -537,6 +553,7 @@ model CashShift {
   sales          Sale[]
   movements      CashMovement[]
   auditLogs      CashShiftAuditLog[]
+  refunds        SaleRefund[]
 
   @@index([outletId, status, openedAt])
   @@index([openedByUserId, openedAt])
@@ -596,6 +613,7 @@ model SaleItem {
   sale               Sale               @relation(fields: [saleId], references: [id], onDelete: Restrict)
   variants           SaleItemVariant[]
   modifiers          SaleItemModifier[]
+  refundItems        SaleRefundItem[]
 
   @@index([saleId])
   @@index([productId])
@@ -651,6 +669,50 @@ model SalePayment {
   @@index([method, createdAt])
   @@index([settlementStatus, expectedSettlementAt])
   @@map("sale_payment")
+}
+
+model SaleRefund {
+  id                     String           @id @default(cuid())
+  saleId                 String
+  cashShiftId            String?
+  operationToken         String           @unique
+  type                   SaleRefundType
+  method                 PaymentMethod
+  subtotalAmount         Decimal          @db.Decimal(14, 2)
+  serviceChargeAmount    Decimal          @db.Decimal(14, 2)
+  taxAmount              Decimal          @db.Decimal(14, 2)
+  amount                 Decimal          @db.Decimal(14, 2)
+  expectedFeeAmount      Decimal?         @db.Decimal(14, 2)
+  expectedNetAmount      Decimal?         @db.Decimal(14, 2)
+  directEquivalentAmount Decimal?         @db.Decimal(14, 2)
+  reason                 String           @db.VarChar(240)
+  providerReference      String?          @db.VarChar(80)
+  actorUserId            String
+  actorName              String
+  actorEmail             String
+  createdAt              DateTime         @default(now())
+  sale                   Sale             @relation(fields: [saleId], references: [id], onDelete: Restrict)
+  cashShift              CashShift?       @relation(fields: [cashShiftId], references: [id], onDelete: Restrict)
+  items                  SaleRefundItem[]
+
+  @@index([saleId, createdAt])
+  @@index([cashShiftId, createdAt])
+  @@index([actorUserId, createdAt])
+  @@map("sale_refund")
+}
+
+model SaleRefundItem {
+  id         String     @id @default(cuid())
+  refundId   String
+  saleItemId String
+  quantity   Int
+  lineAmount Decimal    @db.Decimal(14, 2)
+  refund     SaleRefund @relation(fields: [refundId], references: [id], onDelete: Restrict)
+  saleItem   SaleItem   @relation(fields: [saleItemId], references: [id], onDelete: Restrict)
+
+  @@unique([refundId, saleItemId])
+  @@index([saleItemId])
+  @@map("sale_refund_item")
 }
 
 model PlatformSettlement {

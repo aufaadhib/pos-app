@@ -37,8 +37,8 @@ describe("delivery settlement service", () => {
     mocks.outletFind.mockResolvedValue({ id: "outlet-1" });
     mocks.channelFind.mockResolvedValue({ id: "channel-1" });
     mocks.paymentFind.mockResolvedValue([
-      { id: "payment-1", saleId: "sale-1", amount: new Prisma.Decimal(100000), directEquivalentAmount: new Prisma.Decimal(85000), expectedNetAmount: new Prisma.Decimal(80000) },
-      { id: "payment-2", saleId: "sale-2", amount: new Prisma.Decimal(150000), directEquivalentAmount: new Prisma.Decimal(125000), expectedNetAmount: new Prisma.Decimal(120000) },
+      { id: "payment-1", saleId: "sale-1", amount: new Prisma.Decimal(100000), directEquivalentAmount: new Prisma.Decimal(85000), expectedNetAmount: new Prisma.Decimal(80000), sale: { refunds: [] } },
+      { id: "payment-2", saleId: "sale-2", amount: new Prisma.Decimal(150000), directEquivalentAmount: new Prisma.Decimal(125000), expectedNetAmount: new Prisma.Decimal(120000), sale: { refunds: [] } },
     ]);
     mocks.settlementCreate.mockImplementation(async ({ data }) => ({ id: "settlement-1", ...data }));
     mocks.paymentUpdate.mockResolvedValue({ count: 2 });
@@ -68,5 +68,17 @@ describe("delivery settlement service", () => {
   it("rejects a batch whose bank net does not match its deductions", async () => {
     await expect(createSettlementBatch({ ...input, netReceivedAmount: "190000.00" }, { id: "manager-1", name: "Manajer", email: "manager@example.com", role: "manager" })).rejects.toBeInstanceOf(DeliveryError);
     expect(mocks.settlementCreate).not.toHaveBeenCalled();
+  });
+
+  it("settles only the receivable remaining after a partial refund", async () => {
+    mocks.paymentFind.mockResolvedValue([
+      { id: "payment-1", saleId: "sale-1", amount: new Prisma.Decimal(100000), directEquivalentAmount: new Prisma.Decimal(85000), expectedNetAmount: new Prisma.Decimal(80000), sale: { refunds: [{ amount: new Prisma.Decimal(20000), directEquivalentAmount: new Prisma.Decimal(17000), expectedNetAmount: new Prisma.Decimal(16000) }] } },
+      { id: "payment-2", saleId: "sale-2", amount: new Prisma.Decimal(150000), directEquivalentAmount: new Prisma.Decimal(125000), expectedNetAmount: new Prisma.Decimal(120000), sale: { refunds: [] } },
+    ]);
+    await createSettlementBatch({ ...input, netReceivedAmount: "168000.00" }, { id: "manager-1", name: "Manajer", email: "manager@example.com", role: "manager" });
+    const data = mocks.settlementCreate.mock.calls[0][0].data;
+    expect(data.grossAmount.toFixed(2)).toBe("230000.00");
+    expect(data.items.create[0].grossAmount.toFixed(2)).toBe("80000.00");
+    expect(data.items.create[0].expectedNetAmount.toFixed(2)).toBe("64000.00");
   });
 });

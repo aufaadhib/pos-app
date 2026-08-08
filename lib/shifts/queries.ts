@@ -120,13 +120,17 @@ export async function getCashShiftDetail(input: {
   });
   if (!shift) return null;
 
-  const [payments, movements, audits, sales, salesTotalItems] = await Promise.all([
+  const [payments, cashRefunds, movements, audits, sales, salesTotalItems] = await Promise.all([
     prisma.salePayment.groupBy({
       by: ["method"],
       where: { sale: { shiftId: shift.id } },
       _sum: { amount: true },
       _count: { _all: true },
       orderBy: { method: "asc" },
+    }),
+    prisma.saleRefund.aggregate({
+      where: { cashShiftId: shift.id, method: "CASH" },
+      _sum: { amount: true },
     }),
     prisma.cashMovement.findMany({
       where: { shiftId: shift.id },
@@ -168,6 +172,7 @@ export async function getCashShiftDetail(input: {
     closedByEmail: shift.closedByEmail,
     closeReason: shift.closeReason,
     cashSales: concealOpenOwnerTotals ? null : cashSales,
+    cashRefunds: concealOpenOwnerTotals ? null : cashRefunds._sum.amount?.toFixed(2) ?? "0.00",
     cashIn: concealOpenOwnerTotals ? null : cashIn.toFixed(2),
     cashOut: concealOpenOwnerTotals ? null : cashOut.toFixed(2),
     paymentSummaries: concealOpenOwnerTotals ? null : paymentSummaries,

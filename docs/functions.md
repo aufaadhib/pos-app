@@ -131,8 +131,8 @@ Dokumen ini mencatat function dan component function yang ditambahkan pada miles
 | --- | --- | --- | --- |
 | `calculateSaleTotals()` | Subtotal Decimal, tarif layanan/pajak, flag harga inklusif | Snapshot total Decimal | Menghitung layanan, pajak, dan total dengan pembulatan half-up ke Rupiah tanpa floating point. |
 | `getPosMenu()` | Outlet, user, role | `PosMenu` atau `null` | Membaca maksimal 300 produk aktif beserta harga override, varian, dan modifier yang tersedia pada outlet. |
-| `getSalesPage()` | Outlet, halaman, filter sumber/settlement | Halaman transaksi | Membaca 20 transaksi terbaru per halaman tanpa cache persisten. |
-| `getSaleDetail()` | Sale ID dan outlet aktif | Detail struk atau `null` | Membatasi detail struk ke outlet aktif dan mengubah Decimal/timestamp menjadi DTO serializable. |
+| `getSalesPage()` | Outlet, halaman, filter sumber/settlement/status | Halaman transaksi | Membaca 20 transaksi terbaru per halaman beserta status dan total refund tanpa cache persisten. |
+| `getSaleDetail()` | Sale ID dan outlet aktif | Detail struk atau `null` | Membatasi detail struk ke outlet aktif serta menyerialisasi snapshot, sisa item, dan ledger koreksi. |
 | `createSale()` | Checkout tervalidasi dan actor | Hasil checkout | Menjalankan validasi harga fresh, nomor struk, sale, item, pembayaran, dan audit dalam transaction serializable; checkout token membuat retry idempoten. |
 | `resolveCheckoutItems()` | Prisma transaction dan cart | Snapshot item | Memvalidasi status produk, override, satu varian per grup, min/max modifier, serta harga yang dilihat kasir. |
 | `resolvePayment()` | Checkout dan total | Data pembayaran | Memastikan uang tunai cukup dan menghitung kembalian; non-tunai menyimpan referensi opsional. |
@@ -154,6 +154,20 @@ Dokumen ini mencatat function dan component function yang ditambahkan pada miles
 | `formatSaleDate()`, `paymentLabel()` | Timestamp/metode | Label transaksi | Menampilkan waktu dalam zona outlet dan nama metode dalam Bahasa Indonesia. |
 | `orderLabel()`, `transactionPageHref()` | Sale dan filter aktif | Label/URL | Menampilkan sumber order serta mempertahankan filter ketika halaman transaksi berubah. |
 
+## Void dan refund transaksi
+
+| Function | Input | Output | Tujuan dan side effect |
+| --- | --- | --- | --- |
+| `voidSale()`, `refundSale()` | Input tervalidasi dan actor owner/manager | `TransactionActionState` | Menjalankan koreksi append-only dalam transaction serializable, memperbarui status, dan menulis audit tanpa mengubah snapshot sale/payment. |
+| `createSaleCorrection()` | Tipe void/refund, input, actor | Hasil koreksi | Memeriksa outlet, status, settlement, idempotency, shift tunai, saldo kas, item tersisa, dan konflik concurrent. |
+| `resolveSelectedItems()` | Item sale, request, refund sebelumnya | Item terpilih | Menolak item asing atau kuantitas yang melebihi sisa serta menghitung subtotal dari unit price snapshot. |
+| `validateCorrectionState()` | Tipe, status, tanggal bisnis | `void` atau error | Membatasi void ke transaksi utuh pada tanggal bisnis yang sama dan menolak transaksi yang sudah dikoreksi penuh. |
+| `allocateCorrectionAmounts()` | Snapshot sale/payment dan item refund | Nilai `Decimal` teralokasi | Mengalokasikan layanan, pajak, fee, net, dan pembanding direct tanpa floating point; refund terakhir menerima residue pembulatan. |
+| `findIdempotentCorrection()` | Token, sale, outlet, tipe, actor | Hasil tersimpan atau `null` | Mengembalikan retry milik actor yang sama dan menolak penggunaan token lintas transaksi. |
+| `voidSaleAction()`, `refundSaleAction()` | State dan FormData | `TransactionActionState` | Mengulang permission `transaction:correct`, active-outlet scope, Zod, mutation, dan revalidation layar finansial. |
+| `TransactionCorrectionControls()` | Detail sale, outlet, hak void | Kontrol responsif | Menampilkan dialog void/refund dengan alasan, jumlah item, referensi provider, pending state, error inline, dan token baru. |
+| `StatusBadge()`, `StatusIcon()` | Status sale | Label dan ikon | Menampilkan status selesai/refund/void tanpa mengandalkan warna saja. |
+
 ## Shift kasir dan tutup kas
 
 | Function | Input | Output | Tujuan dan side effect |
@@ -163,7 +177,7 @@ Dokumen ini mencatat function dan component function yang ditambahkan pada miles
 | `requireOpenCashShift()` | Prisma transaction, user, outlet | Shift aktif | Menjadi guard checkout atomik dan menolak transaksi tanpa shift atau pada outlet yang berbeda. |
 | `addCashMovement()` | Shift, arah, kategori, nominal, alasan, token, actor | `ShiftActionState` | Menambahkan movement immutable hanya pada shift terbuka milik actor dan menulis audit. |
 | `closeCashShift()`, `forceCloseCashShift()` | Shift, kas aktual, token, actor, alasan paksa | Hasil rekonsiliasi | Menjalankan blind close, menyimpan expected/actual/difference, melepaskan kunci shift user, dan mengaudit penutupan. |
-| `calculateExpectedCash()` | Transaction, shift, saldo awal | Total tunai `Decimal` | Menghitung saldo awal + penjualan tunai + kas masuk - kas keluar; pembayaran non-tunai tidak memengaruhi drawer. |
+| `calculateExpectedCash()` | Transaction, shift, saldo awal | Total tunai `Decimal` | Menghitung saldo awal + penjualan tunai + kas masuk - kas keluar - refund tunai; pembayaran non-tunai tidak memengaruhi drawer. |
 | `isTransactionWriteConflict()` | Error Prisma/adapter | Boolean | Mengenali `P2034` dan `DriverAdapterError` Neon agar transaksi serializable dapat di-retry. |
 | `getCurrentCashShift()`, `hasCurrentCashShift()` | User ID | Shift aktif atau boolean | Membaca shift global user secara fresh untuk gate POS dan peringatan logout. |
 | `getCashShiftPage()` | Outlet, actor, halaman, status | Halaman shift | Membatasi data sesuai role/outlet, memisahkan shift terbuka dan riwayat, serta memakai pagination. |
@@ -183,7 +197,7 @@ Dokumen ini mencatat function dan component function yang ditambahkan pada miles
 | `calculateSettlementNet()` | Gross, fee, promo, penyesuaian | Net Decimal | Menjadi satu rumus otoritatif untuk validasi transfer platform. |
 | `saveDeliveryChannel()` | Konfigurasi outlet dan actor | Channel tersimpan | Memvalidasi scope outlet, upsert konfigurasi, dan menulis audit dalam transaction. |
 | `saveChannelProductPrice()` | Channel, produk, harga opsional, actor | Override atau `null` | Menyimpan harga final kelipatan Rp500 yang lebih tinggi dari harga outlet, atau menghapus override. |
-| `createSettlementBatch()` | Transaksi pending, rincian transfer, actor | Batch settlement | Memastikan satu channel/outlet, menyeimbangkan net, menandai pembayaran settled, dan menulis audit atomically. |
+| `createSettlementBatch()` | Transaksi pending, rincian transfer, actor | Batch settlement | Memastikan satu channel/outlet, mengurangi refund dari piutang, menyeimbangkan net, menandai pembayaran settled, dan menulis audit atomically. |
 | `reverseSettlementBatch()` | Batch, alasan, actor owner | Batch reversed | Mengembalikan pembayaran ke pending tanpa menghapus batch atau jejak audit. |
 | `requireOutletAccess()` | Prisma transaction, outlet, actor | `void` | Menolak operasi di luar outlet penugasan manager; owner dapat mengakses seluruh outlet. |
 | `channelSnapshot()`, `settlementSnapshot()` | Record Decimal | JSON audit | Menserialisasi nilai keuangan tanpa melewatkan object Prisma internal. |

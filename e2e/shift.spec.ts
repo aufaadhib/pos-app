@@ -55,6 +55,15 @@ test("cashier shift reconciles cash while summarizing non-cash payments", async 
   await checkout(page, "Tunai");
   await checkout(page, "QRIS");
 
+  await page.goto("/transactions");
+  const cashSale = page.getByRole("row").filter({ hasText: "Tunai" }).first();
+  await cashSale.getByRole("link").first().click();
+  await page.getByRole("button", { name: "Refund item" }).click();
+  await page.getByRole("button", { name: "Pilih semua" }).click();
+  await page.getByLabel("Alasan koreksi").fill("Refund pengujian shift");
+  await page.getByRole("button", { name: "Konfirmasi refund" }).click();
+  await expect(page.getByText("Direfund", { exact: true })).toBeVisible({ timeout: 30_000 });
+
   await page.goto("/shifts");
   await page.getByRole("button", { name: "Kas masuk" }).click();
   await page.getByLabel("Nominal (Rp)").fill("10000");
@@ -65,7 +74,7 @@ test("cashier shift reconciles cash while summarizing non-cash payments", async 
   await page.getByRole("button", { name: "Tutup shift" }).first().click();
   await expect(page.getByText(/Hitung uang fisik tanpa melihat saldo seharusnya/)).toBeVisible();
   await expect(page.getByText("Kas seharusnya", { exact: true })).toHaveCount(0);
-  await page.getByLabel("Kas fisik aktual (Rp)").fill("135000");
+  await page.getByLabel("Kas fisik aktual (Rp)").fill("110000");
   await page.getByRole("button", { name: "Konfirmasi tutup shift" }).click();
   await expect(page.getByText("Belum ada shift pribadi")).toBeVisible({ timeout: 30_000 });
 
@@ -76,8 +85,9 @@ test("cashier shift reconciles cash while summarizing non-cash payments", async 
   await expect(cashSummary).toBeVisible({ timeout: 30_000 });
   await expect(cashSummary.getByText(/Rp\s*100\.000/u)).toBeVisible();
   await expect(cashSummary.getByText(/Rp\s*25\.000/u)).toBeVisible();
+  await expect(cashSummary.getByText(/Refund tunai/u).locator("..")).toContainText(/Rp\s*25\.000/u);
   await expect(cashSummary.getByText(/Rp\s*10\.000 \/ Rp\s*0/u)).toBeVisible();
-  await expect(cashSummary.getByText(/Rp\s*135\.000 \/ Rp\s*0/u)).toBeVisible();
+  await expect(cashSummary.getByText(/Rp\s*110\.000 \/ Rp\s*0/u)).toBeVisible();
   await expect(page.getByText("QRIS", { exact: true })).toBeVisible();
 
   for (const viewport of [{ name: "tablet", width: 820, height: 1180 }, { name: "mobile", width: 390, height: 844 }]) {

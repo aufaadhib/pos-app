@@ -5,34 +5,46 @@ import { ChevronLeft, ChevronRight, ReceiptText } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { SearchableSelect } from "@/components/ui/searchable-select";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { requirePermission } from "@/lib/auth/session";
 import { formatRupiah } from "@/lib/catalog/normalization";
+import { deliveryProviderLabels } from "@/lib/delivery/types";
 import { requireActiveOutlet } from "@/lib/outlets/context";
 import { getSalesPage } from "@/lib/pos/queries";
-import { deliveryProviderLabels } from "@/lib/delivery/types";
 import { cn } from "@/lib/utils";
 
 export const dynamic = "force-dynamic";
 export const metadata: Metadata = { title: "Transaksi", description: "Riwayat transaksi outlet aktif." };
 
 /** Renders a paginated, outlet-scoped transaction history for all POS operators. */
-export default async function TransactionsPage({ searchParams }: { searchParams: Promise<{ page?: string; source?: string; settlement?: string }> }) {
+export default async function TransactionsPage({ searchParams }: {
+  searchParams: Promise<{ page?: string; source?: string; settlement?: string; status?: string }>;
+}) {
   const [session, query] = await Promise.all([requirePermission({ pos: ["operate"] }), searchParams]);
   const outlet = await requireActiveOutlet(session);
   const page = Number.isSafeInteger(Number(query.page)) ? Math.max(1, Number(query.page)) : 1;
   const source = (["DIRECT", "GOFOOD", "GRABFOOD", "SHOPEEFOOD"] as const).find((value) => value === query.source);
   const settlementStatus = (["PENDING", "SETTLED"] as const).find((value) => value === query.settlement);
-  const sales = await getSalesPage(outlet.id, page, { source, settlementStatus });
+  const status = (["COMPLETED", "PARTIALLY_REFUNDED", "REFUNDED", "VOIDED"] as const).find((value) => value === query.status);
+  const sales = await getSalesPage(outlet.id, page, { source, settlementStatus, status });
+
   return <main className="mx-auto max-w-7xl px-4 py-6 sm:px-8 sm:py-8 lg:px-10" id="main-content">
-    <section className="rounded-2xl border bg-card p-5 sm:flex sm:items-end sm:justify-between sm:p-6"><div><p className="text-sm font-medium text-muted-foreground">Outlet · {outlet.code}</p><h1 className="mt-1 font-heading text-2xl font-semibold sm:text-3xl">Riwayat transaksi</h1><p className="mt-2 text-sm text-muted-foreground">Struk yang sudah dibayar di {outlet.name}.</p></div><Link className={cn(buttonVariants(), "mt-4 sm:mt-0")} href="/pos">Buka kasir</Link></section>
-    <form className="mt-4 grid gap-3 rounded-xl border bg-card p-3 sm:grid-cols-[1fr_1fr_auto]" method="get"><SearchableSelect aria-label="Filter sumber pesanan" defaultValue={source ?? "all"} name="source" options={[{ value: "all", label: "Semua sumber" }, { value: "DIRECT", label: "Penjualan langsung" }, { value: "GOFOOD", label: "GoFood" }, { value: "GRABFOOD", label: "GrabFood" }, { value: "SHOPEEFOOD", label: "ShopeeFood" }]} /><SearchableSelect aria-label="Filter status settlement" defaultValue={settlementStatus ?? "all"} name="settlement" options={[{ value: "all", label: "Semua status settlement" }, { value: "PENDING", label: "Settlement pending" }, { value: "SETTLED", label: "Settlement cair" }]} /><Button type="submit">Terapkan filter</Button></form>
-    {sales.items.length === 0 ? <div className="mt-6 grid min-h-64 place-items-center rounded-2xl border border-dashed bg-card text-center"><div><ReceiptText aria-hidden="true" className="mx-auto size-8 text-muted-foreground" /><h2 className="mt-3 font-heading text-lg font-semibold">Belum ada transaksi</h2><p className="mt-1 text-sm text-muted-foreground">Transaksi yang berhasil akan muncul di sini.</p></div></div> : <>
-      <div className="mt-6 hidden overflow-hidden rounded-xl border bg-card md:block"><Table><TableHeader><TableRow className="bg-muted/40"><TableHead>Nomor struk</TableHead><TableHead>Waktu</TableHead><TableHead>Pesanan</TableHead><TableHead>Pembayaran</TableHead><TableHead>Kasir</TableHead><TableHead className="text-right">Total</TableHead></TableRow></TableHeader><TableBody>{sales.items.map((sale) => <TableRow key={sale.id}><TableCell><Link className="font-mono font-semibold text-primary hover:underline" href={`/transactions/${sale.id}`}>{sale.receiptNumber}</Link></TableCell><TableCell>{formatSaleDate(sale.completedAt, outlet.timezone)}</TableCell><TableCell>{orderLabel(sale)} · {sale.itemCount} item</TableCell><TableCell><div className="flex flex-wrap gap-1"><Badge variant="outline">{paymentLabel(sale.paymentMethod)}</Badge>{sale.deliveryProvider && <Badge variant={sale.settlementStatus === "SETTLED" ? "secondary" : "outline"}>{sale.settlementStatus === "SETTLED" ? "Cair" : "Pending"}</Badge>}</div></TableCell><TableCell>{sale.createdByName}</TableCell><TableCell className="text-right font-mono font-semibold">{formatRupiah(sale.total)}</TableCell></TableRow>)}</TableBody></Table></div>
-      <div className="mt-6 grid gap-3 md:hidden">{sales.items.map((sale) => <Link className="rounded-xl focus-visible:ring-3 focus-visible:ring-ring/40 focus-visible:outline-none" href={`/transactions/${sale.id}`} key={sale.id}><Card className="transition-colors hover:ring-primary"><CardHeader><div className="flex items-start justify-between gap-3"><div><CardTitle className="font-mono text-primary">{sale.receiptNumber}</CardTitle><p className="mt-1 text-xs text-muted-foreground">{formatSaleDate(sale.completedAt, outlet.timezone)}</p></div><span className="font-mono font-semibold">{formatRupiah(sale.total)}</span></div></CardHeader><CardContent className="flex flex-wrap gap-2"><Badge variant="secondary">{orderLabel(sale)}</Badge><Badge variant="outline">{paymentLabel(sale.paymentMethod)}</Badge>{sale.deliveryProvider && <Badge variant={sale.settlementStatus === "SETTLED" ? "secondary" : "outline"}>{sale.settlementStatus === "SETTLED" ? "Settlement cair" : "Settlement pending"}</Badge>}<span className="text-xs text-muted-foreground">{sale.itemCount} item · {sale.createdByName}</span></CardContent></Card></Link>)}</div>
+    <section className="rounded-2xl border bg-card p-5 sm:flex sm:items-end sm:justify-between sm:p-6">
+      <div><p className="text-sm font-medium text-muted-foreground">Outlet · {outlet.code}</p><h1 className="mt-1 font-heading text-2xl font-semibold sm:text-3xl">Riwayat transaksi</h1><p className="mt-2 text-sm text-muted-foreground">Struk yang sudah dibayar di {outlet.name}.</p></div>
+      <Link className={cn(buttonVariants(), "mt-4 sm:mt-0")} href="/pos">Buka kasir</Link>
+    </section>
+    <form className="mt-4 grid gap-3 rounded-xl border bg-card p-3 sm:grid-cols-2 lg:grid-cols-[1fr_1fr_1fr_auto]" method="get">
+      <SearchableSelect aria-label="Filter sumber pesanan" defaultValue={source ?? "all"} name="source" options={[{ value: "all", label: "Semua sumber" }, { value: "DIRECT", label: "Penjualan langsung" }, { value: "GOFOOD", label: "GoFood" }, { value: "GRABFOOD", label: "GrabFood" }, { value: "SHOPEEFOOD", label: "ShopeeFood" }]} />
+      <SearchableSelect aria-label="Filter status transaksi" defaultValue={status ?? "all"} name="status" options={[{ value: "all", label: "Semua status transaksi" }, { value: "COMPLETED", label: "Selesai" }, { value: "PARTIALLY_REFUNDED", label: "Refund sebagian" }, { value: "REFUNDED", label: "Direfund penuh" }, { value: "VOIDED", label: "Divoid" }]} />
+      <SearchableSelect aria-label="Filter status settlement" defaultValue={settlementStatus ?? "all"} name="settlement" options={[{ value: "all", label: "Semua status settlement" }, { value: "PENDING", label: "Settlement pending" }, { value: "SETTLED", label: "Settlement cair" }]} />
+      <Button type="submit">Terapkan filter</Button>
+    </form>
+    {sales.items.length === 0 ? <div className="mt-6 grid min-h-64 place-items-center rounded-2xl border border-dashed bg-card text-center"><div><ReceiptText aria-hidden="true" className="mx-auto size-8 text-muted-foreground" /><h2 className="mt-3 font-heading text-lg font-semibold">Belum ada transaksi</h2><p className="mt-1 text-sm text-muted-foreground">Transaksi yang sesuai filter akan muncul di sini.</p></div></div> : <>
+      <div className="mt-6 hidden overflow-hidden rounded-xl border bg-card md:block"><Table><TableHeader><TableRow className="bg-muted/40"><TableHead>Nomor struk</TableHead><TableHead>Waktu</TableHead><TableHead>Pesanan</TableHead><TableHead>Status</TableHead><TableHead>Pembayaran</TableHead><TableHead>Kasir</TableHead><TableHead className="text-right">Total</TableHead></TableRow></TableHeader><TableBody>{sales.items.map((sale) => <TableRow key={sale.id}><TableCell><Link className="font-mono font-semibold text-primary hover:underline" href={`/transactions/${sale.id}`}>{sale.receiptNumber}</Link></TableCell><TableCell>{formatSaleDate(sale.completedAt, outlet.timezone)}</TableCell><TableCell>{orderLabel(sale)} · {sale.itemCount} item</TableCell><TableCell><StatusBadge status={sale.status} /></TableCell><TableCell><div className="flex flex-wrap gap-1"><Badge variant="outline">{paymentLabel(sale.paymentMethod)}</Badge>{sale.deliveryProvider && <Badge variant={sale.settlementStatus === "SETTLED" ? "secondary" : "outline"}>{sale.settlementStatus === "SETTLED" ? "Cair" : "Pending"}</Badge>}</div></TableCell><TableCell>{sale.createdByName}</TableCell><TableCell className="text-right"><span className="block font-mono font-semibold">{formatRupiah(sale.total)}</span>{Number(sale.refundedAmount) > 0 && <span className="text-xs text-muted-foreground">Refund {formatRupiah(sale.refundedAmount)}</span>}</TableCell></TableRow>)}</TableBody></Table></div>
+      <div className="mt-6 grid gap-3 md:hidden">{sales.items.map((sale) => <Link className="min-w-0 rounded-xl focus-visible:ring-3 focus-visible:ring-ring/40 focus-visible:outline-none" href={`/transactions/${sale.id}`} key={sale.id}><Card className="min-w-0 transition-colors hover:ring-primary"><CardHeader><div className="flex min-w-0 items-start justify-between gap-3"><div className="min-w-0"><CardTitle className="truncate font-mono text-primary">{sale.receiptNumber}</CardTitle><p className="mt-1 text-xs text-muted-foreground">{formatSaleDate(sale.completedAt, outlet.timezone)}</p></div><span className="shrink-0 font-mono font-semibold">{formatRupiah(sale.total)}</span></div></CardHeader><CardContent className="flex min-w-0 flex-wrap gap-2"><StatusBadge status={sale.status} /><Badge variant="secondary">{orderLabel(sale)}</Badge><Badge variant="outline">{paymentLabel(sale.paymentMethod)}</Badge>{sale.deliveryProvider && <Badge variant={sale.settlementStatus === "SETTLED" ? "secondary" : "outline"}>{sale.settlementStatus === "SETTLED" ? "Settlement cair" : "Settlement pending"}</Badge>}<span className="text-xs text-muted-foreground">{sale.itemCount} item · {sale.createdByName}</span></CardContent></Card></Link>)}</div>
     </>}
-    <nav aria-label="Paginasi transaksi" className="mt-6 flex items-center justify-between"><Link aria-disabled={sales.page <= 1} className={cn(buttonVariants({ variant: "outline" }), sales.page <= 1 && "pointer-events-none opacity-50")} href={transactionPageHref(sales.page - 1, source, settlementStatus)}><ChevronLeft />Sebelumnya</Link><span className="font-mono text-xs text-muted-foreground">{sales.page} / {sales.totalPages}</span><Link aria-disabled={sales.page >= sales.totalPages} className={cn(buttonVariants({ variant: "outline" }), sales.page >= sales.totalPages && "pointer-events-none opacity-50")} href={transactionPageHref(sales.page + 1, source, settlementStatus)}>Berikutnya<ChevronRight /></Link></nav>
+    <nav aria-label="Paginasi transaksi" className="mt-6 flex items-center justify-between"><Link aria-disabled={sales.page <= 1} className={cn(buttonVariants({ variant: "outline" }), sales.page <= 1 && "pointer-events-none opacity-50")} href={transactionPageHref(sales.page - 1, source, settlementStatus, status)}><ChevronLeft />Sebelumnya</Link><span className="font-mono text-xs text-muted-foreground">{sales.page} / {sales.totalPages}</span><Link aria-disabled={sales.page >= sales.totalPages} className={cn(buttonVariants({ variant: "outline" }), sales.page >= sales.totalPages && "pointer-events-none opacity-50")} href={transactionPageHref(sales.page + 1, source, settlementStatus, status)}>Berikutnya<ChevronRight /></Link></nav>
   </main>;
 }
 
@@ -53,9 +65,16 @@ function orderLabel(sale: Awaited<ReturnType<typeof getSalesPage>>["items"][numb
 }
 
 /** Preserves active transaction filters while changing pagination. */
-function transactionPageHref(page: number, source?: string, settlement?: string): string {
+function transactionPageHref(page: number, source?: string, settlement?: string, status?: string): string {
   const params = new URLSearchParams({ page: String(page) });
   if (source) params.set("source", source);
   if (settlement) params.set("settlement", settlement);
+  if (status) params.set("status", status);
   return `/transactions?${params}`;
+}
+
+/** Shows transaction correction state with text so status does not rely on color alone. */
+function StatusBadge({ status }: { status: Awaited<ReturnType<typeof getSalesPage>>["items"][number]["status"] }) {
+  const labels = { COMPLETED: "Selesai", PARTIALLY_REFUNDED: "Refund sebagian", REFUNDED: "Direfund", VOIDED: "Divoid" } as const;
+  return <Badge variant={status === "COMPLETED" ? "outline" : status === "PARTIALLY_REFUNDED" ? "secondary" : "destructive"}>{labels[status]}</Badge>;
 }

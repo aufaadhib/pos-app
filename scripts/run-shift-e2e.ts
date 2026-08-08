@@ -97,6 +97,8 @@ async function cleanupShiftFixtures(runId: string) {
 
   await prisma.$transaction([
     prisma.platformSettlementItem.deleteMany({ where: { salePayment: { saleId: { in: saleIds } } } }),
+    prisma.saleRefundItem.deleteMany({ where: { refund: { saleId: { in: saleIds } } } }),
+    prisma.saleRefund.deleteMany({ where: { saleId: { in: saleIds } } }),
     prisma.saleItemVariant.deleteMany({ where: { saleItemId: { in: saleItemIds } } }),
     prisma.saleItemModifier.deleteMany({ where: { saleItemId: { in: saleItemIds } } }),
     prisma.salePayment.deleteMany({ where: { saleId: { in: saleIds } } }),

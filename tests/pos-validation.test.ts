@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { checkoutSchema } from "@/lib/pos/validation";
+import { checkoutSchema, refundSaleSchema, voidSaleSchema } from "@/lib/pos/validation";
 
 const baseCheckout = {
   checkoutToken: "a5df2f12-bf3e-4a1e-9b12-1dd4c931cd36",
@@ -32,5 +32,23 @@ describe("POS checkout validation", () => {
       items: [{ ...baseCheckout.items[0], modifierOptionIds: ["option-1", "option-1"] }],
     });
     expect(parsed.success).toBe(false);
+  });
+});
+
+describe("sale correction validation", () => {
+  const correction = {
+    saleId: "sale-1",
+    outletId: "outlet-1",
+    operationToken: "b5df2f12-bf3e-4a1e-9b12-1dd4c931cd36",
+    reason: "Pesanan pelanggan keliru",
+  };
+
+  it("accepts a reasoned void and unique positive refund quantities", () => {
+    expect(voidSaleSchema.safeParse(correction).success).toBe(true);
+    expect(refundSaleSchema.safeParse({ ...correction, items: [{ saleItemId: "item-1", quantity: 1 }] }).success).toBe(true);
+  });
+
+  it("rejects duplicate refund items and short reasons", () => {
+    expect(refundSaleSchema.safeParse({ ...correction, reason: "x", items: [{ saleItemId: "item-1", quantity: 1 }, { saleItemId: "item-1", quantity: 1 }] }).success).toBe(false);
   });
 });

@@ -39,7 +39,7 @@ Hanya satu milestone utama yang sebaiknya berstatus `In Progress` agar perubahan
 | Urutan | Milestone | Status | Dependensi utama | Hasil bisnis |
 | ---: | --- | --- | --- | --- |
 | 1 | Shift kasir dan tutup kas | Completed | Register POS | Uang fisik dapat dicocokkan dengan transaksi per kasir dan outlet |
-| 2 | Void, cancellation, dan refund | Planned | Shift kasir | Kesalahan transaksi dapat dikoreksi tanpa menghapus riwayat finansial |
+| 2 | Void dan refund | Completed | Shift kasir | Kesalahan transaksi dapat dikoreksi tanpa menghapus riwayat finansial |
 | 3 | Open order dan kitchen ticket | Planned | Transaksi POS | Pesanan dapat diproses sebelum pembayaran dan diteruskan ke dapur |
 | 4 | Stok, resep, waste, dan HPP | Planned | Void/refund dan open order | Persediaan serta biaya produk dapat dihitung dari kejadian operasional nyata |
 | 5 | Laporan operasional dan keuangan | Planned | Shift, refund, stok | Owner dapat membaca penjualan, kas, margin, dan performa outlet |
@@ -59,7 +59,7 @@ Mengelompokkan transaksi dan pergerakan uang berdasarkan shift aktif sehingga sa
 - Satu kasir hanya memiliki satu shift terbuka pada satu waktu.
 - Setiap penjualan terhubung ke shift yang aktif saat checkout.
 - Kas masuk dan kas keluar non-penjualan membutuhkan nominal, kategori, dan alasan.
-- Penutupan menghitung saldo seharusnya dari saldo awal, penjualan tunai, kas masuk, dan kas keluar. Refund tunai ditambahkan pada milestone void/refund.
+- Penutupan menghitung saldo seharusnya dari saldo awal, penjualan tunai, kas masuk, kas keluar, dan refund tunai dari shift pelaksana.
 - Kasir memasukkan jumlah uang fisik aktual; sistem menyimpan selisih tanpa mengubah hasil hitung.
 - Owner dan manager dapat melihat riwayat serta rincian shift dalam cakupan outletnya.
 - Pembukaan, pergerakan kas, dan penutupan dicatat dalam audit trail.
@@ -69,7 +69,7 @@ Mengelompokkan transaksi dan pergerakan uang berdasarkan shift aktif sehingga sa
 - Absensi, payroll, jadwal kerja, dan perhitungan lembur.
 - Integrasi cash drawer atau mesin penghitung uang.
 - Persetujuan selisih berdasarkan nominal otomatis sebelum kebutuhan bisnis ditentukan.
-- Refund tunai dan non-tunai; model koreksinya dikerjakan pada milestone berikutnya.
+- Tidak ada lagi; refund tunai dan non-tunai sudah dikerjakan pada milestone berikutnya.
 
 ### Kriteria selesai
 
@@ -88,17 +88,19 @@ Mengelompokkan transaksi dan pergerakan uang berdasarkan shift aktif sehingga sa
 - Pergantian outlet dan perubahan administratif yang memutus cakupan shift diblokir sampai shift ditutup.
 - Input Rupiah operasional memakai pemisah ribuan titik sambil mengirim digit mentah ke server.
 
-## Milestone 2 — Void, cancellation, dan refund
+## Milestone 2 — Void dan refund
 
 ### Cakupan MVP
 
 - Tambahkan status transaksi tanpa mengubah snapshot transaksi asli.
-- Bedakan pembatalan sebelum pembayaran, void setelah pembayaran pada hari yang sama, dan refund setelah transaksi selesai.
+- Void adalah pembalikan penuh pada tanggal bisnis yang sama; transaksi lebih lama menggunakan refund.
+- Cancellation sebelum pembayaran ditunda ke milestone open order karena belum ada order belum lunas yang dapat dibatalkan.
 - Wajibkan alasan, actor, waktu, nominal, metode pengembalian, dan referensi transaksi asal.
-- Refund parsial tidak boleh melebihi sisa nilai yang belum pernah direfund.
-- Refund tunai memengaruhi shift aktif; refund non-tunai dicatat sebagai kewajiban pengembalian sesuai metode.
-- Transaksi delivery yang sudah masuk settlement tidak dapat diubah tanpa aturan reversal yang eksplisit.
-- Owner/manager memiliki permission koreksi; batas kewenangan kasir ditentukan sebelum implementasi.
+- Refund parsial berbasis item/kuantitas dapat diulang tanpa melebihi sisa yang belum direfund.
+- Refund tunai membutuhkan shift aktif milik pelaksana dan mengurangi expected cash shift tersebut tanpa membuka shift asal.
+- Refund non-tunai memakai metode asal, dicatat selesai manual, dan wajib menyimpan referensi bank/provider.
+- Delivery pending mengurangi piutang settlement; delivery settled diblokir sampai batch dibalik.
+- Owner/manager memiliki permission koreksi; kasir tidak dapat melakukan void/refund.
 
 ### Kriteria selesai
 
@@ -106,6 +108,13 @@ Mengelompokkan transaksi dan pergerakan uang berdasarkan shift aktif sehingga sa
 - Operasi koreksi dan audit tersimpan dalam satu transaction database.
 - Riwayat serta struk menampilkan status dan hubungan dengan transaksi/refund asal.
 - Pengujian mencakup refund berlebih, request ganda, permission, dan transaksi settled.
+
+### Keputusan implementasi
+
+- Sale, payment, item, dan harga asli tetap immutable; koreksi disimpan pada ledger `SaleRefund`/`SaleRefundItem`.
+- Semua nominal memakai `Decimal` dan residue pembulatan diberikan pada refund terakhir agar total tidak terlampaui.
+- Idempotency token, status sale, ledger refund, dan audit ditulis dalam transaction serializable yang sama.
+- Pengembalian stok belum dilakukan karena stock movement baru tersedia pada milestone stok.
 
 ## Milestone 3 — Open order dan kitchen ticket
 
@@ -229,6 +238,9 @@ Integrasi harus dikembangkan bertahap. Jangan menjanjikan API langsung sebelum a
 | 8 Agustus 2026 | Integrasi platform dimulai dari impor terverifikasi | API partner belum boleh diasumsikan tersedia dan jalur manual lebih mudah diaudit |
 | 8 Agustus 2026 | Roadmap tidak disimpan di `AGENTS.md` | Roadmap berubah mengikuti prioritas produk, sedangkan `AGENTS.md` berisi aturan implementasi permanen |
 | 8 Agustus 2026 | Shift kasir selesai dan tervalidasi live | E2E membuktikan checkout tunai/QRIS, movement, blind close, rekonsiliasi, dan viewport tablet/mobile |
+| 9 Agustus 2026 | Cancellation dipindahkan ke milestone open order | Sistem saat ini langsung membuat transaksi lunas sehingga belum ada order sebelum pembayaran yang dapat dibatalkan |
+| 9 Agustus 2026 | Koreksi dibatasi untuk owner/manager | Refund memengaruhi kas dan piutang sehingga kasir hanya dapat melihat hasil koreksi |
+| 9 Agustus 2026 | Void/refund selesai dan tervalidasi lokal | Schema, permission, transaksi serializable, cash drawer, settlement bersih, UI, unit/component test, dan production build sudah lulus |
 
 ## Cara memperbarui roadmap
 

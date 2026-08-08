@@ -1,6 +1,6 @@
 import "server-only";
 
-import { CatalogStatus, DeliveryProvider, PaymentSettlementStatus, Prisma, SettlementBatchStatus } from "@/generated/prisma/client";
+import { CatalogStatus, DeliveryProvider, PaymentSettlementStatus, Prisma, SaleStatus, SettlementBatchStatus } from "@/generated/prisma/client";
 import type { AppRole } from "@/lib/auth/permissions";
 import { deliveryProviderLabels, type DeliveryManagementDto } from "@/lib/delivery/types";
 import { prisma } from "@/lib/prisma";
@@ -17,7 +17,8 @@ export async function getDeliveryManagement(outletId: string, userId: string, ro
   });
   if (!outlet) return null;
   const now = new Date();
-  const [channels, products, pending, batches, pendingAggregate, overdueAggregate, settledAggregate, settledComparison] = await Promise.all([
+  const outstandingStatuses = [SaleStatus.COMPLETED, SaleStatus.PARTIALLY_REFUNDED];
+  const [channels, products, pending, batches, pendingAggregate, pendingRefundAggregate, overdueAggregate, overdueRefundAggregate, settledAggregate, settledComparison] = await Promise.all([
     prisma.outletDeliveryChannel.findMany({ where: { outletId }, orderBy: { provider: "asc" } }),
     prisma.product.findMany({
       where: { status: CatalogStatus.ACTIVE, category: { status: CatalogStatus.ACTIVE } },
@@ -33,7 +34,7 @@ export async function getDeliveryManagement(outletId: string, userId: string, ro
       },
     }),
     prisma.salePayment.findMany({
-      where: { settlementStatus: PaymentSettlementStatus.PENDING, sale: { outletId } },
+      where: { settlementStatus: PaymentSettlementStatus.PENDING, sale: { outletId, status: { in: outstandingStatuses } } },
       orderBy: { expectedSettlementAt: "asc" },
       take: pendingSettlementLimit,
       select: {
@@ -43,7 +44,14 @@ export async function getDeliveryManagement(outletId: string, userId: string, ro
         expectedFeeAmount: true,
         expectedNetAmount: true,
         expectedSettlementAt: true,
-        sale: { select: { id: true, receiptNumber: true, externalOrderId: true, completedAt: true, channel: { select: { id: true, provider: true } } } },
+        sale: { select: {
+          id: true,
+          receiptNumber: true,
+          externalOrderId: true,
+          completedAt: true,
+          channel: { select: { id: true, provider: true } },
+          refunds: { select: { amount: true, directEquivalentAmount: true, expectedFeeAmount: true, expectedNetAmount: true } },
+        } },
       },
     }),
     prisma.platformSettlement.findMany({
@@ -53,12 +61,20 @@ export async function getDeliveryManagement(outletId: string, userId: string, ro
       select: { id: true, reference: true, grossAmount: true, platformFeeAmount: true, merchantPromotionAmount: true, otherAdjustmentAmount: true, netReceivedAmount: true, receivedAt: true, status: true, channel: { select: { provider: true } }, _count: { select: { items: true } } },
     }),
     prisma.salePayment.aggregate({
-      where: { settlementStatus: PaymentSettlementStatus.PENDING, sale: { outletId } },
+      where: { settlementStatus: PaymentSettlementStatus.PENDING, sale: { outletId, status: { in: outstandingStatuses } } },
       _sum: { amount: true, expectedNetAmount: true },
       _count: true,
     }),
+    prisma.saleRefund.aggregate({
+      where: { sale: { outletId, status: { in: outstandingStatuses }, payment: { settlementStatus: PaymentSettlementStatus.PENDING } } },
+      _sum: { amount: true, expectedNetAmount: true },
+    }),
     prisma.salePayment.aggregate({
-      where: { settlementStatus: PaymentSettlementStatus.PENDING, expectedSettlementAt: { lt: now }, sale: { outletId } },
+      where: { settlementStatus: PaymentSettlementStatus.PENDING, expectedSettlementAt: { lt: now }, sale: { outletId, status: { in: outstandingStatuses } } },
+      _sum: { amount: true },
+    }),
+    prisma.saleRefund.aggregate({
+      where: { sale: { outletId, status: { in: outstandingStatuses }, payment: { settlementStatus: PaymentSettlementStatus.PENDING, expectedSettlementAt: { lt: now } } } },
       _sum: { amount: true },
     }),
     prisma.platformSettlement.aggregate({
@@ -70,6 +86,26 @@ export async function getDeliveryManagement(outletId: string, userId: string, ro
       _sum: { directEquivalentAmount: true },
     }),
   ]);
+  const serializedPending = pending.flatMap((payment) => {
+    if (!payment.sale.channel || !payment.sale.externalOrderId || !payment.expectedSettlementAt || !payment.directEquivalentAmount || !payment.expectedFeeAmount || !payment.expectedNetAmount) return [];
+    const grossAmount = payment.amount.sub(sumRefundField(payment.sale.refunds, "amount"));
+    if (grossAmount.lessThanOrEqualTo(0)) return [];
+    return [{
+      paymentId: payment.id,
+      saleId: payment.sale.id,
+      receiptNumber: payment.sale.receiptNumber,
+      externalOrderId: payment.sale.externalOrderId,
+      channelId: payment.sale.channel.id,
+      provider: payment.sale.channel.provider,
+      grossAmount: grossAmount.toFixed(2),
+      directEquivalentAmount: payment.directEquivalentAmount.sub(sumRefundField(payment.sale.refunds, "directEquivalentAmount")).toFixed(2),
+      expectedFeeAmount: payment.expectedFeeAmount.sub(sumRefundField(payment.sale.refunds, "expectedFeeAmount")).toFixed(2),
+      expectedNetAmount: payment.expectedNetAmount.sub(sumRefundField(payment.sale.refunds, "expectedNetAmount")).toFixed(2),
+      expectedSettlementAt: payment.expectedSettlementAt.toISOString(),
+      completedAt: payment.sale.completedAt.toISOString(),
+      overdue: payment.expectedSettlementAt < now,
+    }];
+  });
   return {
     channels: channels.map((channel) => ({
       id: channel.id,
@@ -89,24 +125,7 @@ export async function getDeliveryManagement(outletId: string, userId: string, ro
       directPrice: (product.outletOverrides[0]?.priceOverride ?? product.basePrice).toFixed(2),
       overrides: product.channelPrices.map((price) => ({ channelId: price.channelId, priceOverride: price.priceOverride.toFixed(2) })),
     })),
-    pending: pending.flatMap((payment) => {
-      if (!payment.sale.channel || !payment.sale.externalOrderId || !payment.expectedSettlementAt || !payment.directEquivalentAmount || !payment.expectedFeeAmount || !payment.expectedNetAmount) return [];
-      return [{
-        paymentId: payment.id,
-        saleId: payment.sale.id,
-        receiptNumber: payment.sale.receiptNumber,
-        externalOrderId: payment.sale.externalOrderId,
-        channelId: payment.sale.channel.id,
-        provider: payment.sale.channel.provider,
-        grossAmount: payment.amount.toFixed(2),
-        directEquivalentAmount: payment.directEquivalentAmount.toFixed(2),
-        expectedFeeAmount: payment.expectedFeeAmount.toFixed(2),
-        expectedNetAmount: payment.expectedNetAmount.toFixed(2),
-        expectedSettlementAt: payment.expectedSettlementAt.toISOString(),
-        completedAt: payment.sale.completedAt.toISOString(),
-        overdue: payment.expectedSettlementAt < now,
-      }];
-    }),
+    pending: serializedPending,
     batches: batches.map((batch) => ({
       id: batch.id,
       provider: batch.channel.provider,
@@ -121,9 +140,9 @@ export async function getDeliveryManagement(outletId: string, userId: string, ro
       transactionCount: batch._count.items,
     })),
     summary: {
-      pendingGross: pendingAggregate._sum.amount?.toFixed(2) ?? "0.00",
-      expectedNet: pendingAggregate._sum.expectedNetAmount?.toFixed(2) ?? "0.00",
-      overdueGross: overdueAggregate._sum.amount?.toFixed(2) ?? "0.00",
+      pendingGross: new Prisma.Decimal(pendingAggregate._sum.amount ?? 0).sub(pendingRefundAggregate._sum.amount ?? 0).toFixed(2),
+      expectedNet: new Prisma.Decimal(pendingAggregate._sum.expectedNetAmount ?? 0).sub(pendingRefundAggregate._sum.expectedNetAmount ?? 0).toFixed(2),
+      overdueGross: new Prisma.Decimal(overdueAggregate._sum.amount ?? 0).sub(overdueRefundAggregate._sum.amount ?? 0).toFixed(2),
       settledNet: settledAggregate._sum.netReceivedAmount?.toFixed(2) ?? "0.00",
       settledFees: settledAggregate._sum.platformFeeAmount?.toFixed(2) ?? "0.00",
       directComparison: new Prisma.Decimal(settledAggregate._sum.netReceivedAmount ?? 0).sub(settledComparison._sum.directEquivalentAmount ?? 0).toFixed(2),
@@ -131,6 +150,19 @@ export async function getDeliveryManagement(outletId: string, userId: string, ro
       statuses: [PaymentSettlementStatus.PENDING, PaymentSettlementStatus.SETTLED],
     },
   };
+}
+
+/** Sums one nullable refund snapshot field for a pending delivery payment. */
+function sumRefundField(
+  refunds: Array<{
+    amount: Prisma.Decimal;
+    directEquivalentAmount: Prisma.Decimal | null;
+    expectedFeeAmount: Prisma.Decimal | null;
+    expectedNetAmount: Prisma.Decimal | null;
+  }>,
+  field: "amount" | "directEquivalentAmount" | "expectedFeeAmount" | "expectedNetAmount",
+) {
+  return refunds.reduce((sum, refund) => sum.add(refund[field] ?? 0), new Prisma.Decimal(0));
 }
 
 /** Returns the three supported providers for configuration cards even before database rows exist. */
