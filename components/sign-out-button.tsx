@@ -30,12 +30,12 @@ export function SignOutButton({ hasOpenShift = false }: { hasOpenShift?: boolean
       const result = await authClient.signOut();
       if (result.error) {
         toast.error("Sesi belum dapat diakhiri. Coba lagi.");
+        setPending(false);
         return;
       }
       window.location.replace("/sign-in");
     } catch {
       toast.error("Glutong POS belum dapat dihubungi. Periksa koneksi lalu coba lagi.");
-    } finally {
       setPending(false);
     }
   }

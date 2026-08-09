@@ -56,6 +56,7 @@ export function LoginForm() {
         setErrors({
           form: "Email atau kata sandi tidak sesuai. Periksa kembali lalu coba lagi.",
         });
+        setPending(false);
         return;
       }
 
@@ -65,7 +66,6 @@ export function LoginForm() {
       setErrors({
         form: "Glutong POS belum dapat dihubungi. Periksa koneksi lalu coba lagi.",
       });
-    } finally {
       setPending(false);
     }
   }

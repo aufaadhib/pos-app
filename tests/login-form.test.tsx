@@ -79,4 +79,18 @@ describe("LoginForm", () => {
     ).toBeVisible();
     expect(screen.queryByText("USER_NOT_FOUND")).not.toBeInTheDocument();
   });
+
+  it("keeps the loading state active after scheduling a successful navigation", async () => {
+    const user = userEvent.setup();
+    signInEmail.mockResolvedValue({ error: null });
+
+    render(<LoginForm />);
+    await user.type(screen.getByLabelText("Email"), "owner@example.com");
+    await user.type(screen.getByLabelText("Kata sandi"), "valid-password");
+    await user.click(screen.getByRole("button", { name: "Masuk" }));
+
+    expect(replace).toHaveBeenCalledWith("/workspace");
+    expect(refresh).toHaveBeenCalledOnce();
+    expect(screen.getByRole("button", { name: "Memeriksa akses…" })).toBeDisabled();
+  });
 });
