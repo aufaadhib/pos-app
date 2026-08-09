@@ -259,9 +259,10 @@ Dokumen ini mencatat function dan component function yang ditambahkan pada miles
 | `proxy()` | `NextRequest` | `NextResponse` | Melakukan redirect optimistis dari keberadaan cookie saja; tidak menjadi kontrol authorization. |
 | `BrandMark()` | Opsi inverse/compact/class | Wordmark | Merender identitas code-native tanpa asset gambar eksternal. |
 | `ServiceTicketRail()` | Tidak ada | Ordered list | Menjelaskan urutan Masuk → Periksa → Melayani khusus layar login. |
-| `WorkspaceHeader()` | Role, permission navigasi, outlet aktif, route aktif | Shell navigasi responsif | Menyusun sidebar desktop yang dapat diperkecil, app bar serta bottom navigation mobile, menampilkan label role aktual, pemilih outlet, tema, dan logout tanpa mengubah permission server. |
-| `WorkspaceSidebarPreference()` | Nilai awal sidebar dari cookie | Checkbox kontrol sidebar | Menyimpan pilihan kecil/besar selama satu tahun dan memulihkannya setelah navigasi cache, reload, atau berpindah layout. |
-| `CatalogLayout()` | Child route katalog | Shell katalog terlindungi | Membaca session fresh, menentukan navigasi sesuai role, dan mempertahankan `WorkspaceHeader` saat konten katalog melakukan streaming. |
+| `WorkspaceShellLayout()` | Child route operasional | Shell workspace terlindungi | Membaca session fresh dan mempertahankan satu `WorkspaceHeader` saat pengguna berpindah di antara seluruh route operasional. |
+| `WorkspaceHeader()` | Role, permission navigasi, dan outlet aktif | Shell navigasi responsif | Menyusun sidebar desktop yang dapat diperkecil, app bar serta bottom navigation mobile, menampilkan label role aktual, pemilih outlet, tema, dan logout tanpa mengubah permission server. |
+| `WorkspaceNavigation()` | Role, permission navigasi, mode mobile | Navigasi responsif | Membaca pathname aktif di client agar sorotan menu berubah tanpa memasang ulang shell dan state sidebar. |
+| `WorkspaceSidebarPreference()` | Nilai awal sidebar dari cookie | Checkbox kontrol sidebar | Menyimpan pilihan kecil/besar selama satu tahun; shared layout mempertahankan kontrol dan state selama navigasi operasional. |
 | `CatalogPage()` | URL search params | Boundary katalog | Segera merender `<Suspense>` dengan skeleton tanpa menunggu query katalog. |
 | `CatalogContent()` | URL search params | Konten katalog dynamic | Memvalidasi `catalog:view`, membaca kategori/produk fresh, lalu mengganti skeleton melalui streaming; tidak mengubah data. |
 | `CatalogFilters()` | Kategori, search, hak kelola | Form GET | Menyelaraskan pencarian/filter dengan URL agar dapat dibagikan dan dinavigasi. |

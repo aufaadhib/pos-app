@@ -1,7 +1,6 @@
 import type { Metadata } from "next";
 import { CheckCircle2, TriangleAlert } from "lucide-react";
 
-import { WorkspaceHeader } from "@/components/workspace-header";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -11,7 +10,6 @@ import { Input } from "@/components/ui/input";
 import { Separator } from "@/components/ui/separator";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Spinner } from "@/components/ui/spinner";
-import { isAppRole } from "@/lib/auth/permissions";
 import { requirePermission } from "@/lib/auth/session";
 
 export const dynamic = "force-dynamic";
@@ -30,13 +28,10 @@ const colorTokens = [
 ] as const;
 
 export default async function DesignSystemPage() {
-  const session = await requirePermission({ designSystem: ["view"] });
-  const role = isAppRole(session.user.role) ? session.user.role : "cashier";
+  await requirePermission({ designSystem: ["view"] });
 
   return (
-    <div className="workspace-shell min-h-svh bg-background">
-      <WorkspaceHeader activeOutletId={session.session.activeOutletId} activeRoute="design-system" canManageStaff canViewDesignSystem role={role} />
-      <main className="mx-auto max-w-7xl px-4 py-6 sm:px-8 sm:py-8 lg:px-10" id="main-content">
+    <main className="mx-auto max-w-7xl px-4 py-6 sm:px-8 sm:py-8 lg:px-10" id="main-content">
         <div className="max-w-3xl">
           <p className="text-sm font-medium text-muted-foreground">Referensi khusus pemilik</p>
           <h1 className="mt-1 font-heading text-3xl font-semibold tracking-tight sm:text-4xl">
@@ -131,7 +126,6 @@ export default async function DesignSystemPage() {
             </div>
           </div>
         </section>
-      </main>
-    </div>
+    </main>
   );
 }

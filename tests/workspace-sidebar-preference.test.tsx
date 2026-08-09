@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from "@testing-library/react";
+import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it } from "vitest";
 
@@ -9,14 +9,11 @@ describe("workspace sidebar preference", () => {
     document.cookie = "glutong_sidebar_collapsed=; Max-Age=0; Path=/";
   });
 
-  it("restores the collapsed state after the control remounts", async () => {
+  it("uses the server preference and persists toggle changes", async () => {
     const user = userEvent.setup();
-    const firstRender = render(<WorkspaceSidebarPreference defaultChecked={false} />);
+    render(<WorkspaceSidebarPreference defaultChecked />);
+    expect(screen.getByRole("checkbox")).toBeChecked();
     await user.click(screen.getByRole("checkbox"));
-    expect(document.cookie).toContain("glutong_sidebar_collapsed=1");
-    firstRender.unmount();
-
-    render(<WorkspaceSidebarPreference defaultChecked={false} />);
-    await waitFor(() => expect(screen.getByRole("checkbox")).toBeChecked());
+    expect(document.cookie).toContain("glutong_sidebar_collapsed=0");
   });
 });
