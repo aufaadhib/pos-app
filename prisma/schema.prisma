@@ -149,6 +149,7 @@ model Product {
   modifierGroups  ProductModifierGroup[]
   outletOverrides OutletProductOverride[]
   channelPrices   ChannelProductPrice[]
+  orderItems      OrderItem[]
 
   @@unique([categoryId, normalizedName])
   @@index([categoryId, status, displayOrder])
@@ -335,6 +336,7 @@ model Outlet {
   taxRate                Decimal                       @default(0) @db.Decimal(5, 2)
   serviceChargeRate      Decimal                       @default(0) @db.Decimal(5, 2)
   pricesIncludeTax       Boolean                       @default(false)
+  openOrdersEnabled      Boolean                       @default(false)
   status                 OutletStatus                  @default(ACTIVE)
   archivedAt             DateTime?
   createdAt              DateTime                      @default(now())
@@ -347,6 +349,8 @@ model Outlet {
   receiptSequences       ReceiptSequence[]
   deliveryChannels       OutletDeliveryChannel[]
   cashShifts             CashShift[]
+  orders                 Order[]
+  kitchenTickets         KitchenTicket[]
 
   @@index([status, name])
   @@map("outlet")
@@ -399,6 +403,38 @@ enum SaleStatus {
   VOIDED
 }
 
+enum OrderStatus {
+  OPEN
+  COMPLETED
+  CANCELLED
+}
+
+enum OrderAuditAction {
+  CREATE
+  UPDATE
+  SEND
+  PRICE_REFRESH
+  COMPLETE
+  CANCEL
+}
+
+enum KitchenTicketKind {
+  INITIAL
+  DELTA
+}
+
+enum KitchenTicketStatus {
+  NEW
+  PROCESSING
+  COMPLETED
+}
+
+enum KitchenTicketLineAction {
+  ADD
+  UPDATE
+  REMOVE
+}
+
 enum SaleRefundType {
   VOID
   REFUND
@@ -448,6 +484,7 @@ model OutletDeliveryChannel {
   outlet               Outlet                @relation(fields: [outletId], references: [id], onDelete: Restrict)
   productPrices        ChannelProductPrice[]
   sales                Sale[]
+  orders               Order[]
   settlements          PlatformSettlement[]
 
   @@unique([outletId, provider])
@@ -485,6 +522,7 @@ model Sale {
   checkoutToken       String                 @unique
   outletId            String
   shiftId             String?
+  orderId             String?                @unique
   receiptNumber       String
   businessDate        DateTime               @db.Date
   dailySequence       Int
@@ -507,6 +545,7 @@ model Sale {
   createdAt           DateTime               @default(now())
   outlet              Outlet                 @relation(fields: [outletId], references: [id], onDelete: Restrict)
   shift               CashShift?             @relation(fields: [shiftId], references: [id], onDelete: Restrict)
+  order               Order?                 @relation(fields: [orderId], references: [id], onDelete: Restrict)
   channel             OutletDeliveryChannel? @relation(fields: [channelId], references: [id], onDelete: Restrict)
   items               SaleItem[]
   payment             SalePayment?
@@ -554,10 +593,144 @@ model CashShift {
   movements      CashMovement[]
   auditLogs      CashShiftAuditLog[]
   refunds        SaleRefund[]
+  openedOrders   Order[]             @relation("OrderOpenedShift")
 
   @@index([outletId, status, openedAt])
   @@index([openedByUserId, openedAt])
   @@map("cash_shift")
+}
+
+model Order {
+  id                   String                 @id @default(cuid())
+  operationToken       String                 @unique
+  lastOperationToken   String?                @unique
+  outletId             String
+  openedShiftId        String?
+  orderType            SaleOrderType
+  tableLabel           String?                @db.VarChar(40)
+  normalizedTableLabel String?                @db.VarChar(40)
+  activeTableKey       String?                @unique @db.VarChar(100)
+  channelId            String?
+  externalOrderId      String?                @db.VarChar(80)
+  status               OrderStatus            @default(OPEN)
+  version              Int                    @default(1)
+  lastSentVersion      Int                    @default(0)
+  subtotal             Decimal                @db.Decimal(14, 2)
+  serviceChargeRate    Decimal                @db.Decimal(5, 2)
+  serviceChargeAmount  Decimal                @db.Decimal(14, 2)
+  taxRate              Decimal                @db.Decimal(5, 2)
+  taxAmount            Decimal                @db.Decimal(14, 2)
+  pricesIncludeTax     Boolean
+  total                Decimal                @db.Decimal(14, 2)
+  createdByUserId      String
+  createdByName        String
+  createdByEmail       String
+  completedAt          DateTime?
+  cancelledAt          DateTime?
+  cancellationReason   String?                @db.VarChar(240)
+  createdAt            DateTime               @default(now())
+  updatedAt            DateTime               @updatedAt
+  outlet               Outlet                 @relation(fields: [outletId], references: [id], onDelete: Restrict)
+  openedShift          CashShift?             @relation("OrderOpenedShift", fields: [openedShiftId], references: [id], onDelete: Restrict)
+  channel              OutletDeliveryChannel? @relation(fields: [channelId], references: [id], onDelete: Restrict)
+  sale                 Sale?
+  items                OrderItem[]
+  kitchenTickets       KitchenTicket[]
+  auditLogs            OrderAuditLog[]
+
+  @@unique([channelId, externalOrderId])
+  @@index([outletId, status, updatedAt])
+  @@index([openedShiftId, createdAt])
+  @@map("pos_order")
+}
+
+model OrderItem {
+  id                 String              @id @default(cuid())
+  orderId            String
+  productId          String
+  productName        String
+  sku                String?
+  quantity           Int
+  note               String?             @db.VarChar(240)
+  variantOptionIds   String[]
+  modifierOptionIds  String[]
+  selectionLabel     String?             @db.VarChar(280)
+  unitPrice          Decimal             @db.Decimal(14, 2)
+  sentQuantity       Int                 @default(0)
+  sentNote           String?             @db.VarChar(240)
+  sentSelectionLabel String?             @db.VarChar(280)
+  changeReason       String?             @db.VarChar(240)
+  createdAt          DateTime            @default(now())
+  updatedAt          DateTime            @updatedAt
+  order              Order               @relation(fields: [orderId], references: [id], onDelete: Restrict)
+  product            Product             @relation(fields: [productId], references: [id], onDelete: Restrict)
+  kitchenTicketLines KitchenTicketLine[]
+
+  @@index([orderId, createdAt])
+  @@index([productId])
+  @@map("order_item")
+}
+
+model KitchenTicket {
+  id                    String              @id @default(cuid())
+  number                BigInt              @unique @default(autoincrement())
+  operationToken        String              @unique
+  outletId              String
+  orderId               String
+  orderVersion          Int
+  kind                  KitchenTicketKind
+  status                KitchenTicketStatus @default(NEW)
+  sentByUserId          String
+  sentByName            String
+  sentAt                DateTime            @default(now())
+  statusUpdatedByUserId String?
+  statusUpdatedByName   String?
+  statusUpdatedAt       DateTime?
+  completedAt           DateTime?
+  createdAt             DateTime            @default(now())
+  updatedAt             DateTime            @updatedAt
+  outlet                Outlet              @relation(fields: [outletId], references: [id], onDelete: Restrict)
+  order                 Order               @relation(fields: [orderId], references: [id], onDelete: Restrict)
+  lines                 KitchenTicketLine[]
+
+  @@unique([orderId, orderVersion])
+  @@index([outletId, status, sentAt])
+  @@index([orderId, sentAt])
+  @@map("kitchen_ticket")
+}
+
+model KitchenTicketLine {
+  id             String                  @id @default(cuid())
+  ticketId       String
+  orderItemId    String?
+  action         KitchenTicketLineAction
+  productName    String
+  quantity       Int
+  selectionLabel String?                 @db.VarChar(280)
+  note           String?                 @db.VarChar(240)
+  reason         String?                 @db.VarChar(240)
+  ticket         KitchenTicket           @relation(fields: [ticketId], references: [id], onDelete: Restrict)
+  orderItem      OrderItem?              @relation(fields: [orderItemId], references: [id], onDelete: Restrict)
+
+  @@index([ticketId])
+  @@index([orderItemId])
+  @@map("kitchen_ticket_line")
+}
+
+model OrderAuditLog {
+  id          String           @id @default(cuid())
+  orderId     String
+  action      OrderAuditAction
+  actorUserId String
+  actorEmail  String
+  before      Json?
+  after       Json?
+  createdAt   DateTime         @default(now())
+  order       Order            @relation(fields: [orderId], references: [id], onDelete: Restrict)
+
+  @@index([orderId, createdAt])
+  @@index([actorUserId, createdAt])
+  @@map("order_audit_log")
 }
 
 model CashMovement {

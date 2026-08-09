@@ -7,23 +7,28 @@ const uniqueIdsSchema = z.array(idSchema).max(30).refine(
   "Pilihan tidak boleh duplikat.",
 );
 
+export const cartItemSchema = z.object({
+  orderItemId: idSchema.optional(),
+  productId: idSchema,
+  quantity: z.number().int().min(1).max(99),
+  note: z.string().trim().max(240).optional(),
+  variantOptionIds: uniqueIdsSchema,
+  modifierOptionIds: uniqueIdsSchema,
+  expectedUnitPrice: moneySchema,
+});
+
 export const checkoutSchema = z.object({
   checkoutToken: z.uuid(),
   outletId: idSchema,
+  orderId: idSchema.optional(),
+  expectedVersion: z.number().int().positive().optional(),
   source: z.discriminatedUnion("type", [
     z.object({ type: z.literal("DIRECT") }),
     z.object({ type: z.literal("DELIVERY_PLATFORM"), channelId: idSchema, externalOrderId: z.string().trim().min(1, "Nomor order platform wajib diisi.").max(80) }),
   ]).default({ type: "DIRECT" }),
   orderType: z.enum(["DINE_IN", "TAKEAWAY", "DELIVERY"]),
   tableLabel: z.string().trim().max(40).optional(),
-  items: z.array(z.object({
-    productId: idSchema,
-    quantity: z.number().int().min(1).max(99),
-    note: z.string().trim().max(240).optional(),
-    variantOptionIds: uniqueIdsSchema,
-    modifierOptionIds: uniqueIdsSchema,
-    expectedUnitPrice: moneySchema,
-  })).min(1).max(100),
+  items: z.array(cartItemSchema).min(1).max(100),
   payment: z.object({
     method: z.enum(["CASH", "QRIS", "DEBIT_CARD", "CREDIT_CARD", "BANK_TRANSFER"]),
     tenderedAmount: moneySchema.optional(),
@@ -47,6 +52,9 @@ export const checkoutSchema = z.object({
   }
   if (value.source.type === "DIRECT" && value.payment?.method === "CASH" && !value.payment.tenderedAmount) {
     context.addIssue({ code: "custom", path: ["payment", "tenderedAmount"], message: "Uang diterima wajib diisi." });
+  }
+  if (Boolean(value.orderId) !== Boolean(value.expectedVersion)) {
+    context.addIssue({ code: "custom", path: ["orderId"], message: "Versi open order tidak lengkap." });
   }
 });
 

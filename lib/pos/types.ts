@@ -40,6 +40,7 @@ export type PosMenu = {
     taxRate: string;
     serviceChargeRate: string;
     pricesIncludeTax: boolean;
+    openOrdersEnabled?: boolean;
   };
   deliveryChannels: Array<{
     id: string;
@@ -66,6 +67,7 @@ export type CheckoutActionState =
   | {
     status: "error";
     message: string;
+    code?: "PRICE_CHANGED" | "CONFLICT";
   };
 
 export type PosActor = {

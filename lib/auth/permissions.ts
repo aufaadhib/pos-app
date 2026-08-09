@@ -44,7 +44,7 @@ export const managerRole = accessControl.newRole({
   transaction: ["correct"],
   shift: ["operate", "view", "forceClose"],
   staff: ["view", "manage"],
-  settings: ["view"],
+  settings: ["view", "manage"],
   designSystem: [],
   catalog: ["view", "manageOutlet"],
   deliveryChannel: ["view"],

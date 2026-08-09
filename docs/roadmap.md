@@ -40,7 +40,7 @@ Hanya satu milestone utama yang sebaiknya berstatus `In Progress` agar perubahan
 | ---: | --- | --- | --- | --- |
 | 1 | Shift kasir dan tutup kas | Completed | Register POS | Uang fisik dapat dicocokkan dengan transaksi per kasir dan outlet |
 | 2 | Void dan refund | Completed | Shift kasir | Kesalahan transaksi dapat dikoreksi tanpa menghapus riwayat finansial |
-| 3 | Open order dan kitchen ticket | Planned | Transaksi POS | Pesanan dapat diproses sebelum pembayaran dan diteruskan ke dapur |
+| 3 | Open order dan kitchen ticket | In Progress | Transaksi POS | Pesanan dapat diproses sebelum pembayaran dan diteruskan ke dapur |
 | 4 | Stok, resep, waste, dan HPP | Planned | Void/refund dan open order | Persediaan serta biaya produk dapat dihitung dari kejadian operasional nyata |
 | 5 | Laporan operasional dan keuangan | Planned | Shift, refund, stok | Owner dapat membaca penjualan, kas, margin, dan performa outlet |
 | 6 | Diskon, promo, split payment, dan pelanggan | Planned | Refund dan laporan dasar | Metode pembayaran serta retensi pelanggan menjadi lebih fleksibel |
@@ -241,6 +241,10 @@ Integrasi harus dikembangkan bertahap. Jangan menjanjikan API langsung sebelum a
 | 9 Agustus 2026 | Cancellation dipindahkan ke milestone open order | Sistem saat ini langsung membuat transaksi lunas sehingga belum ada order sebelum pembayaran yang dapat dibatalkan |
 | 9 Agustus 2026 | Koreksi dibatasi untuk owner/manager | Refund memengaruhi kas dan piutang sehingga kasir hanya dapat melihat hasil koreksi |
 | 9 Agustus 2026 | Void/refund selesai dan tervalidasi lokal | Schema, permission, transaksi serializable, cash drawer, settlement bersih, UI, unit/component test, dan production build sudah lulus |
+| 9 Agustus 2026 | Open order memakai model Order terpadu | Checkout langsung dan pembayaran akhir berbagi snapshot, audit, dan jalur kitchen ticket yang sama |
+| 9 Agustus 2026 | Simpan order dikonfigurasi per outlet oleh owner/manager | Kasir tetap fokus pada operasi; perubahan konfigurasi tercatat dan dibatasi outlet aktif |
+| 9 Agustus 2026 | Kitchen ticket delivery dibuat otomatis | Semua sumber pesanan berbayar masuk antrean dapur yang sama tanpa jalur khusus platform |
+| 9 Agustus 2026 | Migration production dijalankan manual | Vercel build tidak boleh mengubah schema dan development wajib memakai branch Neon terpisah |
 
 ## Cara memperbarui roadmap
 

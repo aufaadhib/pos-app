@@ -52,6 +52,18 @@ test("cashier shift reconciles cash while summarizing non-cash payments", async 
   }
   await page.setViewportSize({ width: 1280, height: 720 });
 
+  await page.getByRole("button", { name: `Tambah ${productName} ke pesanan` }).click();
+  await page.getByRole("button", { name: "Simpan order" }).click();
+  await page.getByRole("button", { name: "Takeaway" }).click();
+  await page.getByRole("button", { name: "Simpan order", exact: true }).last().click();
+  await expect(page.getByRole("button", { name: "Kirim dapur" })).toBeVisible({ timeout: 30_000 });
+  await page.getByRole("button", { name: "Kirim dapur" }).click();
+  await page.getByRole("button", { name: "Bayar sekarang" }).click();
+  await page.getByRole("button", { name: "QRIS", exact: true }).click();
+  await page.getByRole("button", { name: "Konfirmasi pembayaran" }).click();
+  await expect(page.getByText("Pembayaran berhasil")).toBeVisible({ timeout: 30_000 });
+  await page.getByRole("button", { name: "Pesanan baru" }).click();
+
   await checkout(page, "Tunai");
   await checkout(page, "QRIS");
 

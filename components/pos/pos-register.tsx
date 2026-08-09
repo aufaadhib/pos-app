@@ -1,10 +1,10 @@
 "use client";
 
 import { useEffect, useMemo, useState, useTransition } from "react";
-import { Check, CheckCircle2, Clock3, LayoutGrid, Minus, PanelLeftClose, PanelLeftOpen, Plus, Printer, ReceiptText, Search, ShoppingBasket, Trash2 } from "lucide-react";
+import { Check, CheckCircle2, ChefHat, Clock3, FolderOpen, LayoutGrid, Minus, PanelLeftClose, PanelLeftOpen, Plus, Printer, ReceiptText, Save, Search, ShoppingBasket, Trash2, XCircle } from "lucide-react";
 import { toast } from "react-toastify";
 
-import { checkoutSaleAction } from "@/app/pos/actions";
+import { cancelOpenOrderAction, checkoutSaleAction, refreshOpenOrderPricingAction, saveOpenOrderAction, sendOrderToKitchenAction, updateOpenOrderAction } from "@/app/pos/actions";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { CurrencyInput } from "@/components/ui/currency-input";
@@ -20,12 +20,14 @@ import { Input } from "@/components/ui/input";
 import { Spinner } from "@/components/ui/spinner";
 import { Textarea } from "@/components/ui/textarea";
 import type { PosMenu, PosMenuOption, PosMenuProduct } from "@/lib/pos/types";
+import type { OpenOrder } from "@/lib/orders/types";
 import { ProductImage } from "@/components/product-image";
 import { getProductMonogram } from "@/lib/catalog/normalization";
 import { cn } from "@/lib/utils";
 
 type CartLine = {
   id: string;
+  orderItemId?: string;
   productId: string;
   productName: string;
   sku: string | null;
@@ -57,7 +59,8 @@ type ReceiptSnapshot = {
 };
 
 /** Renders the interactive outlet register while keeping all authoritative writes on the server. */
-export function PosRegister({ menu }: { menu: PosMenu }) {
+export function PosRegister({ menu, openOrders = [] }: { menu: PosMenu; openOrders?: OpenOrder[] }) {
+  const [orderPending, startOrderTransition] = useTransition();
   const [search, setSearch] = useState("");
   const [categoryId, setCategoryId] = useState("all");
   const [cart, setCart] = useState<CartLine[]>([]);
@@ -66,6 +69,9 @@ export function PosRegister({ menu }: { menu: PosMenu }) {
   const [channelId, setChannelId] = useState<string | null>(null);
   const [mobileCartOpen, setMobileCartOpen] = useState(false);
   const [checkoutOpen, setCheckoutOpen] = useState(false);
+  const [saveOrderOpen, setSaveOrderOpen] = useState(false);
+  const [openOrdersOpen, setOpenOrdersOpen] = useState(false);
+  const [currentOrder, setCurrentOrder] = useState<Pick<OpenOrder, "id" | "version" | "lastSentVersion" | "orderType" | "tableLabel"> | null>(null);
   const filteredProducts = useMemo(() => {
     const query = search.trim().toLocaleLowerCase("id-ID");
     return menu.products.filter((product) =>
@@ -103,6 +109,33 @@ export function PosRegister({ menu }: { menu: PosMenu }) {
       : line));
   }
 
+  /** Loads one shared open order into the register without trusting stale totals. */
+  function resumeOrder(order: OpenOrder) {
+    setChannelId(null);
+    setCurrentOrder({ id: order.id, version: order.version, lastSentVersion: order.lastSentVersion, orderType: order.orderType, tableLabel: order.tableLabel });
+    setCart(order.items.map((item) => ({ id: item.id, orderItemId: item.id, productId: item.productId, productName: item.productName, sku: item.sku, quantity: item.quantity, note: item.note, variantOptionIds: item.variantOptionIds, modifierOptionIds: item.modifierOptionIds, selectionLabel: item.selectionLabel, unitMinor: parseMoneyToMinor(item.unitPrice), directUnitMinor: parseMoneyToMinor(item.unitPrice) })));
+    setOpenOrdersOpen(false);
+    setMobileCartOpen(false);
+  }
+
+  /** Clears the current register after payment or when switching to another order. */
+  function resetRegister() {
+    setCart([]);
+    setCurrentOrder(null);
+    setMobileCartOpen(false);
+  }
+
+  /** Sends the current saved revision to the shared kitchen queue. */
+  function sendCurrentOrder() {
+    if (!currentOrder) return;
+    startOrderTransition(async () => {
+      const result = await sendOrderToKitchenAction({ orderId: currentOrder.id, outletId: menu.outlet.id, expectedVersion: currentOrder.version, operationToken: crypto.randomUUID() });
+      if (result.status !== "success") { toast.error(result.message); return; }
+      setCurrentOrder((value) => value ? { ...value, lastSentVersion: value.version } : value);
+      toast.success(result.message);
+    });
+  }
+
   return (
     <div className="flex min-h-0 flex-1 overflow-hidden rounded-2xl border bg-card shadow-sm xl:grid xl:grid-cols-[minmax(0,1fr)_22rem]">
       <section className="flex h-full min-h-0 min-w-0 flex-1 flex-col" aria-labelledby="menu-heading">
@@ -120,16 +153,18 @@ export function PosRegister({ menu }: { menu: PosMenu }) {
               <Search aria-hidden="true" className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground" />
               <Input id="pos-search" className="bg-background pl-9 shadow-none" onChange={(event) => setSearch(event.target.value)} placeholder="Cari produk…" type="search" value={search} />
             </label>
+            <Button aria-label="Buka pesanan tersimpan" className="relative shrink-0" onClick={() => setOpenOrdersOpen(true)} size="icon" type="button" variant="outline"><FolderOpen aria-hidden="true" />{openOrders.length > 0 && <span className="absolute -top-1 -right-1 grid size-5 place-items-center rounded-full bg-primary font-mono text-[0.65rem] text-primary-foreground">{Math.min(openOrders.length, 99)}</span>}</Button>
             <div className="hidden shrink-0 gap-2 2xl:flex">
               <Badge variant="secondary">Pajak {formatRate(menu.outlet.taxRate)}{selectedChannel || menu.outlet.pricesIncludeTax ? " termasuk" : ""}</Badge>
               <Badge variant="outline">{selectedChannel ? `Estimasi fee ${formatRate(selectedChannel.estimatedFeeRate)}` : `Layanan ${formatRate(menu.outlet.serviceChargeRate)}`}</Badge>
             </div>
           </div>
           {menu.deliveryChannels.length > 0 && <div aria-label="Sumber pesanan" className="mt-3 flex gap-2 overflow-x-auto pb-1">
-            <Button className="shrink-0" disabled={cart.length > 0 && channelId !== null} onClick={() => setChannelId(null)} size="sm" type="button" variant={channelId === null ? "default" : "outline"}>Langsung</Button>
-            {menu.deliveryChannels.map((channel) => <Button className="shrink-0" disabled={cart.length > 0 && channelId !== channel.id} key={channel.id} onClick={() => setChannelId(channel.id)} size="sm" type="button" variant={channelId === channel.id ? "default" : "outline"}>{channel.label}</Button>)}
+            <Button className="shrink-0" disabled={Boolean(currentOrder) || (cart.length > 0 && channelId !== null)} onClick={() => setChannelId(null)} size="sm" type="button" variant={channelId === null ? "default" : "outline"}>Langsung</Button>
+            {menu.deliveryChannels.map((channel) => <Button className="shrink-0" disabled={Boolean(currentOrder) || (cart.length > 0 && channelId !== channel.id)} key={channel.id} onClick={() => setChannelId(channel.id)} size="sm" type="button" variant={channelId === channel.id ? "default" : "outline"}>{channel.label}</Button>)}
             {cart.length > 0 && <span className="self-center whitespace-nowrap text-xs text-muted-foreground">Kosongkan pesanan untuk mengganti sumber.</span>}
           </div>}
+          {currentOrder && <div className="mt-3 flex min-w-0 items-center justify-between gap-3 rounded-lg border border-primary/25 bg-primary/5 px-3 py-2 text-sm"><span className="min-w-0 truncate font-semibold">Open order · {currentOrder.orderType === "DINE_IN" ? `Meja ${currentOrder.tableLabel}` : "Takeaway"}</span><Badge variant={currentOrder.version === currentOrder.lastSentVersion ? "secondary" : "outline"}>{currentOrder.version === currentOrder.lastSentVersion ? "Terkirim" : "Belum dikirim"}</Badge></div>}
         </header>
 
         <div className="flex min-h-0 flex-1 overflow-hidden">
@@ -172,14 +207,16 @@ export function PosRegister({ menu }: { menu: PosMenu }) {
         <div className="border-b p-3">
           <RegisterClock timeZone={menu.outlet.timezone} />
         </div>
-        <CartPanel cart={cart} changeQuantity={changeQuantity} onCheckout={() => setCheckoutOpen(true)} onRemove={(id) => setCart((current) => current.filter((line) => line.id !== id))} totals={totals} />
+        <CartPanel canSave={Boolean(menu.outlet.openOrdersEnabled && !selectedChannel)} cart={cart} changeQuantity={changeQuantity} currentOrder={currentOrder} onCheckout={() => setCheckoutOpen(true)} onRemove={(id) => setCart((current) => current.filter((line) => line.id !== id))} onSave={() => setSaveOrderOpen(true)} onSend={sendCurrentOrder} pending={orderPending} totals={totals} />
       </aside>
 
       <button className="fixed right-4 bottom-[calc(5.4rem+env(safe-area-inset-bottom))] left-4 z-30 flex min-h-14 items-center justify-between rounded-xl bg-primary px-4 font-semibold text-primary-foreground shadow-lg focus-visible:ring-3 focus-visible:ring-ring/40 focus-visible:outline-none xl:hidden" onClick={() => setMobileCartOpen(true)} type="button"><span className="flex items-center gap-2"><ShoppingBasket aria-hidden="true" className="size-5" />Pesanan · {cart.reduce((sum, line) => sum + line.quantity, 0)} item</span><span className="font-mono">{formatMinor(totals.total)}</span></button>
 
-      <Dialog onOpenChange={setMobileCartOpen} open={mobileCartOpen}><DialogContent className="p-0 sm:p-0"><DialogHeader className="sr-only"><DialogTitle>Pesanan saat ini</DialogTitle><DialogDescription>Periksa item sebelum pembayaran.</DialogDescription></DialogHeader><CartPanel cart={cart} changeQuantity={changeQuantity} onCheckout={() => setCheckoutOpen(true)} onRemove={(id) => setCart((current) => current.filter((line) => line.id !== id))} totals={totals} /></DialogContent></Dialog>
+      <Dialog onOpenChange={setMobileCartOpen} open={mobileCartOpen}><DialogContent className="p-0 sm:p-0"><DialogHeader className="sr-only"><DialogTitle>Pesanan saat ini</DialogTitle><DialogDescription>Periksa item sebelum pembayaran.</DialogDescription></DialogHeader><CartPanel canSave={Boolean(menu.outlet.openOrdersEnabled && !selectedChannel)} cart={cart} changeQuantity={changeQuantity} currentOrder={currentOrder} onCheckout={() => setCheckoutOpen(true)} onRemove={(id) => setCart((current) => current.filter((line) => line.id !== id))} onSave={() => setSaveOrderOpen(true)} onSend={sendCurrentOrder} pending={orderPending} totals={totals} /></DialogContent></Dialog>
       {configuring && <ProductConfigurator channelId={channelId} key={`${configuring.id}:${channelId ?? "direct"}`} onAdd={(line) => { addLine(line); setConfiguring(null); }} onOpenChange={(open) => !open && setConfiguring(null)} product={configuring} />}
-      <CheckoutDialog cart={cart} channel={selectedChannel} menu={menu} onOpenChange={setCheckoutOpen} onSuccess={() => { setCart([]); setMobileCartOpen(false); }} open={checkoutOpen} totals={totals} />
+      <OrderSaveDialog cart={cart} currentOrder={currentOrder} key={`save:${currentOrder?.id ?? "new"}:${currentOrder?.version ?? 0}:${saveOrderOpen}`} menu={menu} onOpenChange={setSaveOrderOpen} onSaved={(value, itemIds) => { setCurrentOrder(value); setCart((lines) => lines.map((line, index) => ({ ...line, id: itemIds[index] ?? line.id, orderItemId: itemIds[index] ?? line.orderItemId }))); }} open={saveOrderOpen} />
+      <OpenOrdersDialog menu={menu} onCancelled={(orderId) => currentOrder?.id === orderId && resetRegister()} onResume={resumeOrder} open={openOrdersOpen} onOpenChange={setOpenOrdersOpen} orders={openOrders} />
+      <CheckoutDialog cart={cart} channel={selectedChannel} currentOrder={currentOrder} key={`checkout:${currentOrder?.id ?? "direct"}:${currentOrder?.version ?? 0}:${checkoutOpen}`} menu={menu} onOpenChange={setCheckoutOpen} onSuccess={resetRegister} open={checkoutOpen} totals={totals} />
     </div>
   );
 }
@@ -264,21 +301,78 @@ function ProductConfigurator({ product, channelId, onAdd, onOpenChange }: {
 }
 
 /** Displays current cart lines and the authoritative checkout summary preview. */
-function CartPanel({ cart, totals, changeQuantity, onRemove, onCheckout }: {
+function CartPanel({ cart, totals, changeQuantity, onRemove, onCheckout, canSave, currentOrder, onSave, onSend, pending }: {
   cart: CartLine[];
   totals: ReturnType<typeof calculateClientTotals>;
   changeQuantity: (id: string, delta: number) => void;
   onRemove: (id: string) => void;
   onCheckout: () => void;
+  canSave: boolean;
+  currentOrder: Pick<OpenOrder, "id" | "version" | "lastSentVersion"> | null;
+  onSave: () => void;
+  onSend: () => void;
+  pending: boolean;
 }) {
   return <div className="flex min-h-0 flex-1 flex-col"><div className="border-b p-4"><div className="flex items-center justify-between"><h2 className="font-heading text-xl font-semibold">Rincian pesanan</h2><Badge variant="secondary">{cart.reduce((sum, line) => sum + line.quantity, 0)} item</Badge></div><p className="mt-1 text-sm text-muted-foreground">Periksa pilihan sebelum dibayar.</p></div>
     <div className="grid min-h-0 flex-1 content-start gap-3 overflow-y-auto p-4">{cart.length === 0 ? <div className="grid min-h-56 place-items-center rounded-xl border border-dashed text-center xl:h-full"><div><span className="mx-auto grid size-14 place-items-center rounded-full bg-muted"><ShoppingBasket aria-hidden="true" className="size-6 text-muted-foreground" /></span><p className="mt-3 font-semibold">Belum ada pesanan</p><p className="mt-1 text-xs text-muted-foreground">Ketuk produk untuk menambahnya.</p></div></div> : cart.map((line) => <article className="rounded-xl border p-3" key={line.id}><div className="flex items-start justify-between gap-3"><div className="min-w-0"><h3 className="font-semibold">{line.productName}</h3>{line.selectionLabel && <p className="mt-1 text-xs leading-5 text-muted-foreground">{line.selectionLabel}</p>}{line.note && <p className="mt-1 text-xs italic text-muted-foreground">“{line.note}”</p>}</div><Button aria-label={`Hapus ${line.productName}`} onClick={() => onRemove(line.id)} size="icon-sm" type="button" variant="ghost"><Trash2 /></Button></div><div className="mt-3 flex items-center justify-between gap-3"><div className="flex items-center gap-1"><Button aria-label={`Kurangi ${line.productName}`} onClick={() => changeQuantity(line.id, -1)} size="icon-sm" type="button" variant="outline"><Minus /></Button><span className="w-7 text-center font-mono text-sm">{line.quantity}</span><Button aria-label={`Tambah ${line.productName}`} onClick={() => changeQuantity(line.id, 1)} size="icon-sm" type="button" variant="outline"><Plus /></Button></div><span className="font-mono font-semibold">{formatMinor(line.unitMinor * BigInt(line.quantity))}</span></div></article>)}</div>
-    <div className="mt-auto border-t bg-muted/25 p-4"><dl className="grid gap-2 text-sm"><div className="flex justify-between"><dt className="text-muted-foreground">Subtotal</dt><dd className="font-mono">{formatMinor(totals.subtotal)}</dd></div><div className="flex justify-between"><dt className="text-muted-foreground">Layanan</dt><dd className="font-mono">{formatMinor(totals.service)}</dd></div><div className="flex justify-between"><dt className="text-muted-foreground">Pajak {totals.includedTax ? "(termasuk)" : ""}</dt><dd className="font-mono">{formatMinor(totals.tax)}</dd></div><div className="mt-1 flex justify-between border-t pt-3 text-base font-semibold"><dt>Total</dt><dd className="font-mono text-primary">{formatMinor(totals.total)}</dd></div></dl><Button className="mt-4 w-full" disabled={cart.length === 0} onClick={onCheckout} type="button">Bayar sekarang</Button></div>
+    <div className="mt-auto border-t bg-muted/25 p-4"><dl className="grid gap-2 text-sm"><div className="flex justify-between"><dt className="text-muted-foreground">Subtotal</dt><dd className="font-mono">{formatMinor(totals.subtotal)}</dd></div><div className="flex justify-between"><dt className="text-muted-foreground">Layanan</dt><dd className="font-mono">{formatMinor(totals.service)}</dd></div><div className="flex justify-between"><dt className="text-muted-foreground">Pajak {totals.includedTax ? "(termasuk)" : ""}</dt><dd className="font-mono">{formatMinor(totals.tax)}</dd></div><div className="mt-1 flex justify-between border-t pt-3 text-base font-semibold"><dt>Total</dt><dd className="font-mono text-primary">{formatMinor(totals.total)}</dd></div></dl><div className="mt-4 grid grid-cols-2 gap-2">{canSave && <Button disabled={cart.length === 0 || pending} onClick={onSave} type="button" variant="outline"><Save aria-hidden="true" />{currentOrder ? "Simpan" : "Simpan order"}</Button>}{currentOrder && currentOrder.version !== currentOrder.lastSentVersion && <Button disabled={pending} onClick={onSend} type="button" variant="secondary">{pending ? <Spinner /> : <ChefHat aria-hidden="true" />}Kirim dapur</Button>}<Button className={cn(!canSave && !currentOrder && "col-span-2", currentOrder && currentOrder.version === currentOrder.lastSentVersion && "col-span-2")} disabled={cart.length === 0 || Boolean(currentOrder && currentOrder.version !== currentOrder.lastSentVersion)} onClick={onCheckout} type="button">Bayar sekarang</Button></div></div>
   </div>;
 }
 
+/** Saves a new or resumed order without collecting payment. */
+function OrderSaveDialog({ cart, currentOrder, menu, open, onOpenChange, onSaved }: {
+  cart: CartLine[];
+  currentOrder: Pick<OpenOrder, "id" | "version" | "lastSentVersion" | "orderType" | "tableLabel"> | null;
+  menu: PosMenu;
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  onSaved: (order: Pick<OpenOrder, "id" | "version" | "lastSentVersion" | "orderType" | "tableLabel">, itemIds: string[]) => void;
+}) {
+  const [pending, startTransition] = useTransition();
+  const [orderType, setOrderType] = useState<"DINE_IN" | "TAKEAWAY">(currentOrder?.orderType ?? "DINE_IN");
+  const [tableLabel, setTableLabel] = useState(currentOrder?.tableLabel ?? "");
+  const [reductionReason, setReductionReason] = useState("");
+
+  /** Validates visible order metadata before invoking the matching save mutation. */
+  function submit() {
+    if (orderType === "DINE_IN" && !tableLabel.trim()) return toast.error("Nomor atau nama meja wajib diisi.");
+    const content = { outletId: menu.outlet.id, orderType, tableLabel: orderType === "DINE_IN" ? tableLabel.trim() : undefined, items: cart.map((line) => ({ orderItemId: line.orderItemId, productId: line.productId, quantity: line.quantity, note: line.note, variantOptionIds: line.variantOptionIds, modifierOptionIds: line.modifierOptionIds, expectedUnitPrice: minorToMoney(line.unitMinor) })) };
+    startTransition(async () => {
+      const result = currentOrder
+        ? await updateOpenOrderAction({ ...content, orderId: currentOrder.id, expectedVersion: currentOrder.version, operationToken: crypto.randomUUID(), reductionReason: reductionReason || undefined })
+        : await saveOpenOrderAction({ ...content, operationToken: crypto.randomUUID() });
+      if (result.status !== "success" || !result.orderId || !result.version) { toast.error(result.message); return; }
+      onSaved({ id: result.orderId, version: result.version, lastSentVersion: currentOrder?.lastSentVersion ?? 0, orderType, tableLabel: orderType === "DINE_IN" ? tableLabel.trim() : null }, result.itemIds ?? []);
+      toast.success(result.message);
+      onOpenChange(false);
+    });
+  }
+
+  return <Dialog onOpenChange={(value) => !pending && onOpenChange(value)} open={open}><DialogContent><DialogHeader><DialogTitle>{currentOrder ? "Simpan perubahan order" : "Simpan order"}</DialogTitle><DialogDescription>Order dapat dilanjutkan staf lain pada outlet yang sama.</DialogDescription></DialogHeader><div className="grid gap-4"><fieldset><legend className="mb-2 font-semibold">Jenis pesanan</legend><div className="grid grid-cols-2 gap-2"><Button onClick={() => setOrderType("DINE_IN")} type="button" variant={orderType === "DINE_IN" ? "default" : "outline"}>Dine-in</Button><Button onClick={() => setOrderType("TAKEAWAY")} type="button" variant={orderType === "TAKEAWAY" ? "default" : "outline"}>Takeaway</Button></div></fieldset>{orderType === "DINE_IN" && <label className="grid gap-2" htmlFor="saved-table-label"><span className="font-semibold">Nomor atau nama meja</span><Input id="saved-table-label" maxLength={40} onChange={(event) => setTableLabel(event.target.value)} placeholder="Contoh: A-07" value={tableLabel} /></label>}{currentOrder && <label className="grid gap-2" htmlFor="reduction-reason"><span className="font-semibold">Alasan pengurangan <span className="text-xs font-normal text-muted-foreground">Isi jika item dikurangi/dihapus</span></span><Textarea id="reduction-reason" maxLength={240} onChange={(event) => setReductionReason(event.target.value)} placeholder="Minimal 5 karakter" value={reductionReason} /></label>}<div className="flex items-center justify-between rounded-xl border bg-muted/25 p-3"><span className="text-sm font-medium">{cart.reduce((sum, item) => sum + item.quantity, 0)} item</span><span className="font-mono font-semibold">{formatMinor(cart.reduce((sum, item) => sum + item.unitMinor * BigInt(item.quantity), 0n))}</span></div></div><DialogFooter><Button disabled={pending} onClick={submit} type="button">{pending ? <Spinner /> : <Save aria-hidden="true" />}{pending ? "Menyimpan…" : "Simpan order"}</Button></DialogFooter></DialogContent></Dialog>;
+}
+
+/** Lists shared outlet orders and handles audited cancellation. */
+function OpenOrdersDialog({ menu, open, onOpenChange, orders, onResume, onCancelled }: { menu: PosMenu; open: boolean; onOpenChange: (open: boolean) => void; orders: OpenOrder[]; onResume: (order: OpenOrder) => void; onCancelled: (orderId: string) => void }) {
+  const [pending, startTransition] = useTransition();
+  const [cancelTarget, setCancelTarget] = useState<OpenOrder | null>(null);
+  const [reason, setReason] = useState("");
+  /** Cancels the selected order with an audited reason and idempotency token. */
+  function cancel() {
+    if (!cancelTarget || reason.trim().length < 5) return toast.error("Alasan pembatalan minimal 5 karakter.");
+    startTransition(async () => {
+      const result = await cancelOpenOrderAction({ orderId: cancelTarget.id, outletId: menu.outlet.id, expectedVersion: cancelTarget.version, operationToken: crypto.randomUUID(), reason: reason.trim() });
+      if (result.status !== "success") { toast.error(result.message); return; }
+      onCancelled(cancelTarget.id);
+      setCancelTarget(null);
+      setReason("");
+      toast.success(result.message);
+    });
+  }
+  return <><Dialog onOpenChange={onOpenChange} open={open}><DialogContent className="sm:w-[min(42rem,calc(100vw-3rem))]"><DialogHeader><DialogTitle>Pesanan terbuka</DialogTitle><DialogDescription>Semua staf outlet dapat melanjutkan pesanan ini.</DialogDescription></DialogHeader><div className="grid max-h-[65svh] gap-3 overflow-y-auto pr-1">{orders.length ? orders.map((order) => <article className="rounded-xl border p-3" key={order.id}><div className="flex min-w-0 items-start justify-between gap-3"><div className="min-w-0"><h3 className="truncate font-semibold">{order.orderType === "DINE_IN" ? `Meja ${order.tableLabel}` : "Takeaway"}</h3><p className="mt-1 text-xs text-muted-foreground">{order.items.reduce((sum, item) => sum + item.quantity, 0)} item · {order.createdByName}</p></div><Badge variant={order.version === order.lastSentVersion ? "secondary" : "outline"}>{order.version === order.lastSentVersion ? "Terkirim" : "Ada perubahan"}</Badge></div><div className="mt-3 flex items-center justify-between border-t pt-3"><span className="font-mono font-semibold">{formatMinor(parseMoneyToMinor(order.total))}</span><div className="flex gap-2"><Button aria-label={`Batalkan ${order.tableLabel ?? "takeaway"}`} onClick={() => setCancelTarget(order)} size="sm" type="button" variant="ghost"><XCircle aria-hidden="true" />Batalkan</Button><Button onClick={() => onResume(order)} size="sm" type="button"><FolderOpen aria-hidden="true" />Lanjutkan</Button></div></div></article>) : <div className="grid min-h-48 place-items-center rounded-xl border border-dashed text-center"><div><FolderOpen aria-hidden="true" className="mx-auto size-7 text-muted-foreground" /><p className="mt-3 font-semibold">Belum ada open order</p><p className="mt-1 text-sm text-muted-foreground">Simpan pesanan dari rincian kasir.</p></div></div>}</div></DialogContent></Dialog><Dialog onOpenChange={(value) => !value && !pending && setCancelTarget(null)} open={Boolean(cancelTarget)}><DialogContent><DialogHeader><DialogTitle>Batalkan open order?</DialogTitle><DialogDescription>Jika order sudah dikirim, dapur menerima delta pembatalan.</DialogDescription></DialogHeader><label className="grid gap-2" htmlFor="cancel-order-reason"><span className="font-semibold">Alasan pembatalan</span><Textarea id="cancel-order-reason" maxLength={240} onChange={(event) => setReason(event.target.value)} placeholder="Minimal 5 karakter" value={reason} /></label><DialogFooter><Button disabled={pending} onClick={cancel} type="button" variant="destructive">{pending ? <Spinner /> : <Trash2 aria-hidden="true" />}{pending ? "Membatalkan…" : "Batalkan pesanan"}</Button></DialogFooter></DialogContent></Dialog></>;
+}
+
 /** Collects payment details and calls the idempotent checkout Server Action. */
-function CheckoutDialog({ cart, channel, menu, totals, open, onOpenChange, onSuccess }: {
+function CheckoutDialog({ cart, channel, currentOrder, menu, totals, open, onOpenChange, onSuccess }: {
   cart: CartLine[];
   channel: PosMenu["deliveryChannels"][number] | null;
   menu: PosMenu;
@@ -286,6 +380,7 @@ function CheckoutDialog({ cart, channel, menu, totals, open, onOpenChange, onSuc
   open: boolean;
   onOpenChange: (open: boolean) => void;
   onSuccess: () => void;
+  currentOrder: Pick<OpenOrder, "id" | "version" | "lastSentVersion" | "orderType" | "tableLabel"> | null;
 }) {
   const [pending, startTransition] = useTransition();
   const [orderType, setOrderType] = useState<"DINE_IN" | "TAKEAWAY">("DINE_IN");
@@ -321,13 +416,26 @@ function CheckoutDialog({ cart, channel, menu, totals, open, onOpenChange, onSuc
       const result = await checkoutSaleAction({
         checkoutToken,
         outletId: menu.outlet.id,
+        orderId: currentOrder?.id,
+        expectedVersion: currentOrder?.version,
         source: channel ? { type: "DELIVERY_PLATFORM", channelId: channel.id, externalOrderId: externalOrderId.trim() } : { type: "DIRECT" },
         orderType: channel ? "DELIVERY" : orderType,
         tableLabel: channel ? undefined : tableLabel,
-        items: cart.map((line) => ({ productId: line.productId, quantity: line.quantity, note: line.note, variantOptionIds: line.variantOptionIds, modifierOptionIds: line.modifierOptionIds, expectedUnitPrice: minorToMoney(line.unitMinor) })),
+        items: cart.map((line) => ({ orderItemId: line.orderItemId, productId: line.productId, quantity: line.quantity, note: line.note, variantOptionIds: line.variantOptionIds, modifierOptionIds: line.modifierOptionIds, expectedUnitPrice: minorToMoney(line.unitMinor) })),
         payment: channel ? undefined : { method, tenderedAmount: method === "CASH" ? minorToMoney(parseMoneyToMinor(tendered)) : undefined, reference },
       });
       if (result.status === "error") {
+        if (result.code === "PRICE_CHANGED" && currentOrder && window.confirm(`${result.message}\n\nGunakan harga terbaru untuk order ini?`)) {
+          const refreshed = await refreshOpenOrderPricingAction({ orderId: currentOrder.id, outletId: menu.outlet.id, expectedVersion: currentOrder.version, operationToken: crypto.randomUUID() });
+          if (refreshed.status === "success" && refreshed.version) {
+            onOpenChange(false);
+            onSuccess();
+            toast.success(`${refreshed.message} Buka kembali open order untuk melihat total baru.`);
+            return;
+          }
+          toast.error(refreshed.message);
+          return;
+        }
         toast.error(result.message);
         return;
       }
@@ -354,8 +462,8 @@ function CheckoutDialog({ cart, channel, menu, totals, open, onOpenChange, onSuc
 
   return <Dialog onOpenChange={handleOpenChange} open={open}><DialogContent className={receipt ? "sm:w-[min(32rem,calc(100vw-3rem))]" : undefined}>{receipt ? <ReceiptPreview menu={menu} onClose={() => handleOpenChange(false)} receipt={receipt} /> : <><DialogHeader><DialogTitle>Selesaikan pembayaran</DialogTitle><DialogDescription>{channel ? `Order ${channel.label} akan dicatat sebagai piutang platform.` : "Satu transaksi menggunakan satu metode pembayaran."}</DialogDescription></DialogHeader><div className="grid gap-5">
     {channel ? <div className="grid gap-4 rounded-xl border border-primary/25 bg-primary/5 p-4"><div className="flex items-center justify-between gap-3"><span className="font-semibold">Delivery · {channel.label}</span><Badge variant="outline">Settlement ±{channel.settlementDelayHours} jam</Badge></div><label className="grid gap-2" htmlFor="external-order-id"><span className="font-heading font-semibold">Nomor order platform <span className="text-destructive">*</span></span><Input id="external-order-id" maxLength={80} onChange={(event) => setExternalOrderId(event.target.value)} placeholder={`Contoh: ${channel.label.toUpperCase()}-12345`} value={externalOrderId} /></label></div> : <>
-      <fieldset><legend className="mb-2 font-heading font-semibold">Jenis pesanan</legend><div className="grid grid-cols-2 gap-2"><Button onClick={() => setOrderType("DINE_IN")} type="button" variant={orderType === "DINE_IN" ? "default" : "outline"}>{orderType === "DINE_IN" && <Check />}Dine-in</Button><Button onClick={() => setOrderType("TAKEAWAY")} type="button" variant={orderType === "TAKEAWAY" ? "default" : "outline"}>{orderType === "TAKEAWAY" && <Check />}Takeaway</Button></div></fieldset>
-      {orderType === "DINE_IN" && <label className="grid gap-2" htmlFor="table-label"><span className="font-heading font-semibold">Nomor atau nama meja <span className="text-destructive">*</span></span><Input id="table-label" maxLength={40} onChange={(event) => setTableLabel(event.target.value)} placeholder="Contoh: A-07" value={tableLabel} /></label>}
+      <fieldset disabled={Boolean(currentOrder)}><legend className="mb-2 font-heading font-semibold">Jenis pesanan</legend><div className="grid grid-cols-2 gap-2"><Button onClick={() => setOrderType("DINE_IN")} type="button" variant={orderType === "DINE_IN" ? "default" : "outline"}>{orderType === "DINE_IN" && <Check />}Dine-in</Button><Button onClick={() => setOrderType("TAKEAWAY")} type="button" variant={orderType === "TAKEAWAY" ? "default" : "outline"}>{orderType === "TAKEAWAY" && <Check />}Takeaway</Button></div></fieldset>
+      {orderType === "DINE_IN" && <label className="grid gap-2" htmlFor="table-label"><span className="font-heading font-semibold">Nomor atau nama meja <span className="text-destructive">*</span></span><Input disabled={Boolean(currentOrder)} id="table-label" maxLength={40} onChange={(event) => setTableLabel(event.target.value)} placeholder="Contoh: A-07" value={tableLabel} /></label>}
       <fieldset><legend className="mb-2 font-heading font-semibold">Metode pembayaran</legend><div className="grid grid-cols-2 gap-2 sm:grid-cols-3">{([['CASH','Tunai'],['QRIS','QRIS'],['DEBIT_CARD','Debit'],['CREDIT_CARD','Kredit'],['BANK_TRANSFER','Transfer']] as const).map(([value,label]) => <Button className="min-w-0" key={value} onClick={() => setMethod(value)} type="button" variant={method === value ? "default" : "outline"}>{label}</Button>)}</div></fieldset>
       {method === "CASH" ? <label className="grid gap-2" htmlFor="tendered"><span className="font-heading font-semibold">Uang diterima (Rp) <span className="text-destructive">*</span></span><CurrencyInput id="tendered" onValueChange={setTendered} placeholder="50.000" value={tendered} /><span className="text-sm text-muted-foreground">Kembalian: {formatMinor(tendered ? maxMinor(parseMoneyToMinor(tendered) - totals.total, 0n) : 0n)}</span></label> : <label className="grid gap-2" htmlFor="payment-reference"><span className="font-heading font-semibold">Referensi pembayaran <span className="font-sans text-xs font-normal text-muted-foreground">Opsional</span></span><Input id="payment-reference" maxLength={80} onChange={(event) => setReference(event.target.value)} placeholder="Nomor referensi" value={reference} /></label>}
     </>}

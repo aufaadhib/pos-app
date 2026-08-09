@@ -2,6 +2,10 @@ import "server-only";
 
 import {
   CatalogStatus,
+  KitchenTicketKind,
+  KitchenTicketLineAction,
+  OrderAuditAction,
+  OrderStatus,
   PaymentMethod,
   PaymentSettlementStatus,
   OutletStatus,
@@ -19,7 +23,7 @@ import type { CheckoutActionState, PosActor } from "@/lib/pos/types";
 
 type PosErrorCode = "FORBIDDEN" | "INVALID_CART" | "PRICE_CHANGED" | "PAYMENT_INVALID";
 
-type ResolvedItem = {
+export type ResolvedItem = {
   productId: string;
   productName: string;
   sku: string | null;
@@ -91,15 +95,30 @@ export async function createSale(input: CheckoutInput, actor: PosActor): Promise
         if (!outlet) throw new PosError("FORBIDDEN", "Outlet aktif tidak tersedia untuk akun ini.");
         const shift = await requireOpenCashShift(transaction, outlet.id, actor.id);
 
-        const channel = input.source.type === "DELIVERY_PLATFORM"
+        const openOrder = input.orderId ? await transaction.order.findFirst({
+          where: { id: input.orderId, outletId: outlet.id, status: OrderStatus.OPEN },
+          include: { items: { where: { quantity: { gt: 0 } }, orderBy: { createdAt: "asc" } } },
+        }) : null;
+        if (input.orderId && !openOrder) throw new PosError("FORBIDDEN", "Open order tidak tersedia.");
+        if (openOrder && openOrder.version !== input.expectedVersion) throw new PosError("INVALID_CART", "Pesanan sudah diubah staf lain. Muat ulang sebelum membayar.");
+        if (openOrder && openOrder.lastSentVersion !== openOrder.version) throw new PosError("INVALID_CART", "Kirim perubahan pesanan ke dapur sebelum pembayaran.");
+        const checkout: CheckoutInput = openOrder ? {
+          ...input,
+          source: { type: "DIRECT" },
+          orderType: openOrder.orderType,
+          tableLabel: openOrder.tableLabel ?? undefined,
+          items: openOrder.items.map((item) => ({ orderItemId: item.id, productId: item.productId, quantity: item.quantity, note: item.note ?? undefined, variantOptionIds: item.variantOptionIds, modifierOptionIds: item.modifierOptionIds, expectedUnitPrice: item.unitPrice.toFixed(2) })),
+        } : input;
+
+        const channel = checkout.source.type === "DELIVERY_PLATFORM"
           ? await transaction.outletDeliveryChannel.findFirst({
-            where: { id: input.source.channelId, outletId: outlet.id, isActive: true },
+            where: { id: checkout.source.channelId, outletId: outlet.id, isActive: true },
             select: { id: true, markupRate: true, estimatedFeeRate: true, roundingUnit: true, settlementDelayHours: true },
           })
           : null;
-        if (input.source.type === "DELIVERY_PLATFORM" && !channel) throw new PosError("INVALID_CART", "Channel pengantaran tidak aktif. Muat ulang menu.");
+        if (checkout.source.type === "DELIVERY_PLATFORM" && !channel) throw new PosError("INVALID_CART", "Channel pengantaran tidak aktif. Muat ulang menu.");
 
-        const items = await resolveCheckoutItems(transaction, input, channel);
+        const items = await resolveCheckoutItems(transaction, checkout, channel);
         const subtotal = items.reduce((sum, item) => sum.add(item.lineTotal), new Prisma.Decimal(0));
         const directEquivalentAmount = items.reduce((sum, item) => sum.add(item.directUnitPrice.mul(item.quantity)), new Prisma.Decimal(0));
         const totals = calculateSaleTotals({
@@ -108,7 +127,8 @@ export async function createSale(input: CheckoutInput, actor: PosActor): Promise
           taxRate: outlet.taxRate,
           pricesIncludeTax: channel ? true : outlet.pricesIncludeTax,
         });
-        const payment = resolvePayment(input, totals.total, directEquivalentAmount, channel);
+        if (openOrder && !openOrder.total.equals(totals.total)) throw new PosError("PRICE_CHANGED", "Harga atau biaya outlet berubah. Konfirmasi harga terbaru sebelum membayar.");
+        const payment = resolvePayment(checkout, totals.total, directEquivalentAmount, channel);
         const business = getOutletBusinessDate(outlet.timezone);
         const sequence = await transaction.receiptSequence.upsert({
           where: { outletId_businessDate: { outletId: outlet.id, businessDate: business.date } },
@@ -117,18 +137,51 @@ export async function createSale(input: CheckoutInput, actor: PosActor): Promise
           select: { lastValue: true },
         });
         const receiptNumber = `${outlet.code}-${business.token}-${String(sequence.lastValue).padStart(4, "0")}`;
+        const order = openOrder ?? await transaction.order.create({
+          data: {
+            operationToken: checkout.checkoutToken,
+            outletId: outlet.id,
+            openedShiftId: shift.id,
+            orderType: channel ? "DELIVERY" : checkout.orderType,
+            tableLabel: !channel && checkout.orderType === "DINE_IN" ? checkout.tableLabel : null,
+            channelId: channel?.id ?? null,
+            externalOrderId: checkout.source.type === "DELIVERY_PLATFORM" ? checkout.source.externalOrderId : null,
+            status: OrderStatus.COMPLETED,
+            lastSentVersion: 1,
+            subtotal: totals.subtotal,
+            serviceChargeRate: channel ? 0 : outlet.serviceChargeRate,
+            serviceChargeAmount: totals.serviceChargeAmount,
+            taxRate: outlet.taxRate,
+            taxAmount: totals.taxAmount,
+            pricesIncludeTax: channel ? true : outlet.pricesIncludeTax,
+            total: totals.total,
+            createdByUserId: actor.id,
+            createdByName: actor.name,
+            createdByEmail: actor.email,
+            completedAt: new Date(),
+            items: { create: items.map((item, index) => ({ productId: item.productId, productName: item.productName, sku: item.sku, quantity: item.quantity, note: item.note, variantOptionIds: checkout.items[index].variantOptionIds, modifierOptionIds: checkout.items[index].modifierOptionIds, selectionLabel: resolvedSelectionLabel(item), unitPrice: item.unitPrice, sentQuantity: item.quantity, sentNote: item.note, sentSelectionLabel: resolvedSelectionLabel(item) })) },
+          },
+          include: { items: { orderBy: { createdAt: "asc" } } },
+        });
+        if (!openOrder) {
+          await transaction.kitchenTicket.create({
+            data: { operationToken: checkout.checkoutToken, outletId: outlet.id, orderId: order.id, orderVersion: 1, kind: KitchenTicketKind.INITIAL, sentByUserId: actor.id, sentByName: actor.name, lines: { create: order.items.map((item) => ({ orderItemId: item.id, action: KitchenTicketLineAction.ADD, productName: item.productName, quantity: item.quantity, selectionLabel: item.selectionLabel, note: item.note })) } },
+          });
+          await transaction.orderAuditLog.create({ data: { orderId: order.id, action: OrderAuditAction.CREATE, actorUserId: actor.id, actorEmail: actor.email, after: { paidImmediately: true, total: totals.total.toFixed(2), kitchenTicket: true } } });
+        }
         const sale = await transaction.sale.create({
           data: {
             checkoutToken: input.checkoutToken,
             outletId: outlet.id,
             shiftId: shift.id,
+            orderId: order.id,
             receiptNumber,
             businessDate: business.date,
             dailySequence: sequence.lastValue,
-            orderType: channel ? "DELIVERY" : input.orderType,
-            tableLabel: !channel && input.orderType === "DINE_IN" ? input.tableLabel : null,
+            orderType: channel ? "DELIVERY" : checkout.orderType,
+            tableLabel: !channel && checkout.orderType === "DINE_IN" ? checkout.tableLabel : null,
             channelId: channel?.id ?? null,
-            externalOrderId: input.source.type === "DELIVERY_PLATFORM" ? input.source.externalOrderId : null,
+            externalOrderId: checkout.source.type === "DELIVERY_PLATFORM" ? checkout.source.externalOrderId : null,
             subtotal: totals.subtotal,
             serviceChargeRate: channel ? 0 : outlet.serviceChargeRate,
             serviceChargeAmount: totals.serviceChargeAmount,
@@ -171,12 +224,16 @@ export async function createSale(input: CheckoutInput, actor: PosActor): Promise
               outletId: outlet.id,
               itemCount: items.length,
               total: sale.total.toFixed(2),
-              paymentMethod: channel ? PaymentMethod.DELIVERY_PLATFORM : input.payment!.method,
+              paymentMethod: channel ? PaymentMethod.DELIVERY_PLATFORM : checkout.payment!.method,
               deliveryChannelId: channel?.id ?? null,
-              externalOrderId: input.source.type === "DELIVERY_PLATFORM" ? input.source.externalOrderId : null,
+              externalOrderId: checkout.source.type === "DELIVERY_PLATFORM" ? checkout.source.externalOrderId : null,
             },
           },
         });
+        if (openOrder) {
+          await transaction.order.update({ where: { id: openOrder.id }, data: { status: OrderStatus.COMPLETED, activeTableKey: null, completedAt: new Date() } });
+          await transaction.orderAuditLog.create({ data: { orderId: openOrder.id, action: OrderAuditAction.COMPLETE, actorUserId: actor.id, actorEmail: actor.email, after: { saleId: sale.id, shiftId: shift.id, receiptNumber: sale.receiptNumber } } });
+        }
         return serializeSaleResult(sale);
       }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable, maxWait: 5_000, timeout: 15_000 });
     } catch (error) {
@@ -199,8 +256,18 @@ export async function createSale(input: CheckoutInput, actor: PosActor): Promise
   throw new PosError("INVALID_CART", "Transaksi sedang sibuk. Coba checkout kembali.");
 }
 
+/** Builds the kitchen-readable option label from authoritative item snapshots. */
+function resolvedSelectionLabel(item: ResolvedItem) {
+  return [...item.variants.map((value) => `${value.variantGroupName}: ${value.optionName}`), ...item.modifiers.map((value) => value.optionName)].join(" · ") || null;
+}
+
 /** Rebuilds cart prices and selection rules from fresh catalog records inside checkout. */
-async function resolveCheckoutItems(transaction: Prisma.TransactionClient, input: CheckoutInput, channel: ResolvedDeliveryChannel | null): Promise<ResolvedItem[]> {
+export async function resolveCheckoutItems(
+  transaction: Prisma.TransactionClient,
+  input: Pick<CheckoutInput, "outletId" | "items">,
+  channel: ResolvedDeliveryChannel | null,
+  acceptPriceChanges = false,
+): Promise<ResolvedItem[]> {
   const productIds = Array.from(new Set(input.items.map((item) => item.productId)));
   const products = await transaction.product.findMany({
     where: { id: { in: productIds }, status: CatalogStatus.ACTIVE, category: { status: CatalogStatus.ACTIVE } },
@@ -297,7 +364,7 @@ async function resolveCheckoutItems(transaction: Prisma.TransactionClient, input
       .add(variants.reduce((sum, value) => sum.add(value.directPriceAdjustment), new Prisma.Decimal(0)))
       .add(modifiers.reduce((sum, value) => sum.add(value.directPriceAdjustment), new Prisma.Decimal(0)));
     const unitPrice = baseUnitPrice.add(variantUnitAmount).add(modifierUnitAmount);
-    if (!unitPrice.equals(new Prisma.Decimal(cartItem.expectedUnitPrice))) {
+    if (!acceptPriceChanges && !unitPrice.equals(new Prisma.Decimal(cartItem.expectedUnitPrice))) {
       throw new PosError("PRICE_CHANGED", `Harga ${product.name} berubah. Muat ulang menu sebelum checkout.`);
     }
     return {

@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { cookies } from "next/headers";
-import { BookOpen, HandCoins, House, MapPin, Palette, PanelLeftClose, PanelLeftOpen, ReceiptText, ShoppingBasket, Store, Users, WalletCards } from "lucide-react";
+import { BookOpen, ChefHat, HandCoins, House, MapPin, Palette, PanelLeftClose, PanelLeftOpen, ReceiptText, Settings2, ShoppingBasket, Store, Users, WalletCards } from "lucide-react";
 
 import { BrandMark } from "@/components/brand-mark";
 import { FullscreenToggle } from "@/components/fullscreen-toggle";
@@ -16,7 +16,7 @@ type WorkspaceHeaderProps = {
   canViewDesignSystem?: boolean;
   canManageStaff?: boolean;
   activeOutletId?: string | null;
-  activeRoute?: "workspace" | "pos" | "shifts" | "transactions" | "settlements" | "catalog" | "outlets" | "staff" | "design-system";
+  activeRoute?: "workspace" | "pos" | "kitchen" | "shifts" | "transactions" | "settlements" | "catalog" | "outlets" | "staff" | "settings" | "design-system";
   defaultSidebarCollapsed?: boolean;
   role: AppRole;
 };
@@ -40,15 +40,17 @@ export async function WorkspaceHeader({
   const navigationItems = [
     { href: "/workspace", label: "Beranda", route: "workspace", icon: House, visible: true },
     { href: "/pos", label: "Kasir", route: "pos", icon: ShoppingBasket, visible: true },
+    { href: "/kitchen", label: "Dapur", route: "kitchen", icon: ChefHat, visible: true },
     { href: "/shifts", label: "Shift", route: "shifts", icon: WalletCards, visible: true },
     { href: "/transactions", label: "Transaksi", route: "transactions", icon: ReceiptText, visible: true },
     { href: "/settlements", label: "Ojol & settlement", route: "settlements", icon: HandCoins, visible: role !== "cashier" },
     { href: "/catalog", label: "Katalog", route: "catalog", icon: BookOpen, visible: true },
     { href: "/outlets", label: "Outlet", route: "outlets", icon: Store, visible: true },
     { href: "/staff", label: "Staf", route: "staff", icon: Users, visible: canManageStaff },
+    { href: "/settings", label: "Pengaturan", route: "settings", icon: Settings2, visible: role !== "cashier" },
     { href: "/design-system", label: "Sistem UI", route: "design-system", icon: Palette, visible: canViewDesignSystem },
   ].filter((item) => item.visible);
-  const mobileNavigationItems = navigationItems.filter((item) => ["workspace", "pos", "shifts", "transactions", "catalog"].includes(item.route));
+  const mobileNavigationItems = navigationItems.filter((item) => ["workspace", "pos", "kitchen", "shifts", "transactions"].includes(item.route));
 
   return (
     <>

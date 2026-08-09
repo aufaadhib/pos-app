@@ -116,4 +116,4 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
 4. Dokumentasikan setiap method atau function baru, termasuk tujuan, input, output, dan side effect pentingnya, lalu jelaskan method atau function tersebut kepada pengguna.
 5. Buat test untuk business rule penting, authorization, transaction, database constraint, dan alur pengguna yang kritis.
 6. Pastikan setiap perubahan UI tetap responsif pada mobile, tablet, dan desktop.
-<!-- 7. Sebelum pekerjaan dianggap selesai, jalankan `npm run lint`, `npx tsc --noEmit`, `npm run build`, dan test relevan yang sudah dikonfigurasi. -->
+7. `npm run lint`, `npx tsc --noEmit`, `npm run build`, dan test relevan yang sudah dikonfigurasi dijalankan ketika ada perubahan major saja. Jika cuma perbuahan kecil tidak perlu

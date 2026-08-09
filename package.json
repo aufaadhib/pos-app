@@ -15,6 +15,7 @@
     "test:e2e:shift-live": "tsx scripts/run-shift-e2e.ts",
     "db:generate": "prisma generate",
     "db:migrate": "prisma migrate dev",
+    "db:migrate:deploy": "prisma migrate deploy",
     "db:studio": "prisma studio",
     "auth:generate": "npx --yes auth@1.6.26 generate --config lib/auth/cli.ts --output prisma/schema.prisma",
     "seed:owner": "tsx scripts/seed-initial-owner.ts",

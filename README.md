@@ -12,7 +12,9 @@ Rencana pengembangan berikutnya tersedia di [`docs/roadmap.md`](docs/roadmap.md)
 4. Dari **Connect**, salin connection string branch `development`:
    - URL dengan host yang memuat `-pooler` menjadi `DATABASE_URL` untuk runtime.
    - URL direct/non-pooled menjadi `DIRECT_URL` untuk migration Prisma.
-5. Salin `.env.example` menjadi `.env`, lalu isi seluruh nilai rahasia. Jangan commit `.env`.
+5. Salin `.env.example` menjadi `.env`, lalu isi connection string branch yang ingin digunakan. Jangan commit `.env`.
+
+Migration production dijalankan manual memakai `npm run db:migrate:deploy`, tidak melalui Vercel build. Pastikan `DATABASE_URL` dan `DIRECT_URL` di `.env` mengarah ke branch yang benar sebelum menjalankan migration, seed, atau E2E live.
 
 Gunakan secret acak minimal 32 karakter untuk Better Auth. Contoh membuatnya dari terminal:
 
@@ -80,7 +82,19 @@ Migration `add_pos_transactions` menambahkan struk berurutan harian per outlet, 
 - Tunai menyimpan uang diterima dan kembalian. Satu transaksi hanya memakai satu metode pembayaran.
 - Dine-in wajib memiliki nomor/nama meja; takeaway tidak menyimpan meja.
 - Pajak serta layanan memakai `Decimal` dan dibulatkan half-up ke Rupiah per komponen.
-- Belum ada diskon, split payment, order tertahan, pengurangan stok, atau hard delete transaksi.
+- Belum ada diskon, split payment, pengurangan stok, atau hard delete transaksi.
+
+### Open order dan kitchen ticket
+
+Migration `add_open_orders_and_kitchen_tickets` menambahkan order terpadu untuk checkout langsung dan pesanan belum dibayar, optimistic version, meja aktif unik per outlet, audit, serta antrean dapur.
+
+- Owner/manager dapat mengaktifkan “Simpan order” untuk outlet aktif melalui `/settings`; kasir hanya memakai fiturnya.
+- Open order dine-in/takeaway dapat dilanjutkan semua staf yang memiliki akses outlet dan tetap aktif setelah shift pembuat ditutup.
+- Perubahan wajib disimpan lalu dikirim manual ke dapur. Tambahan, perubahan catatan, dan pengurangan menjadi delta ticket; pengurangan/pembatalan wajib memiliki alasan.
+- Open order hanya dapat dibayar setelah revisi terbaru dikirim. Sale dan pembayaran masuk ke shift aktif staf yang menyelesaikan.
+- Checkout langsung, termasuk delivery platform, otomatis membuat kitchen ticket dalam transaction yang sama.
+- Harga dan availability divalidasi ulang. Perubahan harga harus dikonfirmasi sebelum pembayaran dapat diulang.
+- `/kitchen` memakai antrean fresh Baru → Diproses → Selesai. Printer dapur dan KDS perangkat penuh belum termasuk tahap ini.
 
 ### Void dan refund
 
@@ -128,6 +142,7 @@ Route utama:
 - `/sign-in` — login email dan kata sandi.
 - `/workspace` — workspace semua role yang sah.
 - `/pos` — register kasir untuk outlet aktif.
+- `/kitchen` — antrean kitchen ticket outlet aktif.
 - `/shifts` — shift pribadi, shift terbuka, dan riwayat outlet aktif.
 - `/shifts/[shiftId]` — rincian rekonsiliasi, pembayaran, movement, transaksi, dan audit shift.
 - `/transactions` — riwayat struk outlet aktif.
@@ -138,6 +153,7 @@ Route utama:
 - `/catalog/modifiers` — pustaka modifier reusable khusus owner.
 - `/outlets` — directory outlet; owner mengelola, role lain melihat cakupan masing-masing.
 - `/staff` — roster staf; owner mengelola manager/kasir, manager mengelola kasir pada outlet tugasnya.
+- `/settings` — pengaturan operasional outlet aktif untuk owner/manager.
 - `/select-outlet` — memilih konteks outlet aktif untuk session.
 - `/change-password` — penggantian wajib untuk password sementara.
 - `/design-system` — referensi UI khusus owner.
@@ -196,7 +212,8 @@ Runner shift memakai server Next.js dan folder build terisolasi, membuat fixture
 ## Script database dan auth
 
 - `npm run db:generate` menghasilkan Prisma client ke `generated/prisma`.
-- `npm run db:migrate` membuat dan menjalankan migration versioned memakai `DIRECT_URL`.
+- `npm run db:migrate` membuat dan menjalankan migration versioned memakai `DIRECT_URL` development.
+- `npm run db:migrate:deploy` menerapkan migration yang sudah dibuat ke production secara manual.
 - `npm run db:studio` membuka Prisma Studio.
 - `npm run auth:generate -- -y` menyelaraskan model Better Auth ke schema Prisma.
 - `npm run seed:owner` membuat owner bootstrap secara aman.

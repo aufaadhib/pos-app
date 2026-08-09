@@ -26,6 +26,7 @@ export async function getPosMenu(outletId: string, userId: string, role: AppRole
       taxRate: true,
       serviceChargeRate: true,
       pricesIncludeTax: true,
+      openOrdersEnabled: true,
       deliveryChannels: {
         where: { isActive: true },
         orderBy: { provider: "asc" },
@@ -163,6 +164,7 @@ export async function getPosMenu(outletId: string, userId: string, role: AppRole
       name: outlet.name,
       timezone: outlet.timezone,
       pricesIncludeTax: outlet.pricesIncludeTax,
+      openOrdersEnabled: outlet.openOrdersEnabled,
       taxRate: outlet.taxRate.toFixed(2),
       serviceChargeRate: outlet.serviceChargeRate.toFixed(2),
     },

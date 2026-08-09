@@ -213,6 +213,25 @@ Dokumen ini mencatat function dan component function yang ditambahkan pada miles
 | `useActionToast()` | Action state | Side effect toast | Menampilkan hasil mutation menggunakan provider notifikasi global. |
 | `moneyValue()`, `formatRupiah()`, `formatDate()`, `toLocalDateTime()`, `toIsoDateTime()` | Nilai form/tanggal | String terformat | Menormalisasi input Rupiah dan waktu lokal browser sebelum melewati Server Action. |
 
+## Open order dan kitchen ticket
+
+| Function | Input | Output | Tujuan dan side effect |
+| --- | --- | --- | --- |
+| `saveOpenOrder()` | Cart, outlet, tipe order, meja, token, actor | `OrderActionState` | Menyimpan order belum lunas beserta harga fresh, item snapshot, shift pembuka, versi, dan audit dalam transaction serializable. |
+| `updateOpenOrder()` | Order, expected version, cart terbaru, alasan pengurangan, actor | `OrderActionState` | Menjalankan optimistic concurrency, mempertahankan item yang pernah dikirim, memperbarui harga/totals, dan mencatat audit. |
+| `refreshOpenOrderPricing()` | Order, expected version, token, actor | `OrderActionState` | Menerapkan harga dan konfigurasi outlet terbaru setelah konfirmasi eksplisit tanpa membuat delta dapur palsu. |
+| `sendOrderToKitchen()` | Order, expected version, token, actor | `OrderActionState` | Membuat initial/delta ticket idempoten, menyimpan snapshot terakhir terkirim, dan mengaudit pengiriman. |
+| `buildKitchenDelta()` | Snapshot item saat ini dan terakhir terkirim | Daftar line ticket | Menghasilkan `ADD`, `UPDATE`, atau `REMOVE`; pengurangan tanpa alasan ditolak. |
+| `cancelOpenOrder()` | Order, expected version, token, alasan, actor | `OrderActionState` | Membatalkan order tanpa hard delete, melepaskan meja aktif, menulis audit, dan membuat delta pembatalan jika dapur sudah menerima item. |
+| `updateKitchenTicketStatus()` | Ticket, outlet, status berikutnya, actor | `OrderActionState` | Memvalidasi scope outlet dan memajukan ticket Baru → Diproses → Selesai secara berurutan. |
+| `updateOpenOrderSetting()` | Outlet, flag enable, actor owner/manager | `OrderActionState` | Mengubah kemampuan simpan order per outlet dan menulis admin audit. |
+| `getOpenOrders()`, `getKitchenTickets()`, `getOutletOperations()` | Outlet, user, role | DTO serializable | Membaca data operasional fresh, terbatas outlet serta jumlah record, tanpa persistent cache. |
+| Action order, kitchen, dan settings | Input unknown dari Client Component | Hasil success/error/conflict | Mengulang validasi Zod, session, permission, actor tepercaya, mutation, dan revalidation di server. |
+| `OrderSaveDialog()`, `OpenOrdersDialog()`, `CheckoutDialog()` | Cart/order/menu | Alur POS interaktif | Menyimpan, melanjutkan, mengirim, membatalkan, mengonfirmasi harga, dan membayar order tanpa memperbesar canvas POS. |
+| `KitchenBoard()` | Ticket fresh outlet aktif | Antrean tiga status | Menampilkan kartu initial/delta responsif dan pending state lokal tanpa overflow horizontal. |
+| `OutletOperationsForm()` | Outlet dan nilai awal | Form toggle | Memberi owner/manager kontrol operasional dengan feedback pending/sukses/error. |
+| `KitchenPage()`, `SettingsPage()` | Session dan outlet aktif | Halaman dynamic | Menjaga authorization server, data fresh, serta shell responsif mobile/tablet/desktop. |
+
 ## Interaksi pengguna
 
 | Function | Input | Output | Tujuan dan side effect |

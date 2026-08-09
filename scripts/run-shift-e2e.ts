@@ -37,6 +37,7 @@ export async function runShiftE2E() {
           provinceName: "Daerah Khusus Ibukota Jakarta",
           cityCode: "3174",
           cityName: "Kota Jakarta Selatan",
+          openOrdersEnabled: true,
         },
       }),
       prisma.category.create({
@@ -94,6 +95,10 @@ async function cleanupShiftFixtures(runId: string) {
   const saleItemIds = saleItems.map(({ id }) => id);
   const shifts = await prisma.cashShift.findMany({ where: { outletId: { in: outletIds } }, select: { id: true } });
   const shiftIds = shifts.map(({ id }) => id);
+  const orders = await prisma.order.findMany({ where: { outletId: { in: outletIds } }, select: { id: true } });
+  const orderIds = orders.map(({ id }) => id);
+  const tickets = await prisma.kitchenTicket.findMany({ where: { orderId: { in: orderIds } }, select: { id: true } });
+  const ticketIds = tickets.map(({ id }) => id);
 
   await prisma.$transaction([
     prisma.platformSettlementItem.deleteMany({ where: { salePayment: { saleId: { in: saleIds } } } }),
@@ -105,6 +110,11 @@ async function cleanupShiftFixtures(runId: string) {
     prisma.saleAuditLog.deleteMany({ where: { saleId: { in: saleIds } } }),
     prisma.saleItem.deleteMany({ where: { saleId: { in: saleIds } } }),
     prisma.sale.deleteMany({ where: { id: { in: saleIds } } }),
+    prisma.kitchenTicketLine.deleteMany({ where: { ticketId: { in: ticketIds } } }),
+    prisma.kitchenTicket.deleteMany({ where: { id: { in: ticketIds } } }),
+    prisma.orderAuditLog.deleteMany({ where: { orderId: { in: orderIds } } }),
+    prisma.orderItem.deleteMany({ where: { orderId: { in: orderIds } } }),
+    prisma.order.deleteMany({ where: { id: { in: orderIds } } }),
     prisma.receiptSequence.deleteMany({ where: { outletId: { in: outletIds } } }),
     prisma.cashMovement.deleteMany({ where: { shiftId: { in: shiftIds } } }),
     prisma.cashShiftAuditLog.deleteMany({ where: { shiftId: { in: shiftIds } } }),
