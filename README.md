@@ -11,10 +11,10 @@ Rencana pengembangan berikutnya tersedia di [`docs/roadmap.md`](docs/roadmap.md)
 3. Pertahankan branch utama untuk environment production, lalu buat branch bernama `development` untuk pekerjaan lokal.
 4. Dari **Connect**, salin connection string branch `development`:
    - URL dengan host yang memuat `-pooler` menjadi `DATABASE_URL` untuk runtime.
-   - URL direct/non-pooled menjadi `DIRECT_URL` untuk migration Prisma.
+   - URL direct/non-pooled menjadi `DATABASE_URL_UNPOOLED` untuk migration Prisma.
 5. Salin `.env.example` menjadi `.env`, lalu isi connection string branch yang ingin digunakan. Jangan commit `.env`.
 
-Migration production dijalankan manual memakai `npm run db:migrate:deploy`, tidak melalui Vercel build. Pastikan `DATABASE_URL` dan `DIRECT_URL` di `.env` mengarah ke branch yang benar sebelum menjalankan migration, seed, atau E2E live.
+Migration production dijalankan manual memakai `npm run db:migrate:deploy`, tidak melalui Vercel build. Pastikan `DATABASE_URL` dan `DATABASE_URL_UNPOOLED` di `.env` mengarah ke branch yang benar sebelum menjalankan migration, seed, atau E2E live.
 
 Gunakan secret acak minimal 32 karakter untuk Better Auth. Contoh membuatnya dari terminal:
 
@@ -212,7 +212,7 @@ Runner shift memakai server Next.js dan folder build terisolasi, membuat fixture
 ## Script database dan auth
 
 - `npm run db:generate` menghasilkan Prisma client ke `generated/prisma`.
-- `npm run db:migrate` membuat dan menjalankan migration versioned memakai `DIRECT_URL` development.
+- `npm run db:migrate` membuat dan menjalankan migration versioned memakai `DATABASE_URL_UNPOOLED` development.
 - `npm run db:migrate:deploy` menerapkan migration yang sudah dibuat ke production secara manual.
 - `npm run db:studio` membuka Prisma Studio.
 - `npm run auth:generate -- -y` menyelaraskan model Better Auth ke schema Prisma.

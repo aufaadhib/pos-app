@@ -9,6 +9,6 @@ export default defineConfig({
     seed: "tsx scripts/seed-initial-owner.ts",
   },
   datasource: {
-    url: env("DIRECT_URL"),
+    url: env("DATABASE_URL_UNPOOLED"),
   },
 });
