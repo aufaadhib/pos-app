@@ -105,7 +105,15 @@ export async function getActiveOutlet(
       status: OutletStatus.ACTIVE,
       ...(role === "owner" ? {} : { assignments: { some: { userId } } }),
     },
-    select: { id: true, code: true, name: true, timezone: true },
+    select: {
+      id: true,
+      code: true,
+      name: true,
+      timezone: true,
+      addressLine: true,
+      cityName: true,
+      provinceName: true,
+    },
   });
 
   return outlet;

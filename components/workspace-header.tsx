@@ -10,6 +10,8 @@ import { WorkspaceNavigation } from "@/components/workspace-navigation";
 import { WorkspaceSidebarPreference } from "@/components/workspace-sidebar-preference";
 import { roleLabels, type AppRole } from "@/lib/auth/permissions";
 import { getCurrentSession } from "@/lib/auth/session";
+import { formatOutletAddress } from "@/lib/outlets/normalization";
+import { getActiveOutlet } from "@/lib/outlets/queries";
 import { hasCurrentCashShift } from "@/lib/shifts/queries";
 
 type WorkspaceHeaderProps = {
@@ -27,8 +29,15 @@ export async function WorkspaceHeader({
 }: WorkspaceHeaderProps) {
   const storedSidebarState = (await cookies()).get("glutong_sidebar_collapsed")?.value;
   const session = await getCurrentSession();
-  const hasOpenShift = session ? await hasCurrentCashShift(session.user.id) : false;
+  const [hasOpenShift, activeOutlet] = await Promise.all([
+    session ? hasCurrentCashShift(session.user.id) : Promise.resolve(false),
+    session ? getActiveOutlet(activeOutletId, session.user.id, role) : Promise.resolve(null),
+  ]);
   const sidebarCollapsed = storedSidebarState === "1";
+  const activeOutletLocation = activeOutlet ? formatOutletAddress(activeOutlet) : null;
+  const outletLinkLabel = activeOutlet
+    ? `Ganti outlet aktif. Saat ini ${activeOutlet.name}, ${activeOutletLocation}.`
+    : "Pilih outlet aktif";
 
   return (
     <>
@@ -38,7 +47,7 @@ export async function WorkspaceHeader({
           <BrandMark compact className="gap-2" />
         </Link>
         <div className="flex items-center gap-1">
-          <Link aria-label={activeOutletId ? "Ganti outlet aktif" : "Pilih outlet aktif"} className="grid size-11 place-items-center rounded-lg text-muted-foreground hover:bg-muted hover:text-foreground focus-visible:ring-3 focus-visible:ring-ring/40 focus-visible:outline-none" href="/select-outlet"><MapPin aria-hidden="true" className="size-5" /></Link>
+          <Link aria-label={outletLinkLabel} className="flex size-11 shrink-0 items-center justify-center gap-2 rounded-lg text-muted-foreground hover:bg-muted hover:text-foreground focus-visible:ring-3 focus-visible:ring-ring/40 focus-visible:outline-none md:h-11 md:w-auto md:max-w-48 md:px-3" href="/select-outlet" title={activeOutlet ? `${activeOutlet.name} · ${activeOutletLocation}` : undefined}><MapPin aria-hidden="true" className="size-5 shrink-0" /><span className="hidden min-w-0 text-left md:block"><span className="block text-[0.65rem] leading-none text-muted-foreground">{activeOutlet ? "Outlet aktif" : "Belum ada outlet"}</span><span className="mt-1 block truncate text-xs font-semibold text-foreground">{activeOutlet?.name ?? "Pilih outlet"}</span></span></Link>
           <FullscreenToggle compact />
           <ThemeToggle className="[&_[data-slot=button]]:size-9" />
           <SignOutButton hasOpenShift={hasOpenShift} />
@@ -53,9 +62,9 @@ export async function WorkspaceHeader({
             <PanelLeftOpen aria-hidden="true" className="workspace-sidebar-toggle-open hidden size-5" />
           </label>
         </div>
-        <Link aria-label={activeOutletId ? "Ganti outlet aktif" : "Pilih outlet aktif"} className="workspace-sidebar-outlet mx-3 mt-6 flex min-h-14 shrink-0 items-center gap-3 rounded-xl border bg-background px-3 text-sm hover:border-primary/60 hover:bg-accent/60 focus-visible:ring-3 focus-visible:ring-ring/40 focus-visible:outline-none" href="/select-outlet">
+        <Link aria-label={outletLinkLabel} className="workspace-sidebar-outlet mx-3 mt-6 flex min-h-16 shrink-0 items-center gap-3 rounded-xl border bg-background px-3 py-2 text-sm hover:border-primary/60 hover:bg-accent/60 focus-visible:ring-3 focus-visible:ring-ring/40 focus-visible:outline-none" href="/select-outlet" title={activeOutlet ? `${activeOutlet.name} · ${activeOutletLocation}` : undefined}>
           <span className="grid size-9 place-items-center rounded-lg bg-primary text-primary-foreground"><MapPin aria-hidden="true" className="size-4" /></span>
-          <span className="workspace-sidebar-label min-w-0"><span className="block text-xs text-muted-foreground">Konteks layanan</span><span className="block truncate font-semibold">{activeOutletId ? "Outlet aktif" : "Pilih outlet"}</span></span>
+          <span className="workspace-sidebar-label min-w-0 flex-1 overflow-hidden"><span className="block text-[0.65rem] font-medium tracking-wide text-muted-foreground uppercase">{activeOutlet ? "Outlet aktif" : "Belum ada outlet"}</span><span className="block truncate font-semibold text-foreground">{activeOutlet?.name ?? "Pilih outlet"}</span>{activeOutletLocation && <span className="mt-0.5 block truncate text-[0.65rem] text-muted-foreground">{activeOutletLocation}</span>}</span>
         </Link>
         <WorkspaceNavigation canManageStaff={canManageStaff} canViewDesignSystem={canViewDesignSystem} role={role} />
         <div className="workspace-sidebar-footer shrink-0 border-t p-3">
