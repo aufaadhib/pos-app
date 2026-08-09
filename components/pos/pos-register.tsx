@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState, useTransition } from "react";
-import { Check, CheckCircle2, ChefHat, Clock3, FolderOpen, LayoutGrid, Minus, PanelLeftClose, PanelLeftOpen, Plus, Printer, ReceiptText, Save, Search, ShoppingBasket, Trash2, XCircle } from "lucide-react";
+import { Check, CheckCircle2, ChefHat, Clock3, FolderOpen, LayoutGrid, MessageSquareText, Minus, PanelLeftClose, PanelLeftOpen, Plus, Printer, ReceiptText, Save, Search, ShoppingBasket, Trash2, XCircle } from "lucide-react";
 import { toast } from "react-toastify";
 
 import { cancelOpenOrderAction, checkoutSaleAction, refreshOpenOrderPricingAction, saveOpenOrderAction, sendOrderToKitchenAction, updateOpenOrderAction } from "@/app/pos/actions";
@@ -71,6 +71,7 @@ export function PosRegister({ menu, openOrders = [] }: { menu: PosMenu; openOrde
   const [checkoutOpen, setCheckoutOpen] = useState(false);
   const [saveOrderOpen, setSaveOrderOpen] = useState(false);
   const [openOrdersOpen, setOpenOrdersOpen] = useState(false);
+  const [noteTarget, setNoteTarget] = useState<CartLine | null>(null);
   const [currentOrder, setCurrentOrder] = useState<Pick<OpenOrder, "id" | "version" | "lastSentVersion" | "orderType" | "tableLabel"> | null>(null);
   const filteredProducts = useMemo(() => {
     const query = search.trim().toLocaleLowerCase("id-ID");
@@ -109,6 +110,12 @@ export function PosRegister({ menu, openOrders = [] }: { menu: PosMenu; openOrde
       : line));
   }
 
+  /** Replaces one cart-line note while preserving its product configuration and server identity. */
+  function updateLineNote(id: string, note: string) {
+    setCart((current) => current.map((line) => line.id === id ? { ...line, note: note.trim() } : line));
+    setNoteTarget(null);
+  }
+
   /** Loads one shared open order into the register without trusting stale totals. */
   function resumeOrder(order: OpenOrder) {
     setChannelId(null);
@@ -122,6 +129,7 @@ export function PosRegister({ menu, openOrders = [] }: { menu: PosMenu; openOrde
   function resetRegister() {
     setCart([]);
     setCurrentOrder(null);
+    setNoteTarget(null);
     setMobileCartOpen(false);
   }
 
@@ -207,28 +215,37 @@ export function PosRegister({ menu, openOrders = [] }: { menu: PosMenu; openOrde
         <div className="border-b p-3">
           <RegisterClock timeZone={menu.outlet.timezone} />
         </div>
-        <CartPanel canSave={Boolean(menu.outlet.openOrdersEnabled && !selectedChannel)} cart={cart} changeQuantity={changeQuantity} currentOrder={currentOrder} onCheckout={() => setCheckoutOpen(true)} onRemove={(id) => setCart((current) => current.filter((line) => line.id !== id))} onSave={() => setSaveOrderOpen(true)} onSend={sendCurrentOrder} pending={orderPending} totals={totals} />
+        <CartPanel canSave={Boolean(menu.outlet.openOrdersEnabled && !selectedChannel)} cart={cart} changeQuantity={changeQuantity} currentOrder={currentOrder} onCheckout={() => setCheckoutOpen(true)} onEditNote={setNoteTarget} onRemove={(id) => setCart((current) => current.filter((line) => line.id !== id))} onSave={() => setSaveOrderOpen(true)} onSend={sendCurrentOrder} pending={orderPending} totals={totals} />
       </aside>
 
       <button className="fixed right-4 bottom-[calc(5.4rem+env(safe-area-inset-bottom))] left-4 z-30 flex min-h-14 items-center justify-between rounded-xl bg-primary px-4 font-semibold text-primary-foreground shadow-lg focus-visible:ring-3 focus-visible:ring-ring/40 focus-visible:outline-none xl:hidden" onClick={() => setMobileCartOpen(true)} type="button"><span className="flex items-center gap-2"><ShoppingBasket aria-hidden="true" className="size-5" />Pesanan · {cart.reduce((sum, line) => sum + line.quantity, 0)} item</span><span className="font-mono">{formatMinor(totals.total)}</span></button>
 
-      <Dialog onOpenChange={setMobileCartOpen} open={mobileCartOpen}><DialogContent className="p-0 sm:p-0"><DialogHeader className="sr-only"><DialogTitle>Pesanan saat ini</DialogTitle><DialogDescription>Periksa item sebelum pembayaran.</DialogDescription></DialogHeader><CartPanel canSave={Boolean(menu.outlet.openOrdersEnabled && !selectedChannel)} cart={cart} changeQuantity={changeQuantity} currentOrder={currentOrder} onCheckout={() => setCheckoutOpen(true)} onRemove={(id) => setCart((current) => current.filter((line) => line.id !== id))} onSave={() => setSaveOrderOpen(true)} onSend={sendCurrentOrder} pending={orderPending} totals={totals} /></DialogContent></Dialog>
+      <Dialog onOpenChange={setMobileCartOpen} open={mobileCartOpen}><DialogContent className="p-0 sm:p-0"><DialogHeader className="sr-only"><DialogTitle>Pesanan saat ini</DialogTitle><DialogDescription>Periksa item sebelum pembayaran.</DialogDescription></DialogHeader><CartPanel canSave={Boolean(menu.outlet.openOrdersEnabled && !selectedChannel)} cart={cart} changeQuantity={changeQuantity} currentOrder={currentOrder} onCheckout={() => setCheckoutOpen(true)} onEditNote={setNoteTarget} onRemove={(id) => setCart((current) => current.filter((line) => line.id !== id))} onSave={() => setSaveOrderOpen(true)} onSend={sendCurrentOrder} pending={orderPending} totals={totals} /></DialogContent></Dialog>
       {configuring && <ProductConfigurator channelId={channelId} key={`${configuring.id}:${channelId ?? "direct"}`} onAdd={(line) => { addLine(line); setConfiguring(null); }} onOpenChange={(open) => !open && setConfiguring(null)} product={configuring} />}
+      {noteTarget && <ItemNoteDialog key={`${noteTarget.id}:${noteTarget.note}`} line={noteTarget} onOpenChange={(open) => !open && setNoteTarget(null)} onSave={updateLineNote} />}
       <OrderSaveDialog cart={cart} currentOrder={currentOrder} key={`save:${currentOrder?.id ?? "new"}:${currentOrder?.version ?? 0}:${saveOrderOpen}`} menu={menu} onOpenChange={setSaveOrderOpen} onSaved={(value, itemIds) => { setCurrentOrder(value); setCart((lines) => lines.map((line, index) => ({ ...line, id: itemIds[index] ?? line.id, orderItemId: itemIds[index] ?? line.orderItemId }))); }} open={saveOrderOpen} />
       {menu.outlet.openOrdersEnabled && <OpenOrdersDialog menu={menu} onCancelled={(orderId) => currentOrder?.id === orderId && resetRegister()} onResume={resumeOrder} open={openOrdersOpen} onOpenChange={setOpenOrdersOpen} orders={openOrders} />}
-      <CheckoutDialog cart={cart} channel={selectedChannel} currentOrder={currentOrder} key={`checkout:${currentOrder?.id ?? "direct"}:${currentOrder?.version ?? 0}:${checkoutOpen}`} menu={menu} onOpenChange={setCheckoutOpen} onSuccess={resetRegister} open={checkoutOpen} totals={totals} />
+      <CheckoutDialog cart={cart} channel={selectedChannel} currentOrder={currentOrder} key={`checkout:${checkoutOpen}`} menu={menu} onOpenChange={setCheckoutOpen} onSuccess={resetRegister} open={checkoutOpen} totals={totals} />
     </div>
   );
 }
 
 /** Displays the current outlet time without rerendering the surrounding register. */
 function RegisterClock({ timeZone }: { timeZone: string }) {
-  const [now, setNow] = useState(Date.now);
+  const [now, setNow] = useState<number | null>(null);
 
   useEffect(() => {
+    const frame = window.requestAnimationFrame(() => setNow(Date.now()));
     const interval = window.setInterval(() => setNow(Date.now()), 1_000);
-    return () => window.clearInterval(interval);
+    return () => {
+      window.cancelAnimationFrame(frame);
+      window.clearInterval(interval);
+    };
   }, []);
+
+  if (now === null) {
+    return <time aria-label="Memuat waktu outlet" className="flex min-h-16 items-center justify-between gap-4 rounded-xl border bg-background px-4" title={`Waktu outlet · ${timeZone}`}><span className="flex items-center gap-3"><Clock3 aria-hidden="true" className="size-5 text-primary" /><span className="font-mono text-xl font-semibold tabular-nums">--:--:--</span></span><span className="text-right text-xs text-muted-foreground">Waktu outlet</span></time>;
+  }
 
   const time = new Intl.DateTimeFormat("id-ID", {
     timeZone,
@@ -240,7 +257,7 @@ function RegisterClock({ timeZone }: { timeZone: string }) {
   const day = new Intl.DateTimeFormat("id-ID", { timeZone, weekday: "long" }).format(now);
   const date = new Intl.DateTimeFormat("id-ID", { timeZone, day: "numeric", month: "long", year: "numeric" }).format(now);
 
-  return <time aria-label={`${day}, ${date}, pukul ${time}`} className="flex min-h-16 items-center justify-between gap-4 rounded-xl border bg-background px-4" dateTime={new Date(now).toISOString()} suppressHydrationWarning title={`Waktu outlet · ${timeZone}`}><span className="flex items-center gap-3"><Clock3 aria-hidden="true" className="size-5 text-primary" /><span className="font-mono text-xl font-semibold tabular-nums">{time}</span></span><span className="min-w-0 text-right"><span className="block truncate text-sm font-semibold capitalize">{day}</span><span className="mt-0.5 block truncate text-xs text-muted-foreground">{date}</span></span></time>;
+  return <time aria-label={`${day}, ${date}, pukul ${time}`} className="flex min-h-16 items-center justify-between gap-4 rounded-xl border bg-background px-4" dateTime={new Date(now).toISOString()} title={`Waktu outlet · ${timeZone}`}><span className="flex items-center gap-3"><Clock3 aria-hidden="true" className="size-5 text-primary" /><span className="font-mono text-xl font-semibold tabular-nums">{time}</span></span><span className="min-w-0 text-right"><span className="block truncate text-sm font-semibold capitalize">{day}</span><span className="mt-0.5 block truncate text-xs text-muted-foreground">{date}</span></span></time>;
 }
 
 /** Collects variant and modifier choices for one cart line. */
@@ -301,12 +318,13 @@ function ProductConfigurator({ product, channelId, onAdd, onOpenChange }: {
 }
 
 /** Displays current cart lines and the authoritative checkout summary preview. */
-function CartPanel({ cart, totals, changeQuantity, onRemove, onCheckout, canSave, currentOrder, onSave, onSend, pending }: {
+function CartPanel({ cart, totals, changeQuantity, onRemove, onCheckout, onEditNote, canSave, currentOrder, onSave, onSend, pending }: {
   cart: CartLine[];
   totals: ReturnType<typeof calculateClientTotals>;
   changeQuantity: (id: string, delta: number) => void;
   onRemove: (id: string) => void;
   onCheckout: () => void;
+  onEditNote: (line: CartLine) => void;
   canSave: boolean;
   currentOrder: Pick<OpenOrder, "id" | "version" | "lastSentVersion"> | null;
   onSave: () => void;
@@ -314,9 +332,16 @@ function CartPanel({ cart, totals, changeQuantity, onRemove, onCheckout, canSave
   pending: boolean;
 }) {
   return <div className="flex min-h-0 flex-1 flex-col"><div className="border-b p-4"><div className="flex items-center justify-between"><h2 className="font-heading text-xl font-semibold">Rincian pesanan</h2><Badge variant="secondary">{cart.reduce((sum, line) => sum + line.quantity, 0)} item</Badge></div><p className="mt-1 text-sm text-muted-foreground">Periksa pilihan sebelum dibayar.</p></div>
-    <div className="grid min-h-0 flex-1 content-start gap-3 overflow-y-auto p-4">{cart.length === 0 ? <div className="grid min-h-56 place-items-center rounded-xl border border-dashed text-center xl:h-full"><div><span className="mx-auto grid size-14 place-items-center rounded-full bg-muted"><ShoppingBasket aria-hidden="true" className="size-6 text-muted-foreground" /></span><p className="mt-3 font-semibold">Belum ada pesanan</p><p className="mt-1 text-xs text-muted-foreground">Ketuk produk untuk menambahnya.</p></div></div> : cart.map((line) => <article className="rounded-xl border p-3" key={line.id}><div className="flex items-start justify-between gap-3"><div className="min-w-0"><h3 className="font-semibold">{line.productName}</h3>{line.selectionLabel && <p className="mt-1 text-xs leading-5 text-muted-foreground">{line.selectionLabel}</p>}{line.note && <p className="mt-1 text-xs italic text-muted-foreground">“{line.note}”</p>}</div><Button aria-label={`Hapus ${line.productName}`} onClick={() => onRemove(line.id)} size="icon-sm" type="button" variant="ghost"><Trash2 /></Button></div><div className="mt-3 flex items-center justify-between gap-3"><div className="flex items-center gap-1"><Button aria-label={`Kurangi ${line.productName}`} onClick={() => changeQuantity(line.id, -1)} size="icon-sm" type="button" variant="outline"><Minus /></Button><span className="w-7 text-center font-mono text-sm">{line.quantity}</span><Button aria-label={`Tambah ${line.productName}`} onClick={() => changeQuantity(line.id, 1)} size="icon-sm" type="button" variant="outline"><Plus /></Button></div><span className="font-mono font-semibold">{formatMinor(line.unitMinor * BigInt(line.quantity))}</span></div></article>)}</div>
+    <div className="grid min-h-0 flex-1 content-start gap-3 overflow-y-auto p-4">{cart.length === 0 ? <div className="grid min-h-56 place-items-center rounded-xl border border-dashed text-center xl:h-full"><div><span className="mx-auto grid size-14 place-items-center rounded-full bg-muted"><ShoppingBasket aria-hidden="true" className="size-6 text-muted-foreground" /></span><p className="mt-3 font-semibold">Belum ada pesanan</p><p className="mt-1 text-xs text-muted-foreground">Ketuk produk untuk menambahnya.</p></div></div> : cart.map((line) => <article className="rounded-xl border p-3" key={line.id}><div className="flex items-start justify-between gap-3"><div className="min-w-0"><h3 className="font-semibold">{line.productName}</h3>{line.selectionLabel && <p className="mt-1 text-xs leading-5 text-muted-foreground">{line.selectionLabel}</p>}{line.note && <p className="mt-1 text-xs italic text-muted-foreground">“{line.note}”</p>}</div><div className="flex shrink-0 gap-1"><Button aria-label={`Ubah catatan ${line.productName}`} onClick={() => onEditNote(line)} size="icon-sm" title="Ubah catatan" type="button" variant="ghost"><MessageSquareText /></Button><Button aria-label={`Hapus ${line.productName}`} onClick={() => onRemove(line.id)} size="icon-sm" type="button" variant="ghost"><Trash2 /></Button></div></div><div className="mt-3 flex items-center justify-between gap-3"><div className="flex items-center gap-1"><Button aria-label={`Kurangi ${line.productName}`} onClick={() => changeQuantity(line.id, -1)} size="icon-sm" type="button" variant="outline"><Minus /></Button><span className="w-7 text-center font-mono text-sm">{line.quantity}</span><Button aria-label={`Tambah ${line.productName}`} onClick={() => changeQuantity(line.id, 1)} size="icon-sm" type="button" variant="outline"><Plus /></Button></div><span className="font-mono font-semibold">{formatMinor(line.unitMinor * BigInt(line.quantity))}</span></div></article>)}</div>
     <div className="mt-auto border-t bg-muted/25 p-4"><dl className="grid gap-2 text-sm"><div className="flex justify-between"><dt className="text-muted-foreground">Subtotal</dt><dd className="font-mono">{formatMinor(totals.subtotal)}</dd></div><div className="flex justify-between"><dt className="text-muted-foreground">Layanan</dt><dd className="font-mono">{formatMinor(totals.service)}</dd></div><div className="flex justify-between"><dt className="text-muted-foreground">Pajak {totals.includedTax ? "(termasuk)" : ""}</dt><dd className="font-mono">{formatMinor(totals.tax)}</dd></div><div className="mt-1 flex justify-between border-t pt-3 text-base font-semibold"><dt>Total</dt><dd className="font-mono text-primary">{formatMinor(totals.total)}</dd></div></dl><div className="mt-4 grid grid-cols-2 gap-2">{canSave && <Button disabled={cart.length === 0 || pending} onClick={onSave} type="button" variant="outline"><Save aria-hidden="true" />{currentOrder ? "Simpan" : "Simpan order"}</Button>}{currentOrder && currentOrder.version !== currentOrder.lastSentVersion && <Button disabled={pending} onClick={onSend} type="button" variant="secondary">{pending ? <Spinner /> : <ChefHat aria-hidden="true" />}Kirim dapur</Button>}<Button className={cn(!canSave && !currentOrder && "col-span-2", currentOrder && currentOrder.version === currentOrder.lastSentVersion && "col-span-2")} disabled={cart.length === 0 || Boolean(currentOrder && currentOrder.version !== currentOrder.lastSentVersion)} onClick={onCheckout} type="button">Bayar sekarang</Button></div></div>
   </div>;
+}
+
+/** Edits or clears one item note without changing its quantity, options, or price. */
+function ItemNoteDialog({ line, onOpenChange, onSave }: { line: CartLine; onOpenChange: (open: boolean) => void; onSave: (id: string, note: string) => void }) {
+  const [note, setNote] = useState(line.note);
+
+  return <Dialog onOpenChange={onOpenChange} open><DialogContent className="sm:max-w-md"><DialogHeader><DialogTitle>Catatan {line.productName}</DialogTitle><DialogDescription>Catatan ikut dikirim ke dapur setelah perubahan order disimpan.</DialogDescription></DialogHeader><label className="grid gap-2" htmlFor="cart-item-note"><span className="font-semibold">Catatan item <span className="text-xs font-normal text-muted-foreground">Opsional</span></span><Textarea autoFocus id="cart-item-note" maxLength={240} onChange={(event) => setNote(event.target.value)} placeholder="Contoh: tanpa es" value={note} /><span className="text-right font-mono text-xs text-muted-foreground">{note.length}/240</span></label><DialogFooter className="gap-2 sm:justify-between"><Button disabled={!note.trim()} onClick={() => onSave(line.id, "")} type="button" variant="ghost">Hapus catatan</Button><Button onClick={() => onSave(line.id, note)} type="button"><MessageSquareText aria-hidden="true" />Simpan catatan</Button></DialogFooter></DialogContent></Dialog>;
 }
 
 /** Saves a new or resumed order without collecting payment. */
@@ -383,8 +408,8 @@ function CheckoutDialog({ cart, channel, currentOrder, menu, totals, open, onOpe
   currentOrder: Pick<OpenOrder, "id" | "version" | "lastSentVersion" | "orderType" | "tableLabel"> | null;
 }) {
   const [pending, startTransition] = useTransition();
-  const [orderType, setOrderType] = useState<"DINE_IN" | "TAKEAWAY">("DINE_IN");
-  const [tableLabel, setTableLabel] = useState("");
+  const [orderType, setOrderType] = useState<"DINE_IN" | "TAKEAWAY">(currentOrder?.orderType ?? "DINE_IN");
+  const [tableLabel, setTableLabel] = useState(currentOrder?.tableLabel ?? "");
   const [method, setMethod] = useState<PaymentMethod>("CASH");
   const [tendered, setTendered] = useState("");
   const [reference, setReference] = useState("");

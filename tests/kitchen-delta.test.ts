@@ -11,6 +11,7 @@ describe("kitchen delta", () => {
   it("creates additions and note updates", () => {
     expect(buildKitchenDelta([base])[0]).toMatchObject({ action: "ADD", quantity: 2 });
     expect(buildKitchenDelta([{ ...base, sentQuantity: 2, note: "Tanpa gula" }])[0]).toMatchObject({ action: "UPDATE", quantity: 2, note: "Tanpa gula" });
+    expect(buildKitchenDelta([{ ...base, sentQuantity: 2, sentNote: "Tanpa gula" }])[0]).toMatchObject({ action: "UPDATE", quantity: 2, note: null });
   });
 
   it("requires a reason for reductions", () => {

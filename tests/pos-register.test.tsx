@@ -3,11 +3,19 @@ import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { PosRegister } from "@/components/pos/pos-register";
+import type { OpenOrder } from "@/lib/orders/types";
 import type { PosMenu } from "@/lib/pos/types";
 
-const mocks = vi.hoisted(() => ({ checkoutSaleAction: vi.fn() }));
+const mocks = vi.hoisted(() => ({
+  cancelOpenOrderAction: vi.fn(),
+  checkoutSaleAction: vi.fn(),
+  refreshOpenOrderPricingAction: vi.fn(),
+  saveOpenOrderAction: vi.fn(),
+  sendOrderToKitchenAction: vi.fn(),
+  updateOpenOrderAction: vi.fn(),
+}));
 
-vi.mock("@/app/pos/actions", () => ({ checkoutSaleAction: mocks.checkoutSaleAction }));
+vi.mock("@/app/pos/actions", () => mocks);
 
 const menu: PosMenu = {
   outlet: { id: "outlet-1", code: "GLT", name: "Glutong Pusat", timezone: "Asia/Jakarta", taxRate: "10.00", serviceChargeRate: "5.00", pricesIncludeTax: false },
@@ -17,8 +25,23 @@ const menu: PosMenu = {
   truncated: false,
 };
 
+const openOrder: OpenOrder = {
+  id: "order-1",
+  version: 1,
+  lastSentVersion: 1,
+  orderType: "TAKEAWAY",
+  tableLabel: null,
+  total: "25000.00",
+  createdByName: "Kasir Satu",
+  updatedAt: new Date().toISOString(),
+  items: [{ id: "item-1", productId: "product-1", productName: "Kopi Susu", sku: "KOP-1", quantity: 1, note: "Sedikit gula", variantOptionIds: [], modifierOptionIds: [], selectionLabel: "", unitPrice: "25000.00" }],
+};
+
 describe("POS register layout", () => {
-  beforeEach(() => vi.clearAllMocks());
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mocks.updateOpenOrderAction.mockResolvedValue({ status: "success", message: "Perubahan pesanan disimpan.", orderId: "order-1", version: 2, itemIds: ["item-1"] });
+  });
 
   it("hides and restores the desktop category rail", async () => {
     const user = userEvent.setup();
@@ -56,6 +79,59 @@ describe("POS register layout", () => {
 
     expect(screen.getByLabelText("2 Kopi Susu dalam pesanan")).toBeInTheDocument();
     expect(screen.getAllByRole("article")).toHaveLength(1);
+  });
+
+  it("edits and clears a new cart item note", async () => {
+    const user = userEvent.setup();
+    render(<PosRegister menu={menu} />);
+
+    await user.click(screen.getByRole("button", { name: "Tambah Kopi Susu ke pesanan" }));
+    await user.click(screen.getByRole("button", { name: "Ubah catatan Kopi Susu" }));
+    await user.type(screen.getByLabelText(/Catatan item/), "Tanpa es");
+    await user.click(screen.getByRole("button", { name: "Simpan catatan" }));
+    expect(screen.getByText("“Tanpa es”")).toBeVisible();
+
+    await user.click(screen.getByRole("button", { name: "Ubah catatan Kopi Susu" }));
+    await user.click(screen.getByRole("button", { name: "Hapus catatan" }));
+    expect(screen.queryByText("“Tanpa es”")).not.toBeInTheDocument();
+  });
+
+  it("keeps a resumed item identity when saving an edited note", async () => {
+    const user = userEvent.setup();
+    render(<PosRegister menu={{ ...menu, outlet: { ...menu.outlet, openOrdersEnabled: true } }} openOrders={[openOrder]} />);
+
+    await user.click(screen.getByRole("button", { name: "Buka pesanan tersimpan" }));
+    await user.click(screen.getByRole("button", { name: "Lanjutkan" }));
+    await user.click(screen.getByRole("button", { name: "Ubah catatan Kopi Susu" }));
+    const note = screen.getByLabelText(/Catatan item/);
+    await user.clear(note);
+    await user.type(note, "Tanpa gula");
+    await user.click(screen.getByRole("button", { name: "Simpan catatan" }));
+    await user.click(screen.getByRole("button", { name: /^Simpan$/ }));
+    await user.click(screen.getByRole("button", { name: /^Simpan order$/ }));
+
+    expect(mocks.updateOpenOrderAction).toHaveBeenCalledWith(expect.objectContaining({
+      orderId: "order-1",
+      expectedVersion: 1,
+      items: [expect.objectContaining({ orderItemId: "item-1", note: "Tanpa gula" })],
+    }));
+    expect(await screen.findByRole("button", { name: "Kirim dapur" })).toBeVisible();
+  });
+
+  it("checks out a resumed dine-in order with its stored table", async () => {
+    const user = userEvent.setup();
+    mocks.checkoutSaleAction.mockResolvedValue({ status: "success", message: "Transaksi berhasil disimpan.", saleId: "sale-2", receiptNumber: "GLT-20260809-0002", total: "25000.00", changeAmount: null });
+    render(<PosRegister menu={{ ...menu, outlet: { ...menu.outlet, openOrdersEnabled: true } }} openOrders={[{ ...openOrder, orderType: "DINE_IN", tableLabel: "A-07" }]} />);
+
+    await user.click(screen.getByRole("button", { name: "Buka pesanan tersimpan" }));
+    await user.click(screen.getByRole("button", { name: "Lanjutkan" }));
+    await user.click(screen.getByRole("button", { name: "Bayar sekarang" }));
+    expect(screen.getByLabelText(/Nomor atau nama meja/)).toHaveValue("A-07");
+    await user.click(screen.getByRole("button", { name: "QRIS" }));
+    await user.click(screen.getByRole("button", { name: "Konfirmasi pembayaran" }));
+
+    expect(mocks.checkoutSaleAction).toHaveBeenCalledWith(expect.objectContaining({ orderId: "order-1", expectedVersion: 1, orderType: "DINE_IN", tableLabel: "A-07" }));
+    expect(await screen.findByText("Pembayaran berhasil")).toBeVisible();
   });
 
   it("renders the stored product image with a meaningful label", () => {

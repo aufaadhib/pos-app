@@ -2,7 +2,7 @@
 
 Dokumen ini adalah sumber utama rencana pengembangan Glutong POS. Perbarui status dan keputusan di sini sebelum memulai milestone baru. Fitur yang sudah selesai tetap didokumentasikan secara operasional di [`README.md`](../README.md), sedangkan aturan implementasi yang berlaku permanen tetap berada di [`AGENTS.md`](../AGENTS.md).
 
-Terakhir diperbarui: 8 Agustus 2026
+Terakhir diperbarui: 9 Agustus 2026
 
 ## Status
 
@@ -40,7 +40,7 @@ Hanya satu milestone utama yang sebaiknya berstatus `In Progress` agar perubahan
 | ---: | --- | --- | --- | --- |
 | 1 | Shift kasir dan tutup kas | Completed | Register POS | Uang fisik dapat dicocokkan dengan transaksi per kasir dan outlet |
 | 2 | Void dan refund | Completed | Shift kasir | Kesalahan transaksi dapat dikoreksi tanpa menghapus riwayat finansial |
-| 3 | Open order dan kitchen ticket | In Progress | Transaksi POS | Pesanan dapat diproses sebelum pembayaran dan diteruskan ke dapur |
+| 3 | Open order dan kitchen ticket | Completed | Transaksi POS | Pesanan dapat diproses sebelum pembayaran dan diteruskan ke dapur |
 | 4 | Stok, resep, waste, dan HPP | Planned | Void/refund dan open order | Persediaan serta biaya produk dapat dihitung dari kejadian operasional nyata |
 | 5 | Laporan operasional dan keuangan | Planned | Shift, refund, stok | Owner dapat membaca penjualan, kas, margin, dan performa outlet |
 | 6 | Diskon, promo, split payment, dan pelanggan | Planned | Refund dan laporan dasar | Metode pembayaran serta retensi pelanggan menjadi lebih fleksibel |
@@ -131,6 +131,14 @@ Mengelompokkan transaksi dan pergerakan uang berdasarkan shift aktif sehingga sa
 
 - Reservasi meja, pemesanan pelanggan mandiri, dan sinkronisasi antar-cabang.
 - Kitchen Display System penuh; milestone ini menyiapkan model order dan event dapurnya terlebih dahulu.
+
+### Kriteria selesai
+
+- Open order dine-in/takeaway dapat disimpan, dilanjutkan staf outlet lain, dibatalkan beralasan, dan dibayar pada shift berikutnya.
+- Meja aktif unik, optimistic concurrency, idempotency, audit, serta validasi harga/availability ditegakkan di server.
+- Catatan item dapat diedit atau dikosongkan; perubahan setelah pengiriman menghasilkan delta ticket dapur.
+- Kitchen ticket initial/delta dapat diproses berurutan dari Baru, Diproses, hingga Selesai.
+- Unit, component, production build, dan live E2E multi-session lulus pada viewport mobile, tablet, serta desktop tanpa overflow horizontal.
 
 ## Milestone 4 — Stok, resep, waste, dan HPP
 
@@ -245,6 +253,7 @@ Integrasi harus dikembangkan bertahap. Jangan menjanjikan API langsung sebelum a
 | 9 Agustus 2026 | Simpan order dikonfigurasi per outlet oleh owner/manager | Kasir tetap fokus pada operasi; perubahan konfigurasi tercatat dan dibatasi outlet aktif |
 | 9 Agustus 2026 | Kitchen ticket delivery dibuat otomatis | Semua sumber pesanan berbayar masuk antrean dapur yang sama tanpa jalur khusus platform |
 | 9 Agustus 2026 | Migration production dijalankan manual | Vercel build tidak boleh mengubah schema dan development wajib memakai branch Neon terpisah |
+| 9 Agustus 2026 | Open order dan kitchen ticket selesai serta tervalidasi live | E2E membuktikan save/send, delta catatan, pembatalan, meja unik, konflik dua sesi, status dapur, lintas shift, dan layout responsif |
 
 ## Cara memperbarui roadmap
 

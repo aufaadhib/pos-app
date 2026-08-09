@@ -228,9 +228,11 @@ Dokumen ini mencatat function dan component function yang ditambahkan pada miles
 | `getOpenOrders()`, `getKitchenTickets()`, `getOutletOperations()` | Outlet, user, role | DTO serializable | Membaca data operasional fresh, terbatas outlet serta jumlah record, tanpa persistent cache. |
 | Action order, kitchen, dan settings | Input unknown dari Client Component | Hasil success/error/conflict | Mengulang validasi Zod, session, permission, actor tepercaya, mutation, dan revalidation di server. |
 | `OrderSaveDialog()`, `OpenOrdersDialog()`, `CheckoutDialog()` | Cart/order/menu | Alur POS interaktif | Menyimpan, melanjutkan, mengirim, membatalkan, mengonfirmasi harga, dan membayar order tanpa memperbesar canvas POS. |
+| `updateLineNote()`, `ItemNoteDialog()` | Item cart dan catatan maksimal 240 karakter | Cart lokal terbarui | Menambah, mengubah, atau menghapus catatan tanpa mengubah identitas, opsi, jumlah, atau harga item; persistence tetap melalui simpan order. |
 | `KitchenBoard()` | Ticket fresh outlet aktif | Antrean tiga status | Menampilkan kartu initial/delta responsif dan pending state lokal tanpa overflow horizontal. |
 | `OutletOperationsForm()` | Outlet dan nilai awal | Form toggle | Memberi owner/manager kontrol operasional dengan feedback pending/sukses/error. |
 | `KitchenPage()`, `SettingsPage()` | Session dan outlet aktif | Halaman dynamic | Menjaga authorization server, data fresh, serta shell responsif mobile/tablet/desktop. |
+| `runOrderE2E()` | Flag persetujuan dan environment database | Exit process | Membuat fixture order unik, menjalankan journey live multi-session/lintas shift, lalu membersihkan seluruh row milik run di blok `finally`. |
 
 ## Interaksi pengguna
 

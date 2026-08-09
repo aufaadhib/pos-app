@@ -90,7 +90,7 @@ Migration `add_open_orders_and_kitchen_tickets` menambahkan order terpadu untuk 
 
 - Owner/manager dapat mengaktifkan “Simpan order” untuk outlet aktif melalui `/settings`; kasir hanya memakai fiturnya.
 - Open order dine-in/takeaway dapat dilanjutkan semua staf yang memiliki akses outlet dan tetap aktif setelah shift pembuat ditutup.
-- Perubahan wajib disimpan lalu dikirim manual ke dapur. Tambahan, perubahan catatan, dan pengurangan menjadi delta ticket; pengurangan/pembatalan wajib memiliki alasan.
+- Catatan item dapat ditambah, diubah, atau dikosongkan langsung dari rincian pesanan. Perubahan wajib disimpan lalu dikirim manual ke dapur; tambahan, perubahan catatan, dan pengurangan menjadi delta ticket, sedangkan pengurangan/pembatalan wajib memiliki alasan.
 - Open order hanya dapat dibayar setelah revisi terbaru dikirim. Sale dan pembayaran masuk ke shift aktif staf yang menyelesaikan.
 - Checkout langsung, termasuk delivery platform, otomatis membuat kitchen ticket dalam transaction yang sama.
 - Harga dan availability divalidasi ulang. Perubahan harga harus dikonfirmasi sebelum pembayaran dapat diulang.
@@ -208,6 +208,15 @@ npm run test:e2e:shift-live
 ```
 
 Runner shift memakai server Next.js dan folder build terisolasi, membuat fixture sementara pada database development/test, menyimpan screenshot ke `.artifacts/shifts`, lalu membersihkan seluruh data finansial dan akun fixture. Jangan jalankan flag ini pada database production.
+
+Untuk menguji save/send, delta catatan, pembatalan, konflik dua sesi, meja unik, status dapur, dan pembayaran lintas shift:
+
+```powershell
+$env:E2E_ALLOW_TEST_USERS="true"
+npm run test:e2e:order-live
+```
+
+Runner order membuat outlet, produk, owner, kasir, shift, order, ticket, dan transaksi dengan ID unik, lalu membersihkan hanya fixture run tersebut di blok `finally`. Flag persetujuan wajib diberikan setiap kali karena runner menulis data sementara ke database yang sedang dikonfigurasi.
 
 ## Script database dan auth
 
