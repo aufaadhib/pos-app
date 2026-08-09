@@ -1,7 +1,7 @@
 "use client";
 
-import { useEffect, useMemo, useState, useTransition } from "react";
-import { Check, CheckCircle2, ChefHat, Clock3, FolderOpen, LayoutGrid, MessageSquareText, Minus, PanelLeftClose, PanelLeftOpen, Plus, Printer, ReceiptText, Save, Search, ShoppingBasket, Trash2, X, XCircle } from "lucide-react";
+import { useEffect, useMemo, useRef, useState, useTransition } from "react";
+import { Check, ChefHat, Clock3, FolderOpen, LayoutGrid, MessageSquareText, Minus, PanelLeftClose, PanelLeftOpen, Plus, Printer, Save, Search, ShoppingBasket, Trash2, X, XCircle } from "lucide-react";
 import { toast } from "react-toastify";
 
 import { cancelOpenOrderAction, checkoutSaleAction, refreshOpenOrderPricingAction, saveOpenOrderAction, sendOrderToKitchenAction, updateOpenOrderAction } from "@/app/pos/actions";
@@ -20,6 +20,8 @@ import {
 import { Input } from "@/components/ui/input";
 import { Spinner } from "@/components/ui/spinner";
 import { Textarea } from "@/components/ui/textarea";
+import { ReceiptRenderer } from "@/components/receipt/receipt-renderer";
+import { getAutoPrintPreference } from "@/lib/printers/device-preference";
 import type { PosMenu, PosMenuOption, PosMenuProduct } from "@/lib/pos/types";
 import type { OpenOrder } from "@/lib/orders/types";
 import { ProductImage } from "@/components/product-image";
@@ -500,72 +502,25 @@ function CheckoutDialog({ cart, channel, currentOrder, menu, totals, open, onOpe
   </div><DialogFooter><Button disabled={pending} onClick={submitCheckout} type="button">{pending && <Spinner />}{pending ? "Menyimpan…" : "Konfirmasi pembayaran"}</Button></DialogFooter></>}</DialogContent></Dialog>;
 }
 
-const paymentLabels: Record<PaymentMethod, string> = {
-  CASH: "Tunai",
-  QRIS: "QRIS",
-  DEBIT_CARD: "Kartu debit",
-  CREDIT_CARD: "Kartu kredit",
-  BANK_TRANSFER: "Transfer bank",
-  DELIVERY_PLATFORM: "Dibayar melalui platform",
-};
-
-/** Shows the completed transaction in place and prints it on standard 80 mm thermal paper. */
+/** Shows the completed transaction, then optionally opens the device browser print dialog. */
 function ReceiptPreview({ menu, receipt, onClose }: { menu: PosMenu; receipt: ReceiptSnapshot; onClose: () => void }) {
-  const completedAt = new Intl.DateTimeFormat("id-ID", {
-    timeZone: menu.outlet.timezone,
-    dateStyle: "medium",
-    timeStyle: "short",
-  }).format(new Date(receipt.completedAt));
-  const itemCount = receipt.items.reduce((sum, item) => sum + item.quantity, 0);
+  const autoPrintAttempted = useRef(false);
 
-  /** Opens the browser print dialog using the receipt-only 80 mm print stylesheet. */
+  useEffect(() => {
+    if (autoPrintAttempted.current || !getAutoPrintPreference(menu.outlet.id)) return;
+    autoPrintAttempted.current = true;
+    window.print();
+  }, [menu.outlet.id]);
+
+  /** Opens the browser print dialog for the already-rendered receipt. */
   function printReceipt() {
     window.print();
   }
 
-  return <article aria-label={`Struk transaksi ${receipt.receiptNumber}`} className="thermal-receipt text-sm">
-    <header className="border-b border-dashed pb-4 text-center">
-      <CheckCircle2 aria-hidden="true" className="mx-auto size-9 text-success print:hidden" />
-      <p className="mt-2 font-heading text-lg font-semibold">{menu.outlet.name}</p>
-      <p className="font-mono text-xs text-muted-foreground">{menu.outlet.code}</p>
-      <p className="mt-3 text-xs font-semibold uppercase tracking-wider">Pembayaran berhasil</p>
-      <DialogTitle className="mt-1 font-mono text-base">{receipt.receiptNumber}</DialogTitle>
-      <DialogDescription className="mt-1 text-xs">{completedAt}</DialogDescription>
-    </header>
-
-    <section aria-label="Informasi pesanan" className="grid gap-1 border-b border-dashed py-3 text-xs">
-      <div className="flex justify-between gap-3"><span>Pesanan</span><span className="text-right font-semibold">{receipt.orderType === "DINE_IN" ? `Dine-in · Meja ${receipt.tableLabel}` : receipt.orderType === "DELIVERY" ? `Delivery · ${receipt.deliveryLabel}` : "Takeaway"}</span></div>
-      {receipt.externalOrderId && <div className="flex justify-between gap-3"><span>Nomor order</span><span className="break-all text-right font-mono font-semibold">{receipt.externalOrderId}</span></div>}
-      <div className="flex justify-between gap-3"><span>Pembayaran</span><span className="font-semibold">{paymentLabels[receipt.paymentMethod]}</span></div>
-      <div className="flex justify-between gap-3"><span>Jumlah</span><span>{itemCount} item</span></div>
-    </section>
-
-    <section aria-label="Rincian pesanan" className="grid gap-3 border-b border-dashed py-3">
-      {receipt.items.map((item) => <div key={item.id}>
-        <div className="flex items-start justify-between gap-3"><span className="font-semibold">{item.quantity}× {item.productName}</span><span className="shrink-0 font-mono">{formatMinor(item.unitMinor * BigInt(item.quantity))}</span></div>
-        <p className="font-mono text-[0.68rem] text-muted-foreground">{formatMinor(item.unitMinor)} / item</p>
-        {item.selectionLabel && <p className="text-xs text-muted-foreground">{item.selectionLabel}</p>}
-        {item.note && <p className="text-xs italic text-muted-foreground">Catatan: {item.note}</p>}
-      </div>)}
-    </section>
-
-    <section aria-label="Ringkasan pembayaran" className="py-3">
-      <dl className="grid gap-1.5 text-xs">
-        <div className="flex justify-between"><dt>Subtotal</dt><dd className="font-mono">{formatMinor(receipt.totals.subtotal)}</dd></div>
-        <div className="flex justify-between"><dt>Layanan</dt><dd className="font-mono">{formatMinor(receipt.totals.service)}</dd></div>
-        <div className="flex justify-between"><dt>Pajak {receipt.totals.includedTax ? "(termasuk)" : ""}</dt><dd className="font-mono">{formatMinor(receipt.totals.tax)}</dd></div>
-        <div className="mt-1 flex justify-between border-t pt-2 text-base font-semibold"><dt>Total</dt><dd className="font-mono">{formatMinor(receipt.totals.total)}</dd></div>
-        {receipt.tenderedMinor !== null && <div className="flex justify-between"><dt>Uang diterima</dt><dd className="font-mono">{formatMinor(receipt.tenderedMinor)}</dd></div>}
-        {receipt.changeMinor !== null && <div className="flex justify-between"><dt>Kembalian</dt><dd className="font-mono">{formatMinor(receipt.changeMinor)}</dd></div>}
-        {receipt.paymentReference && <div className="flex justify-between gap-3"><dt>Referensi</dt><dd className="break-all text-right font-mono">{receipt.paymentReference}</dd></div>}
-      </dl>
-    </section>
-
-    {receipt.expectedSettlementAt && <section className="mb-3 rounded-lg border border-dashed p-3 text-xs"><p className="font-semibold">Menunggu settlement platform</p><p className="mt-1 text-muted-foreground">Estimasi sebelum {new Intl.DateTimeFormat("id-ID", { timeZone: menu.outlet.timezone, dateStyle: "medium", timeStyle: "short" }).format(new Date(receipt.expectedSettlementAt))}</p></section>}
-
-    <footer className="border-t border-dashed pt-3 text-center text-xs text-muted-foreground"><ReceiptText aria-hidden="true" className="mx-auto mb-2 size-4 print:hidden" /><p>Terima kasih atas kunjungan Anda.</p></footer>
+  return <>
+    <ReceiptRenderer data={receipt} outlet={menu.outlet} />
     <div className="mt-5 grid grid-cols-2 gap-2 print:hidden"><Button onClick={onClose} type="button" variant="outline">Pesanan baru</Button><Button onClick={printReceipt} type="button"><Printer aria-hidden="true" />Cetak struk</Button></div>
-  </article>;
+  </>;
 }
 
 /** Parses a positive decimal money string into integer minor units without floating point. */

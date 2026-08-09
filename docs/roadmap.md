@@ -46,7 +46,7 @@ Hanya satu milestone utama yang sebaiknya berstatus `In Progress` agar perubahan
 | 4 | Stok, resep, waste, dan HPP | Deferred | Proses stok usaha perlu dibakukan | Ditunda agar aplikasi tidak memaksakan inventory restoran yang terlalu rinci untuk usaha sate |
 | 5 | Laporan operasional dan keuangan | Completed | Shift, refund, transaksi, settlement | Owner dan manager dapat membaca penjualan, kas, koreksi, serta performa outlet |
 | 6 | Diskon, promo, split payment, dan pelanggan | Planned | Refund dan laporan dasar | Metode pembayaran serta retensi pelanggan menjadi lebih fleksibel |
-| 7 | Printer struk dan Kitchen Display System | Planned | Open order | Alur kasir-dapur dapat berjalan pada perangkat operasional |
+| 7 | Printer struk dan Kitchen Display System | In Progress | Open order | Browser printing pelanggan selesai; perangkat dapur dan integrasi printer masih menunggu kebutuhan nyata |
 | 8 | Integrasi platform eksternal | Planned | Order, settlement, dan laporan stabil | Input manual dapat dikurangi melalui impor atau koneksi resmi |
 
 ## Milestone 1 — Shift kasir dan tutup kas
@@ -200,11 +200,18 @@ Status: `Deferred`. Operasional usaha sate saat ini belum membutuhkan pencatatan
 
 ## Milestone 7 — Perangkat operasional
 
-- Browser print sebagai fallback struk awal.
-- Layout struk 58 mm/80 mm yang dapat diuji tanpa printer khusus.
+- Browser print struk pelanggan tersedia dari checkout dan halaman `/settings/printers`.
+- Layout 58 mm (area isi 52 mm) dan 80 mm (area isi 72 mm), footer per outlet, preview, serta cetak contoh sudah tersedia.
+- Cetak otomatis bersifat opt-in per outlet dan browser melalui local storage; preview serta tombol manual selalu dipertahankan.
 - Adapter ESC/POS hanya setelah target printer, koneksi USB/LAN/Bluetooth, dan lingkungan deployment diketahui.
 - Kitchen Display System menggunakan event order/delta ticket dari milestone open order.
 - Mode offline tidak dimulai sebelum kebutuhan toleransi konflik dan pemulihan koneksi ditentukan.
+
+### Status 7A — selesai sebagian
+
+- Konfigurasi outlet, permission `settings.manage`, active-outlet scope, transaction, dan audit before/after sudah diterapkan.
+- Browser tetap menentukan printer fisik, jumlah salinan, dan orientasi.
+- Milestone tetap `In Progress` karena printer dapur, KDS perangkat penuh, ESC/POS, USB/LAN/Bluetooth, dan print bridge belum dikerjakan.
 
 ## Rencana integrasi eksternal
 
@@ -216,7 +223,7 @@ Integrasi harus dikembangkan bertahap. Jangan menjanjikan API langsung sebelum a
 | GrabFood | Impor CSV settlement/order jika format tersedia | API/webhook resmi | Planned | Akses merchant/partner dan dokumentasi resmi |
 | ShopeeFood | Impor CSV settlement/order jika format tersedia | API/webhook resmi | Planned | Akses merchant/partner dan dokumentasi resmi |
 | Payment gateway/QRIS | Pencatatan referensi manual | Create payment, callback, reconciliation | Planned | Provider dipilih dan webhook sandbox tersedia |
-| Printer struk | Browser print | ESC/POS lokal atau print bridge | Planned | Model printer dan topologi perangkat diketahui |
+| Printer struk | Browser print | ESC/POS lokal atau print bridge | In Progress | Browser print selesai; model printer dan topologi perangkat belum diketahui |
 | Akuntansi | Ekspor CSV terstruktur | API jurnal otomatis | Planned | Target software dan mapping chart of accounts |
 
 ### Aturan wajib integrasi
@@ -274,6 +281,7 @@ Integrasi harus dikembangkan bertahap. Jangan menjanjikan API langsung sebelum a
 | 9 Agustus 2026 | Refund dilaporkan pada tanggal pelaksanaan | Angka harian harus dapat direkonsiliasi dengan shift dan arus pembayaran yang benar-benar terjadi |
 | 9 Agustus 2026 | Laporan operasional selesai dan tervalidasi live | Enam view, CSV, snapshot kategori, permission owner/manager, query database, responsive UI, unit test, E2E, dan production build lulus |
 | 9 Agustus 2026 | Open order dan kitchen ticket selesai serta tervalidasi live | E2E membuktikan save/send, delta catatan, pembatalan, meja unik, konflik dua sesi, status dapur, lintas shift, dan layout responsif |
+| 9 Agustus 2026 | Browser printing dipilih sebagai fondasi printer struk | Aman diuji tanpa model printer tertentu; ESC/POS menunggu model serta koneksi perangkat, sedangkan KDS menunggu alur dapur nyata |
 
 ## Cara memperbarui roadmap
 

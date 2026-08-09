@@ -18,7 +18,7 @@ const mocks = vi.hoisted(() => ({
 vi.mock("@/app/pos/actions", () => mocks);
 
 const menu: PosMenu = {
-  outlet: { id: "outlet-1", code: "GLT", name: "Glutong Pusat", timezone: "Asia/Jakarta", taxRate: "10.00", serviceChargeRate: "5.00", pricesIncludeTax: false },
+  outlet: { id: "outlet-1", code: "GLT", name: "Glutong Pusat", timezone: "Asia/Jakarta", taxRate: "10.00", serviceChargeRate: "5.00", pricesIncludeTax: false, receiptPaperSize: "MM80", receiptFooter: "Terima kasih atas kunjungan Anda." },
   deliveryChannels: [],
   categories: [{ id: "category-1", name: "Kopi" }],
   products: [{ id: "product-1", categoryId: "category-1", categoryName: "Kopi", name: "Kopi Susu", sku: "KOP-1", description: null, imageUrl: null, imagePositionX: 50, imagePositionY: 50, effectiveBasePrice: "25000.00", channelBasePrices: [], variantGroups: [], modifierGroups: [] }],
@@ -40,6 +40,7 @@ const openOrder: OpenOrder = {
 describe("POS register layout", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    window.localStorage.clear();
     mocks.updateOpenOrderAction.mockResolvedValue({ status: "success", message: "Perubahan pesanan disimpan.", orderId: "order-1", version: 2, itemIds: ["item-1"] });
   });
 
@@ -181,6 +182,32 @@ describe("POS register layout", () => {
     expect(receipt).toHaveTextContent("Kopi Susu");
     expect(receipt).toHaveTextContent("Meja A-07");
     await user.click(screen.getByRole("button", { name: "Cetak struk" }));
+    expect(print).toHaveBeenCalledOnce();
+  });
+
+  it("auto-prints only after the paid receipt has rendered", async () => {
+    const user = userEvent.setup();
+    window.localStorage.setItem("glutong:printer:auto-print:outlet-1", "true");
+    const print = vi.spyOn(window, "print").mockImplementation(() => {
+      expect(screen.getByRole("article", { name: "Struk transaksi GLT-20260808-0003" })).toBeInTheDocument();
+    });
+    mocks.checkoutSaleAction.mockResolvedValue({
+      status: "success",
+      message: "Transaksi berhasil disimpan.",
+      saleId: "sale-3",
+      receiptNumber: "GLT-20260808-0003",
+      total: "28875.00",
+      changeAmount: null,
+    });
+    render(<PosRegister menu={menu} />);
+
+    await user.click(screen.getByRole("button", { name: "Tambah Kopi Susu ke pesanan" }));
+    await user.click(screen.getByRole("button", { name: "Bayar sekarang" }));
+    await user.type(screen.getByLabelText(/Nomor atau nama meja/), "A-08");
+    await user.click(screen.getByRole("button", { name: "QRIS" }));
+    await user.click(screen.getByRole("button", { name: "Konfirmasi pembayaran" }));
+
+    expect(await screen.findByRole("article", { name: "Struk transaksi GLT-20260808-0003" })).toBeVisible();
     expect(print).toHaveBeenCalledOnce();
   });
 

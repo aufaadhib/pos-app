@@ -130,7 +130,7 @@ Dokumen ini mencatat function dan component function yang ditambahkan pada miles
 | Function | Input | Output | Tujuan dan side effect |
 | --- | --- | --- | --- |
 | `calculateSaleTotals()` | Subtotal Decimal, tarif layanan/pajak, flag harga inklusif | Snapshot total Decimal | Menghitung layanan, pajak, dan total dengan pembulatan half-up ke Rupiah tanpa floating point. |
-| `getPosMenu()` | Outlet, user, role | `PosMenu` atau `null` | Membaca maksimal 300 produk aktif beserta harga override, varian, dan modifier yang tersedia pada outlet. |
+| `getPosMenu()` | Outlet, user, role | `PosMenu` atau `null` | Membaca maksimal 300 produk aktif beserta harga override, varian, modifier, dan konfigurasi struk terbaru pada outlet. |
 | `getSalesPage()` | Outlet, halaman, filter sumber/settlement/status | Halaman transaksi | Membaca 20 transaksi terbaru per halaman beserta status dan total refund tanpa cache persisten. |
 | `getSaleDetail()` | Sale ID dan outlet aktif | Detail struk atau `null` | Membatasi detail struk ke outlet aktif serta menyerialisasi snapshot, sisa item, dan ledger koreksi. |
 | `createSale()` | Checkout tervalidasi dan actor | Hasil checkout | Menjalankan validasi harga fresh, nomor struk, sale, item, pembayaran, dan audit dalam transaction serializable; checkout token membuat retry idempoten. |
@@ -144,7 +144,7 @@ Dokumen ini mencatat function dan component function yang ditambahkan pada miles
 | `ProductConfigurator()` | Produk dan callback cart | Dialog pilihan | Mengumpulkan satu pilihan per grup varian, modifier sesuai batas, jumlah, dan catatan item. |
 | `CartPanel()` | Cart, total preview, callback | Ticket rail | Menampilkan item, kontrol jumlah/hapus, pajak/layanan, dan CTA pembayaran pada desktop/mobile. |
 | `CheckoutDialog()` | Cart, menu, total, state dialog | Dialog pembayaran dan struk | Mengumpulkan jenis order, meja, metode, tunai/referensi, memanggil action, lalu mempertahankan dialog untuk menampilkan transaksi berhasil tanpa berpindah halaman. |
-| `ReceiptPreview()` | Menu outlet, snapshot checkout, callback tutup | Struk transaksi | Menampilkan rincian pembayaran setelah checkout dan membuka dialog cetak browser dengan format termal 80 mm. |
+| `ReceiptPreview()` | Menu outlet, snapshot checkout, callback tutup | Struk transaksi | Menampilkan preview setelah checkout, membaca preferensi auto-print perangkat setelah render, dan mempertahankan tombol cetak manual. |
 | `parseMoneyToMinor()`, `minorToMoney()`, `formatMinor()` | String atau integer minor unit | Bentuk uang lain | Menjaga kalkulasi preview sebagai integer minor unit dan memakai `Intl` hanya untuk tampilan. |
 | `calculateClientTotals()`, `parseRate()`, `roundDivide()`, `maxMinor()` | Minor unit dan tarif | Preview checkout | Menyamakan urutan serta pembulatan preview client dengan server tanpa menjadikannya sumber kebenaran. |
 | `formatRate()`, `productMonogram()` | Rate atau nama | Label UI | Membuat label persentase dan marker dua huruf tanpa asset gambar. |
@@ -153,6 +153,21 @@ Dokumen ini mencatat function dan component function yang ditambahkan pada miles
 | `PosLoading()`, `TransactionsLoading()` | Tidak ada | Skeleton konten | Menampilkan loading hanya pada bagian yang mengambil data sehingga navigasi tetap interaktif. |
 | `formatSaleDate()`, `paymentLabel()` | Timestamp/metode | Label transaksi | Menampilkan waktu dalam zona outlet dan nama metode dalam Bahasa Indonesia. |
 | `orderLabel()`, `transactionPageHref()` | Sale dan filter aktif | Label/URL | Menampilkan sumber order serta mempertahankan filter ketika halaman transaksi berubah. |
+
+## Printer struk browser
+
+| Function | Input | Output | Tujuan dan side effect |
+| --- | --- | --- | --- |
+| `printerSettingsSchema` | Outlet ID, `MM58`/`MM80`, footer | Input terpangkas atau error | Membatasi ukuran kertas dan menolak footer lebih dari 160 karakter setelah spasi tepi dihapus. |
+| `getPrinterSettings()` | Outlet, user, role | Konfigurasi atau `null` | Membaca konfigurasi fresh hanya untuk outlet aktif yang dimiliki atau ditugaskan. |
+| `updatePrinterSettings()` | Input tervalidasi dan actor | `PrinterSettingsActionState` | Memeriksa role/assignment lalu memperbarui outlet dan audit before/after dalam satu transaction. |
+| `updatePrinterSettingsAction()` | Payload Client Component | `PrinterSettingsActionState` | Memeriksa permission `settings.manage`, active-outlet scope, validasi, service, dan revalidation `/settings/printers` serta `/pos`. |
+| `getAutoPrintStorageKey()` | Outlet ID | Key local storage | Membentuk namespace `glutong:printer:auto-print:<outletId>`. |
+| `getAutoPrintPreference()`, `setAutoPrintPreference()`, `subscribeAutoPrintPreference()` | Outlet dan boolean/callback | Preferensi, status penyimpanan, atau cleanup | Membaca/menulis opt-in per browser, menyinkronkan external store dalam/lintas tab, dan memakai fallback manual saat storage gagal. |
+| `ReceiptRenderer()` | Outlet dan snapshot struk | Markup struk bersama | Merender markup identik untuk preview settings, checkout, 58 mm, dan 80 mm tanpa mutation. |
+| `formatReceiptMinor()` | Integer minor unit | Rupiah terformat | Memformat nominal tampilan struk tanpa dipakai sebagai sumber kalkulasi. |
+| `PrinterSettingsForm()` | Konfigurasi outlet | Form dan preview responsif | Mengelola ukuran/footer outlet, toggle perangkat, preview langsung, pending state, dan cetak contoh. |
+| `PrinterSettingsPage()`, `PrinterSettingsLoading()` | Session/outlet atau tanpa input | Halaman dynamic/skeleton | Melindungi route dengan permission dan menjaga bentuk form plus preview saat navigasi loading. |
 
 ## Void dan refund transaksi
 

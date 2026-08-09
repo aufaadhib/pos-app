@@ -41,6 +41,8 @@ export type PosMenu = {
     serviceChargeRate: string;
     pricesIncludeTax: boolean;
     openOrdersEnabled?: boolean;
+    receiptPaperSize: "MM58" | "MM80";
+    receiptFooter: string;
   };
   deliveryChannels: Array<{
     id: string;

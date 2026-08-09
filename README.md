@@ -96,6 +96,17 @@ Migration `add_open_orders_and_kitchen_tickets` menambahkan order terpadu untuk 
 - Harga dan availability divalidasi ulang. Perubahan harga harus dikonfirmasi sebelum pembayaran dapat diulang.
 - `/kitchen` memakai antrean fresh Baru → Diproses → Selesai. Printer dapur dan KDS perangkat penuh belum termasuk tahap ini.
 
+### Printer struk browser
+
+Migration `add_receipt_printer_settings` menambahkan ukuran kertas dan footer struk per outlet dengan default 80 mm dan “Terima kasih atas kunjungan Anda.” agar perilaku lama tetap konsisten.
+
+- Owner dan manager membuka `/settings/printers` dari kartu **Printer struk** di Pengaturan; kasir tidak memiliki permission halaman maupun mutation.
+- Ukuran 58 mm memakai area isi 52 mm, sedangkan 80 mm memakai area isi 72 mm. Preview pengaturan dan struk checkout memakai renderer yang sama.
+- Footer dapat dikosongkan untuk disembunyikan. Perubahannya dibatasi ke outlet aktif dan disimpan bersama audit before/after dalam satu transaction.
+- **Buka dialog cetak browser otomatis** nonaktif secara default dan disimpan per browser dengan key `glutong:printer:auto-print:<outletId>`. Status Aktif/Nonaktif hanya mengatur pembukaan dialog browser pada perangkat tersebut; jika local storage tidak tersedia, cetak kembali manual.
+- Checkout selalu mempertahankan preview serta tombol **Cetak struk**. Printer fisik, jumlah salinan, dan orientasi tetap dipilih lewat dialog browser.
+- Printer dapur, KDS perangkat penuh, ESC/POS, USB/LAN/Bluetooth, logo, dan jumlah salinan tersimpan belum termasuk tahap ini.
+
 ### Void dan refund
 
 Migration `add_sale_voids_and_refunds` menambahkan status transaksi serta ledger koreksi append-only tanpa mengubah snapshot struk asli.

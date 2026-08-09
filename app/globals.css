@@ -294,15 +294,26 @@
   }
 }
 
+.receipt-preview-sheet {
+  --foreground: #171717;
+  --muted-foreground: #5f6360;
+  --border: #d7d9d7;
+  --card: #ffffff;
+  --success: #257354;
+  --success-foreground: #ffffff;
+  color-scheme: light;
+}
+
 @media print {
   body * {
     visibility: hidden;
   }
 
-  body:has(.thermal-receipt) > *:not([data-base-ui-portal]:has(.thermal-receipt)) {
+  body:has(.thermal-receipt) > *:not(:has(.thermal-receipt)) {
     display: none !important;
   }
 
+  body:has(.thermal-receipt) > *:has(.thermal-receipt),
   body:has(.thermal-receipt) > [data-base-ui-portal]:has(.thermal-receipt),
   body:has(.thermal-receipt) [data-slot="dialog-content"]:has(.thermal-receipt) {
     visibility: visible;
@@ -315,7 +326,6 @@
   body:has(.thermal-receipt) [data-slot="dialog-content"]:has(.thermal-receipt) {
     position: static !important;
     display: block !important;
-    width: 72mm !important;
     max-height: none !important;
     overflow: visible !important;
     transform: none !important;
@@ -340,13 +350,31 @@
   }
 
   .thermal-receipt {
-    position: static;
-    width: 72mm;
+    position: absolute;
+    top: 0;
+    left: 0;
     max-width: none;
-    page: thermal-receipt;
     background: #ffffff;
     color: #000000;
     font-size: 11px;
+  }
+
+  .receipt-paper-mm58 {
+    width: 52mm;
+    page: receipt-mm58;
+  }
+
+  .receipt-paper-mm80 {
+    width: 72mm;
+    page: receipt-mm80;
+  }
+
+  body:has(.receipt-paper-mm58) [data-slot="dialog-content"]:has(.thermal-receipt) {
+    width: 52mm !important;
+  }
+
+  body:has(.receipt-paper-mm80) [data-slot="dialog-content"]:has(.thermal-receipt) {
+    width: 72mm !important;
   }
 
   .thermal-receipt * {
@@ -355,7 +383,12 @@
   }
 }
 
-@page thermal-receipt {
+@page receipt-mm58 {
+  size: 58mm auto;
+  margin: 3mm;
+}
+
+@page receipt-mm80 {
   size: 80mm auto;
   margin: 4mm;
 }

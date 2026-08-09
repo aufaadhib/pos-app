@@ -298,6 +298,11 @@ enum OutletStatus {
   ARCHIVED
 }
 
+enum ReceiptPaperSize {
+  MM58
+  MM80
+}
+
 enum AdminAuditEntityType {
   OUTLET
   STAFF
@@ -337,6 +342,8 @@ model Outlet {
   serviceChargeRate      Decimal                       @default(0) @db.Decimal(5, 2)
   pricesIncludeTax       Boolean                       @default(false)
   openOrdersEnabled      Boolean                       @default(false)
+  receiptPaperSize       ReceiptPaperSize              @default(MM80)
+  receiptFooter          String                        @default("Terima kasih atas kunjungan Anda.") @db.VarChar(160)
   status                 OutletStatus                  @default(ACTIVE)
   archivedAt             DateTime?
   createdAt              DateTime                      @default(now())
