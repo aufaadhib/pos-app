@@ -74,9 +74,9 @@ export function WrongOutletShiftCard({ shift }: { shift: CurrentCashShift }) {
 
 /** Provides compact shift status and financial controls above the active POS register. */
 export function PosShiftBar({ shift }: { shift: CurrentCashShift }) {
-  return <section aria-label="Shift kasir aktif" className="mb-3 flex shrink-0 flex-col gap-3 rounded-xl border bg-card p-3 shadow-sm sm:flex-row sm:items-center sm:justify-between sm:px-4">
-    <div className="min-w-0"><div className="flex flex-wrap items-center gap-2"><Badge>Shift aktif</Badge><span className="truncate font-semibold">{shift.outletName}</span></div><p className="mt-1 flex items-center gap-2 text-xs text-muted-foreground"><Clock3 aria-hidden="true" className="size-4" />Dibuka {formatDateTime(shift.openedAt, shift.outletTimezone)} · Saldo awal {formatRupiah(shift.openingCash)}</p></div>
-    <div className="grid grid-cols-3 gap-2 sm:flex">
+  return <section aria-label="Shift kasir aktif" className="pos-shift-bar mb-3 flex shrink-0 flex-col gap-3 rounded-xl border bg-card p-3 shadow-sm sm:flex-row sm:items-center sm:justify-between sm:px-4">
+    <div className="min-w-0"><div className="flex flex-wrap items-center gap-2"><Badge>Shift aktif</Badge><span className="truncate font-semibold">{shift.outletName}</span></div><p className="pos-shift-meta mt-1 flex items-center gap-2 text-xs text-muted-foreground"><Clock3 aria-hidden="true" className="size-4" />Dibuka {formatDateTime(shift.openedAt, shift.outletTimezone)} · Saldo awal {formatRupiah(shift.openingCash)}</p></div>
+    <div className="pos-shift-actions grid grid-cols-3 gap-2 sm:flex">
       <CashMovementDialog direction="IN" shift={shift} />
       <CashMovementDialog direction="OUT" shift={shift} />
       <CloseShiftDialog shift={shift} />

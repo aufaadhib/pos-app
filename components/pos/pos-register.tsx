@@ -90,6 +90,7 @@ export function PosRegister({ menu, openOrders = [] }: { menu: PosMenu; openOrde
     return quantities;
   }, [cart]);
   const selectedChannel = menu.deliveryChannels.find((channel) => channel.id === channelId) ?? null;
+  const cartItemCount = cart.reduce((sum, line) => sum + line.quantity, 0);
   const subtotal = cart.reduce((sum, line) => sum + line.unitMinor * BigInt(line.quantity), 0n);
   const totals = calculateClientTotals(subtotal, selectedChannel ? "0.00" : menu.outlet.serviceChargeRate, menu.outlet.taxRate, selectedChannel ? true : menu.outlet.pricesIncludeTax);
 
@@ -146,9 +147,9 @@ export function PosRegister({ menu, openOrders = [] }: { menu: PosMenu; openOrde
   }
 
   return (
-    <div className="flex min-h-0 flex-1 overflow-hidden rounded-2xl border bg-card shadow-sm xl:grid xl:grid-cols-[minmax(0,1fr)_22rem]">
+    <div className="pos-register flex min-h-0 flex-1 overflow-hidden rounded-2xl border bg-card shadow-sm xl:grid xl:grid-cols-[minmax(0,1fr)_22rem]">
       <section className="flex h-full min-h-0 min-w-0 flex-1 flex-col" aria-labelledby="menu-heading">
-        <header className="border-b bg-card p-3 sm:p-4">
+        <header className="pos-register-header border-b bg-card p-3 sm:p-4">
           <div className="flex items-center gap-3">
             <Button aria-controls="pos-category-rail" aria-expanded={categoryRailOpen} aria-label={categoryRailOpen ? "Sembunyikan kategori" : "Tampilkan kategori"} className="hidden xl:inline-flex" onClick={() => setCategoryRailOpen((value) => !value)} size="icon" type="button" variant="ghost">
               {categoryRailOpen ? <PanelLeftClose aria-hidden="true" /> : <PanelLeftOpen aria-hidden="true" />}
@@ -182,17 +183,17 @@ export function PosRegister({ menu, openOrders = [] }: { menu: PosMenu; openOrde
             <div className="mt-2 grid min-h-0 w-full min-w-0 flex-1 content-start gap-2 overflow-x-hidden overflow-y-auto">{menu.categories.map((category) => <button aria-current={categoryId === category.id ? "true" : undefined} className={cn("relative flex min-h-20 w-full min-w-0 max-w-full flex-col items-center justify-center gap-2 overflow-hidden rounded-xl border px-2 py-3 text-center text-xs font-semibold transition-colors focus-visible:ring-3 focus-visible:ring-ring/40 focus-visible:outline-none", categoryId === category.id ? "border-primary bg-primary/8 text-primary" : "border-transparent bg-muted/55 text-muted-foreground hover:bg-muted hover:text-foreground")} key={category.id} onClick={() => setCategoryId(category.id)} type="button"><span aria-hidden="true" className="grid size-8 shrink-0 place-items-center rounded-lg bg-background font-heading text-sm ring-1 ring-foreground/10">{getProductMonogram(category.name)}</span><span className="line-clamp-2 w-full min-w-0 break-words">{category.name}</span></button>)}</div>
           </aside>}
 
-          <div aria-label="Daftar menu" className="h-full min-h-0 min-w-0 flex-1 overflow-y-auto overscroll-contain bg-muted/20 p-3 pb-20 [scrollbar-gutter:stable] sm:p-4 sm:pb-20 xl:pb-4" role="region" tabIndex={0}>
+          <div aria-label="Daftar menu" className="pos-menu-scroll h-full min-h-0 min-w-0 flex-1 overflow-y-auto overscroll-contain bg-muted/20 p-3 pb-20 [scrollbar-gutter:stable] sm:p-4 sm:pb-20 xl:pb-4" role="region" tabIndex={0}>
             <div aria-label="Filter kategori" className="flex gap-2 overflow-x-auto pb-2 xl:hidden">
               <Button className="shrink-0" onClick={() => setCategoryId("all")} size="sm" variant={categoryId === "all" ? "default" : "outline"}>Semua</Button>
               {menu.categories.map((category) => <Button className="shrink-0" key={category.id} onClick={() => setCategoryId(category.id)} size="sm" variant={categoryId === category.id ? "default" : "outline"}>{category.name}</Button>)}
             </div>
-            <div className="mb-3 flex items-end justify-between gap-4"><div><h2 className="font-heading text-lg font-semibold">{selectedCategoryName}</h2><p className="text-xs text-muted-foreground">Ketuk produk untuk menambah pesanan.</p></div><span className="font-mono text-xs text-muted-foreground">{filteredProducts.length} produk</span></div>
+            <div className="mb-3 flex items-end justify-between gap-4"><div><h2 className="font-heading text-lg font-semibold">{selectedCategoryName}</h2><p className="pos-menu-helper text-xs text-muted-foreground">Ketuk produk untuk menambah pesanan.</p></div><span className="font-mono text-xs text-muted-foreground">{filteredProducts.length} produk</span></div>
             {menu.truncated && <p className="mb-3 rounded-lg border border-primary/30 bg-primary/5 p-3 text-sm">Menu dibatasi 300 produk. Gunakan pencarian katalog untuk menata produk aktif.</p>}
             {filteredProducts.length === 0 ? (
               <div className="grid min-h-64 place-items-center rounded-xl border border-dashed bg-card text-center"><div><Search aria-hidden="true" className="mx-auto size-6 text-muted-foreground" /><p className="mt-3 font-heading text-lg font-semibold">Menu tidak ditemukan</p><p className="mt-1 text-sm text-muted-foreground">Ubah pencarian atau kategori.</p></div></div>
             ) : (
-              <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4 2xl:grid-cols-5">
+              <div className="pos-product-grid grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4 2xl:grid-cols-5">
                 {filteredProducts.map((product) => { const orderedQuantity = orderedQuantityByProduct.get(product.id) ?? 0; const productPrice = getProductBasePrice(product, channelId); return (
                   <button aria-label={`Tambah ${product.name} ke pesanan`} className={cn("group overflow-hidden rounded-xl border bg-card text-left shadow-xs transition-[border-color,box-shadow] hover:border-primary hover:shadow-sm focus-visible:ring-3 focus-visible:ring-ring/40 focus-visible:outline-none", orderedQuantity > 0 && "border-success shadow-sm")} key={product.id} onClick={() => {
                     if (product.variantGroups.length || product.modifierGroups.length) setConfiguring(product);
@@ -219,7 +220,7 @@ export function PosRegister({ menu, openOrders = [] }: { menu: PosMenu; openOrde
         <CartPanel canSave={Boolean(menu.outlet.openOrdersEnabled && !selectedChannel)} cart={cart} changeQuantity={changeQuantity} currentOrder={currentOrder} onCheckout={() => setCheckoutOpen(true)} onEditNote={setNoteTarget} onRemove={(id) => setCart((current) => current.filter((line) => line.id !== id))} onSave={() => setSaveOrderOpen(true)} onSend={sendCurrentOrder} pending={orderPending} totals={totals} />
       </aside>
 
-      <button className="fixed right-4 bottom-[calc(5.4rem+env(safe-area-inset-bottom))] left-4 z-30 flex min-h-14 items-center justify-between rounded-xl bg-primary px-4 font-semibold text-primary-foreground shadow-lg focus-visible:ring-3 focus-visible:ring-ring/40 focus-visible:outline-none xl:hidden" onClick={() => setMobileCartOpen(true)} type="button"><span className="flex items-center gap-2"><ShoppingBasket aria-hidden="true" className="size-5" />Pesanan · {cart.reduce((sum, line) => sum + line.quantity, 0)} item</span><span className="font-mono">{formatMinor(totals.total)}</span></button>
+      <button aria-label={`Buka pesanan, ${cartItemCount} item, total ${formatMinor(totals.total)}`} className="pos-mobile-cart-trigger fixed right-4 bottom-[calc(5.4rem+env(safe-area-inset-bottom))] left-4 z-30 flex min-h-14 items-center justify-between rounded-xl bg-primary px-4 font-semibold text-primary-foreground shadow-lg focus-visible:ring-3 focus-visible:ring-ring/40 focus-visible:outline-none xl:hidden" onClick={() => setMobileCartOpen(true)} type="button"><span className="pos-mobile-cart-copy flex items-center gap-2"><ShoppingBasket aria-hidden="true" className="size-5" />Pesanan · {cartItemCount} item</span><ShoppingBasket aria-hidden="true" className="pos-mobile-cart-icon hidden size-5" /><span aria-hidden="true" className="pos-mobile-cart-count absolute -top-1 -right-1 hidden size-5 place-items-center rounded-full bg-card font-mono text-[0.65rem] text-card-foreground ring-1 ring-border">{Math.min(cartItemCount, 99)}</span><span className="pos-mobile-cart-total font-mono">{formatMinor(totals.total)}</span></button>
 
       <Dialog onOpenChange={setMobileCartOpen} open={mobileCartOpen}><DialogContent className="p-0 sm:p-0"><DialogHeader className="sr-only"><DialogTitle>Pesanan saat ini</DialogTitle><DialogDescription>Periksa item sebelum pembayaran.</DialogDescription></DialogHeader><CartPanel canSave={Boolean(menu.outlet.openOrdersEnabled && !selectedChannel)} cart={cart} changeQuantity={changeQuantity} currentOrder={currentOrder} onCheckout={() => setCheckoutOpen(true)} onEditNote={setNoteTarget} onRemove={(id) => setCart((current) => current.filter((line) => line.id !== id))} onSave={() => setSaveOrderOpen(true)} onSend={sendCurrentOrder} pending={orderPending} totals={totals} /></DialogContent></Dialog>
       {configuring && <ProductConfigurator channelId={channelId} key={`${configuring.id}:${channelId ?? "direct"}`} onAdd={(line) => { addLine(line); setConfiguring(null); }} onOpenChange={(open) => !open && setConfiguring(null)} product={configuring} />}

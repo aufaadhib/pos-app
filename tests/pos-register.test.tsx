@@ -59,6 +59,7 @@ describe("POS register layout", () => {
   it("keeps the product menu inside its own desktop scroll region", () => {
     render(<PosRegister menu={menu} />);
     expect(screen.getByRole("region", { name: "Daftar menu" })).toHaveClass("h-full", "min-h-0", "overflow-y-auto", "overscroll-contain");
+    expect(screen.getByRole("button", { name: /Buka pesanan, 0 item/ })).toHaveClass("pos-mobile-cart-trigger");
   });
 
   it("hides the open-order list when the outlet feature is disabled", () => {

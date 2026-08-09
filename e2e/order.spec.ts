@@ -82,10 +82,14 @@ test("open orders produce kitchen deltas, reject conflicts, and continue across 
   await signIn(page, ownerEmail!, ownerPassword!);
   await openShift(page);
 
-  for (const viewport of [{ width: 1280, height: 720 }, { width: 820, height: 1180 }, { width: 390, height: 844 }]) {
+  for (const viewport of [{ width: 1280, height: 720 }, { width: 820, height: 1180 }, { width: 390, height: 844 }, { width: 844, height: 390 }]) {
     await page.setViewportSize(viewport);
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
     expect(await page.evaluate(() => document.documentElement.scrollHeight <= window.innerHeight + 1)).toBe(true);
+    if (viewport.height < 500) {
+      expect((await page.locator(".pos-mobile-cart-trigger").boundingBox())?.width).toBeLessThanOrEqual(56);
+      expect(await page.getByRole("region", { name: "Daftar menu" }).evaluate((element) => element.clientHeight)).toBeGreaterThan(100);
+    }
   }
   await page.setViewportSize({ width: 1280, height: 720 });
 

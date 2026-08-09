@@ -125,6 +125,84 @@
   padding-bottom: calc(6.5rem + env(safe-area-inset-bottom));
 }
 
+@media (orientation: landscape) and (max-height: 31rem) and (max-width: 63.999rem) {
+  .workspace-shell:has(.pos-main) > header {
+    display: none;
+  }
+
+  .pos-main {
+    height: 100svh;
+    padding-top: 0.5rem;
+    padding-bottom: calc(4.25rem + env(safe-area-inset-bottom));
+  }
+
+  .pos-shift-bar {
+    margin-bottom: 0.5rem;
+    flex-direction: row;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.5rem 0.75rem;
+  }
+
+  .pos-shift-meta {
+    display: none;
+  }
+
+  .pos-shift-actions {
+    display: flex;
+  }
+
+  .pos-shift-actions button {
+    min-height: 2.5rem;
+  }
+
+  .pos-register,
+  .pos-mobile-cart-trigger {
+    border-radius: 0.75rem;
+  }
+
+  .pos-register-header,
+  .pos-menu-scroll {
+    padding: 0.5rem;
+  }
+
+  .pos-menu-scroll {
+    padding-bottom: 0.5rem;
+  }
+
+  .pos-menu-helper {
+    display: none;
+  }
+
+  .pos-product-grid {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 0.5rem;
+  }
+
+  .pos-mobile-cart-trigger {
+    right: max(0.75rem, env(safe-area-inset-right));
+    bottom: calc(4.25rem + env(safe-area-inset-bottom));
+    left: auto;
+    min-height: 3rem;
+    width: 3rem;
+    justify-content: center;
+    padding: 0;
+  }
+
+  .pos-mobile-cart-copy,
+  .pos-mobile-cart-total {
+    display: none;
+  }
+
+  .pos-mobile-cart-count {
+    display: grid;
+  }
+
+  .pos-mobile-cart-icon {
+    display: block;
+  }
+}
+
 @media (min-width: 64rem) {
   .workspace-shell {
     padding-left: 15rem;
