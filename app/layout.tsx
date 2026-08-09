@@ -39,6 +39,11 @@ export const metadata: Metadata = {
   },
   description: "Workspace pelayanan kafe dan restoran Glutong POS.",
   applicationName: "Glutong POS",
+  appleWebApp: {
+    capable: true,
+    statusBarStyle: "default",
+    title: "Glutong POS",
+  },
 };
 
 export const viewport: Viewport = {

@@ -39,7 +39,7 @@ export async function WorkspaceHeader({
         </Link>
         <div className="flex items-center gap-1">
           <Link aria-label={activeOutletId ? "Ganti outlet aktif" : "Pilih outlet aktif"} className="grid size-11 place-items-center rounded-lg text-muted-foreground hover:bg-muted hover:text-foreground focus-visible:ring-3 focus-visible:ring-ring/40 focus-visible:outline-none" href="/select-outlet"><MapPin aria-hidden="true" className="size-5" /></Link>
-          <FullscreenToggle className="hidden sm:inline-flex" compact />
+          <FullscreenToggle compact />
           <ThemeToggle className="[&_[data-slot=button]]:size-9" />
           <SignOutButton hasOpenShift={hasOpenShift} />
         </div>
