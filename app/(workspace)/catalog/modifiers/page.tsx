@@ -12,7 +12,7 @@ import { buttonVariants } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { requirePermission } from "@/lib/auth/session";
 import { getModifierGroups } from "@/lib/catalog/advanced-queries";
-import { formatRupiah } from "@/lib/catalog/normalization";
+import { formatRupiah } from "@/lib/currency";
 import { cn } from "@/lib/utils";
 
 export const dynamic = "force-dynamic";

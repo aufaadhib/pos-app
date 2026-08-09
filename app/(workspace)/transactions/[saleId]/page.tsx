@@ -8,7 +8,7 @@ import { Badge } from "@/components/ui/badge";
 import { buttonVariants } from "@/components/ui/button";
 import { isAppRole, roleHasPermission } from "@/lib/auth/permissions";
 import { requirePermission } from "@/lib/auth/session";
-import { formatRupiah } from "@/lib/catalog/normalization";
+import { formatRupiah } from "@/lib/currency";
 import { deliveryProviderLabels } from "@/lib/delivery/types";
 import { requireActiveOutlet } from "@/lib/outlets/context";
 import { getSaleDetail } from "@/lib/pos/queries";

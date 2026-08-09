@@ -60,6 +60,7 @@ export async function getReportDataset<View extends ReportView>(view: View, filt
     case "shifts": dataset = { view: "shifts", data: await getShiftReport(filter, limit) }; break;
     case "corrections": dataset = { view: "corrections", data: await getCorrectionReport(filter, limit) }; break;
     case "settlements": dataset = { view: "settlements", data: await getSettlementReport(filter, limit) }; break;
+    default: throw new Error("Tampilan laporan tidak didukung.");
   }
   return dataset as Extract<ReportDataset, { view: View }>;
 }

@@ -20,6 +20,7 @@ import { Input } from "@/components/ui/input";
 import { SearchableSelect } from "@/components/ui/searchable-select";
 import { Spinner } from "@/components/ui/spinner";
 import type { DeliveryProvider } from "@/generated/prisma/client";
+import { formatRupiah } from "@/lib/currency";
 import { deliveryProviderLabels, initialDeliveryActionState, type DeliveryActionState, type DeliveryChannelDto, type DeliveryManagementDto, type PendingSettlementDto } from "@/lib/delivery/types";
 
 const deliveryProviderLogos: Record<DeliveryProvider, { src: string; background: string }> = {
@@ -142,7 +143,6 @@ function NumberField({ label, name, ...props }: React.ComponentProps<typeof Inpu
 function MoneyField({ label, value, onChange, allowNegative = false }: { label: string; value: string; onChange: (value: string) => void; allowNegative?: boolean }) { return <label className="grid gap-2 text-sm font-medium">{label}<CurrencyInput allowNegative={allowNegative} onValueChange={onChange} value={value} /></label>; }
 function ReadOnlyMoney({ label, value }: { label: string; value: number }) { return <div className="grid gap-2 text-sm font-medium"><span>{label}</span><div className="flex h-12 items-center rounded-lg border bg-muted/40 px-3 font-mono">{formatRupiah(String(value))}</div></div>; }
 function moneyValue(value: string, signed = false) { const amount = Number(value || 0); return `${signed && amount < 0 ? "-" : ""}${Math.abs(Math.trunc(amount))}.00`; }
-function formatRupiah(value: string) { return new Intl.NumberFormat("id-ID", { style: "currency", currency: "IDR", maximumFractionDigits: 0 }).format(Number(value)); }
 function formatDate(value: string, timezone: string) { return new Intl.DateTimeFormat("id-ID", { timeZone: timezone, dateStyle: "medium", timeStyle: "short" }).format(new Date(value)); }
 function toLocalDateTime(value: Date) { return new Date(value.getTime() - value.getTimezoneOffset() * 60_000).toISOString().slice(0, 16); }
 function toIsoDateTime(value: string) { const parsed = new Date(value); return Number.isNaN(parsed.getTime()) ? "" : parsed.toISOString(); }

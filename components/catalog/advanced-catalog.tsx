@@ -1,6 +1,7 @@
 "use client";
 
 import { useRouter } from "next/navigation";
+import { useOptimistic, useTransition } from "react";
 import { Archive, Pencil, Plus, RotateCcw, Settings2 } from "lucide-react";
 
 import {
@@ -44,7 +45,7 @@ import { SearchableSelect } from "@/components/ui/searchable-select";
 import { Spinner } from "@/components/ui/spinner";
 import { Textarea } from "@/components/ui/textarea";
 import { useAutoCloseDialogAction } from "@/components/ui/use-auto-close-dialog-action";
-import { formatRupiah } from "@/lib/catalog/normalization";
+import { formatRupiah } from "@/lib/currency";
 import type {
   CatalogActionState,
   ModifierGroupItem,
@@ -61,20 +62,28 @@ import type { OutletItem } from "@/lib/outlets/types";
 /** Navigates between the owner master catalog and accessible outlet catalogs. */
 export function CatalogScopeSelect({ outlets, showMaster = true, value }: { outlets: OutletItem[]; showMaster?: boolean; value: string }) {
   const router = useRouter();
+  const [selectedValue, setSelectedValue] = useOptimistic(value);
+  const [pending, startTransition] = useTransition();
+
   return (
-    <div className="w-full sm:w-72">
+    <div aria-busy={pending} className="relative w-full sm:w-72">
       <SearchableSelect
         aria-label="Cakupan katalog"
+        disabled={pending}
         onValueChange={(nextValue) => {
-          router.push(nextValue === "master" ? "/catalog?scope=master" : `/catalog?scope=outlet&outletId=${encodeURIComponent(nextValue)}`);
+          startTransition(() => {
+            setSelectedValue(nextValue);
+            return router.push(nextValue === "master" ? "/catalog?scope=master" : `/catalog?scope=outlet&outletId=${encodeURIComponent(nextValue)}`);
+          });
         }}
         options={[
           ...(showMaster ? [{ label: "Katalog master", value: "master" }] : []),
           ...outlets.map((outlet) => ({ label: `${outlet.name} · ${outlet.code}`, value: outlet.id })),
         ]}
         placeholder="Cari cakupan katalog"
-        value={value}
+        value={selectedValue}
       />
+      {pending && <Spinner className="pointer-events-none absolute top-1/2 right-12 -translate-y-1/2 text-primary" />}
     </div>
   );
 }

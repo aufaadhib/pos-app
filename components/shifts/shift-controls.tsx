@@ -29,6 +29,7 @@ import { SearchableSelect } from "@/components/ui/searchable-select";
 import { Spinner } from "@/components/ui/spinner";
 import { Textarea } from "@/components/ui/textarea";
 import { useAutoCloseDialogAction } from "@/components/ui/use-auto-close-dialog-action";
+import { formatRupiah } from "@/lib/currency";
 import type { CashShiftListItem, CurrentCashShift, ShiftActionState } from "@/lib/shifts/types";
 import { initialShiftActionState } from "@/lib/shifts/types";
 
@@ -160,7 +161,6 @@ function ActionFeedback({ state }: { state: ShiftActionState }) {
 function toFieldErrors(errors?: string[]) { return errors?.map((message) => ({ message })); }
 
 /** Formats a decimal string as concise Indonesian Rupiah. */
-function formatRupiah(value: string) { return new Intl.NumberFormat("id-ID", { style: "currency", currency: "IDR", maximumFractionDigits: 0 }).format(Number(value)); }
 
 /** Formats an ISO timestamp in the outlet's configured timezone. */
 function formatDateTime(value: string, timezone: string) { return new Intl.DateTimeFormat("id-ID", { timeZone: timezone, dateStyle: "medium", timeStyle: "short" }).format(new Date(value)); }

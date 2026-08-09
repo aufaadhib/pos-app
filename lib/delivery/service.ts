@@ -11,6 +11,7 @@ import {
   SettlementBatchStatus,
 } from "@/generated/prisma/client";
 import type { AppRole } from "@/lib/auth/permissions";
+import { formatRupiah } from "@/lib/currency";
 import { calculateSettlementNet } from "@/lib/delivery/pricing";
 import type {
   ChannelProductPriceInput,
@@ -160,7 +161,7 @@ export async function createSettlementBatch(input: SettlementBatchInput, actor: 
       const netReceived = new Prisma.Decimal(input.netReceivedAmount);
       const calculatedNet = calculateSettlementNet({ gross, platformFee, merchantPromotion, otherAdjustment });
       if (!calculatedNet.equals(netReceived)) {
-        throw new DeliveryError("INVALID", `Nominal tidak seimbang. Net yang benar adalah ${calculatedNet.toFixed(2)}.`);
+        throw new DeliveryError("INVALID", `Nominal tidak seimbang. Net yang benar adalah ${formatRupiah(calculatedNet.toFixed(2))}.`);
       }
       const settlement = await transaction.platformSettlement.create({ data: {
         channelId: channel.id,

@@ -16,7 +16,7 @@ const mocks = vi.hoisted(() => ({
 vi.mock("server-only", () => ({}));
 vi.mock("@/lib/prisma", () => ({ prisma: { $transaction: mocks.transaction } }));
 
-import { createSettlementBatch, DeliveryError } from "@/lib/delivery/service";
+import { createSettlementBatch } from "@/lib/delivery/service";
 
 const input = {
   outletId: "outlet-1",
@@ -66,7 +66,9 @@ describe("delivery settlement service", () => {
   });
 
   it("rejects a batch whose bank net does not match its deductions", async () => {
-    await expect(createSettlementBatch({ ...input, netReceivedAmount: "190000.00" }, { id: "manager-1", name: "Manajer", email: "manager@example.com", role: "manager" })).rejects.toBeInstanceOf(DeliveryError);
+    await expect(createSettlementBatch({ ...input, netReceivedAmount: "190000.00" }, { id: "manager-1", name: "Manajer", email: "manager@example.com", role: "manager" })).rejects.toMatchObject({
+      message: expect.stringMatching(/^Nominal tidak seimbang\. Net yang benar adalah Rp\s188\.000\.$/),
+    });
     expect(mocks.settlementCreate).not.toHaveBeenCalled();
   });
 

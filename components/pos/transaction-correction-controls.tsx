@@ -20,6 +20,7 @@ import { Input } from "@/components/ui/input";
 import { Spinner } from "@/components/ui/spinner";
 import { Textarea } from "@/components/ui/textarea";
 import { useAutoCloseDialogAction } from "@/components/ui/use-auto-close-dialog-action";
+import { formatRupiah } from "@/lib/currency";
 import { initialTransactionActionState, type SaleDetail, type TransactionActionState } from "@/lib/pos/types";
 
 type TransactionCorrectionControlsProps = {
@@ -116,4 +117,3 @@ function ActionFeedback({ state }: { state: TransactionActionState }) {
 function toFieldErrors(errors?: string[]) { return errors?.map((message) => ({ message })); }
 
 /** Formats one decimal string as Indonesian Rupiah for the refund preview. */
-function formatRupiah(value: string) { return new Intl.NumberFormat("id-ID", { style: "currency", currency: "IDR", maximumFractionDigits: 0 }).format(Number(value)); }

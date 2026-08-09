@@ -1,12 +1,12 @@
 import { describe, expect, it } from "vitest";
 
 import {
-  formatRupiah,
   normalizeCatalogLabel,
   normalizeCatalogName,
   normalizeSku,
   parseRupiahToMinorUnit,
 } from "@/lib/catalog/normalization";
+import { formatRupiah } from "@/lib/currency";
 
 describe("catalog normalization", () => {
   it("normalizes spacing and case for unique names", () => {

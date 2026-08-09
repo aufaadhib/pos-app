@@ -43,7 +43,7 @@ export default async function OutletsPage({ searchParams }: { searchParams: Prom
                 <div className="min-w-0"><div className="flex flex-wrap items-center gap-2"><h2 className="truncate font-heading text-lg font-semibold">{outlet.name}</h2><Badge variant={outlet.status === "ACTIVE" ? "secondary" : "outline"}>{outlet.status === "ACTIVE" ? "Aktif" : "Arsip"}</Badge></div><p className="mt-1 font-mono text-xs text-muted-foreground">{outlet.code} · {outlet.timezone}</p></div>
                 {canManage && <div className="flex"><OutletFormDialog outlet={outlet} /><OutletStatusAction outlet={outlet} /></div>}
               </CardHeader>
-              <CardContent><p className="flex items-start gap-2 text-sm leading-6 text-muted-foreground"><MapPin aria-hidden="true" className="mt-1 size-4 shrink-0" />{formatOutletAddress(outlet)}</p><div className="mt-4 flex items-center justify-between border-t pt-4"><span className="text-sm text-muted-foreground">Staf ditugaskan</span><span className="font-mono font-bold">{outlet.staffCount}</span></div></CardContent>
+              <CardContent className="flex flex-1 flex-col gap-4"><p className="flex items-start gap-2 text-sm leading-6 text-muted-foreground"><MapPin aria-hidden="true" className="mt-1 size-4 shrink-0" />{formatOutletAddress(outlet)}</p><div className="mt-auto flex items-center justify-between border-t pt-4"><span className="text-sm text-muted-foreground">Staf ditugaskan</span><span className="font-mono font-bold">{outlet.staffCount}</span></div></CardContent>
             </Card>)}
           </section>
         )}

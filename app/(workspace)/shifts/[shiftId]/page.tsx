@@ -11,6 +11,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Separator } from "@/components/ui/separator";
 import { isAppRole, roleHasPermission } from "@/lib/auth/permissions";
 import { requirePermission } from "@/lib/auth/session";
+import { formatRupiah } from "@/lib/currency";
 import { requireActiveOutlet } from "@/lib/outlets/context";
 import { getCashShiftDetail } from "@/lib/shifts/queries";
 import type { ShiftActor } from "@/lib/shifts/types";
@@ -72,7 +73,6 @@ function categoryLabel(category: string) { return ({ ADDITIONAL_FLOAT: "Tambahan
 function auditLabel(action: string) { return ({ OPEN: "Shift dibuka", CASH_IN: "Kas masuk dicatat", CASH_OUT: "Kas keluar dicatat", CLOSE: "Shift ditutup", FORCE_CLOSE: "Shift ditutup oleh pengelola" } as Record<string, string>)[action] ?? action; }
 
 /** Formats one decimal string as Indonesian Rupiah. */
-function formatRupiah(value: string) { return new Intl.NumberFormat("id-ID", { style: "currency", currency: "IDR", maximumFractionDigits: 0 }).format(Number(value)); }
 
 /** Formats one ISO timestamp in the shift outlet timezone. */
 function formatDateTime(value: string, timezone: string) { return new Intl.DateTimeFormat("id-ID", { timeZone: timezone, dateStyle: "medium", timeStyle: "short" }).format(new Date(value)); }

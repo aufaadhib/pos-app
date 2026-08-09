@@ -301,6 +301,7 @@
   --card: #ffffff;
   --success: #257354;
   --success-foreground: #ffffff;
+  color: var(--foreground);
   color-scheme: light;
 }
 

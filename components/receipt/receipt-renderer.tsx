@@ -1,5 +1,6 @@
 import { CheckCircle2, ReceiptText } from "lucide-react";
 
+import { formatRupiahFromMinor } from "@/lib/currency";
 import { cn } from "@/lib/utils";
 import type { ReceiptPaperSizeValue } from "@/lib/printers/types";
 
@@ -114,7 +115,7 @@ export function ReceiptRenderer({
 
 /** Formats integer minor units as Indonesian Rupiah for receipt display. */
 export function formatReceiptMinor(value: bigint): string {
-  return new Intl.NumberFormat("id-ID", { style: "currency", currency: "IDR", maximumFractionDigits: value % 100n === 0n ? 0 : 2 }).format(Number(value) / 100);
+  return formatRupiahFromMinor(value);
 }
 
 /** Formats one UTC receipt timestamp in the outlet timezone. */

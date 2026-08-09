@@ -10,6 +10,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { SearchableSelect } from "@/components/ui/searchable-select";
 import { isAppRole } from "@/lib/auth/permissions";
 import { requirePermission } from "@/lib/auth/session";
+import { formatRupiah } from "@/lib/currency";
 import { requireActiveOutlet } from "@/lib/outlets/context";
 import { getCashShiftPage } from "@/lib/shifts/queries";
 import type { CashShiftListItem, ShiftActor } from "@/lib/shifts/types";
@@ -56,7 +57,6 @@ function ShiftHistoryCard({ shift, timezone }: { shift: CashShiftListItem; timez
 function shiftHref(page: number, status: string) { return `/shifts?page=${Math.max(1, page)}&status=${status}`; }
 
 /** Formats a decimal string as Indonesian Rupiah. */
-function formatRupiah(value: string) { return new Intl.NumberFormat("id-ID", { style: "currency", currency: "IDR", maximumFractionDigits: 0 }).format(Number(value)); }
 
 /** Formats one ISO timestamp using the active outlet timezone. */
 function formatDateTime(value: string, timezone: string) { return new Intl.DateTimeFormat("id-ID", { timeZone: timezone, dateStyle: "medium", timeStyle: "short" }).format(new Date(value)); }

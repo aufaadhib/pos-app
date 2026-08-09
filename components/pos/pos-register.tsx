@@ -26,6 +26,7 @@ import type { PosMenu, PosMenuOption, PosMenuProduct } from "@/lib/pos/types";
 import type { OpenOrder } from "@/lib/orders/types";
 import { ProductImage } from "@/components/product-image";
 import { getProductMonogram } from "@/lib/catalog/normalization";
+import { formatRupiahFromMinor } from "@/lib/currency";
 import { cn } from "@/lib/utils";
 
 type CartLine = {
@@ -540,7 +541,7 @@ function minorToMoney(value: bigint): string {
 
 /** Formats integer minor units as Indonesian Rupiah for display only. */
 function formatMinor(value: bigint): string {
-  return new Intl.NumberFormat("id-ID", { style: "currency", currency: "IDR", maximumFractionDigits: value % 100n === 0n ? 0 : 2 }).format(Number(value) / 100);
+  return formatRupiahFromMinor(value);
 }
 
 /** Calculates the client preview with integer arithmetic matching server half-up rounding. */

@@ -51,14 +51,6 @@ export function parseNonNegativeRupiah(value: string) {
   return amount.toString();
 }
 
-export function formatRupiah(value: string) {
-  return new Intl.NumberFormat("id-ID", {
-    style: "currency",
-    currency: "IDR",
-    maximumFractionDigits: 0,
-  }).format(BigInt(value.split(".")[0] ?? "0"));
-}
-
 export function getProductMonogram(name: string) {
   return name
     .split(/\s+/)

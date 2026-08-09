@@ -16,6 +16,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
+import { Pagination, PaginationContent, PaginationEllipsis, PaginationItem } from "@/components/ui/pagination";
 import { SearchableSelect } from "@/components/ui/searchable-select";
 import {
   Table,
@@ -28,7 +29,8 @@ import {
 import { isAppRole, roleHasPermission } from "@/lib/auth/permissions";
 import { requirePermission } from "@/lib/auth/session";
 import { getAccessibleCatalogOutlet, getOutletCatalogProducts } from "@/lib/catalog/advanced-queries";
-import { formatRupiah } from "@/lib/catalog/normalization";
+import { formatRupiah } from "@/lib/currency";
+import { getCatalogPaginationItems } from "@/lib/catalog/pagination";
 import { getCatalogCategories, getCatalogProducts } from "@/lib/catalog/queries";
 import type { CatalogProductItem } from "@/lib/catalog/types";
 import { catalogSearchSchema } from "@/lib/catalog/validation";
@@ -249,7 +251,6 @@ function OutletCatalogFilters({ canManage, categories, outletId, search }: { can
 
 /** Builds outlet-scoped pagination links without dropping the current filters. */
 function OutletCatalogPagination({ currentPage, outletId, search, totalPages }: { currentPage: number; outletId: string; search: ReturnType<typeof catalogSearchSchema.parse>; totalPages: number }) {
-  if (totalPages <= 1) return null;
   const href = (page: number) => {
     const params = new URLSearchParams({ scope: "outlet", outletId });
     if (search.q) params.set("q", search.q);
@@ -258,7 +259,7 @@ function OutletCatalogPagination({ currentPage, outletId, search, totalPages }: 
     if (page > 1) params.set("page", String(page));
     return `/catalog?${params.toString()}`;
   };
-  return <nav aria-label="Halaman produk outlet" className="mt-5 flex items-center justify-between"><Link aria-disabled={currentPage <= 1} className={cn(buttonVariants({ variant: "outline" }), currentPage <= 1 && "pointer-events-none opacity-50")} href={href(currentPage - 1)}><ChevronLeft aria-hidden="true" />Sebelumnya</Link><span className="font-mono text-xs text-muted-foreground">{currentPage} / {totalPages}</span><Link aria-disabled={currentPage >= totalPages} className={cn(buttonVariants({ variant: "outline" }), currentPage >= totalPages && "pointer-events-none opacity-50")} href={href(currentPage + 1)}>Berikutnya<ChevronRight aria-hidden="true" /></Link></nav>;
+  return <CatalogPaginationNav ariaLabel="Halaman produk outlet" currentPage={currentPage} hrefForPage={href} totalPages={totalPages} />;
 }
 
 /** Formats a serialized decimal rate for concise Indonesian catalog summaries. */
@@ -360,8 +361,20 @@ function CatalogEmptyState({ canManage, hasCategories, categories }: { canManage
 }
 
 function CatalogPagination({ currentPage, search, totalPages }: { currentPage: number; search: ReturnType<typeof catalogSearchSchema.parse>; totalPages: number }) {
+  return <CatalogPaginationNav ariaLabel="Halaman produk" currentPage={currentPage} hrefForPage={(page) => catalogHref(search, { page })} totalPages={totalPages} />;
+}
+
+/** Renders responsive numbered pagination for master and outlet product lists. */
+function CatalogPaginationNav({ ariaLabel, currentPage, hrefForPage, totalPages }: { ariaLabel: string; currentPage: number; hrefForPage: (page: number) => string; totalPages: number }) {
   if (totalPages <= 1) return null;
-  return <nav aria-label="Halaman produk" className="mt-5 flex items-center justify-between"><Link aria-disabled={currentPage <= 1} className={cn(buttonVariants({ variant: "outline" }), currentPage <= 1 && "pointer-events-none opacity-50")} href={catalogHref(search, { page: currentPage - 1 })}><ChevronLeft aria-hidden="true" />Sebelumnya</Link><span className="font-mono text-xs text-muted-foreground">{currentPage} / {totalPages}</span><Link aria-disabled={currentPage >= totalPages} className={cn(buttonVariants({ variant: "outline" }), currentPage >= totalPages && "pointer-events-none opacity-50")} href={catalogHref(search, { page: currentPage + 1 })}>Berikutnya<ChevronRight aria-hidden="true" /></Link></nav>;
+  const previousDisabled = currentPage <= 1;
+  const nextDisabled = currentPage >= totalPages;
+  return <Pagination aria-label={ariaLabel} className="mt-5"><PaginationContent className="w-full justify-between gap-1 sm:justify-center">
+    <PaginationItem><Link aria-disabled={previousDisabled} aria-label="Halaman sebelumnya" className={cn(buttonVariants({ variant: "outline" }), "px-3 lg:px-4", previousDisabled && "pointer-events-none opacity-50")} href={hrefForPage(Math.max(1, currentPage - 1))}><ChevronLeft aria-hidden="true" /><span className="hidden lg:inline">Sebelumnya</span></Link></PaginationItem>
+    <PaginationItem className="sm:hidden"><span aria-current="page" className="flex min-h-12 items-center px-2 font-mono text-xs text-muted-foreground">Halaman {currentPage} dari {totalPages}</span></PaginationItem>
+    {getCatalogPaginationItems(currentPage, totalPages).map((item) => typeof item === "number" ? <PaginationItem className="hidden sm:block" key={item}><Link aria-current={item === currentPage ? "page" : undefined} aria-label={item === currentPage ? `Halaman ${item}, saat ini` : `Halaman ${item}`} className={buttonVariants({ size: "icon", variant: item === currentPage ? "default" : "ghost" })} href={hrefForPage(item)}>{item}</Link></PaginationItem> : <PaginationItem className="hidden sm:block" key={item}><PaginationEllipsis className="size-12" /></PaginationItem>)}
+    <PaginationItem><Link aria-disabled={nextDisabled} aria-label="Halaman berikutnya" className={cn(buttonVariants({ variant: "outline" }), "px-3 lg:px-4", nextDisabled && "pointer-events-none opacity-50")} href={hrefForPage(Math.min(totalPages, currentPage + 1))}><span className="hidden lg:inline">Berikutnya</span><ChevronRight aria-hidden="true" /></Link></PaginationItem>
+  </PaginationContent></Pagination>;
 }
 
 function catalogHref(search: ReturnType<typeof catalogSearchSchema.parse>, changes: Partial<ReturnType<typeof catalogSearchSchema.parse>>) {

@@ -213,6 +213,14 @@ Status: `Deferred`. Operasional usaha sate saat ini belum membutuhkan pencatatan
 - Browser tetap menentukan printer fisik, jumlah salinan, dan orientasi.
 - Milestone tetap `In Progress` karena printer dapur, KDS perangkat penuh, ESC/POS, USB/LAN/Bluetooth, dan print bridge belum dikerjakan.
 
+### Rencana 7B — printer langsung dari web
+
+- Target awal adalah Android tablet dengan printer Bluetooth EPPOS RPP02 kertas 58 mm.
+- Tambahkan pemilihan/koneksi printer, status koneksi, dan cetak uji langsung pada `/settings/printers` jika kemampuan browser dan profil Bluetooth perangkat mendukungnya.
+- Validasi lebih dahulu apakah RPP02 memakai Bluetooth Classic/SPP atau BLE serta apakah browser Android dapat mengirim perintah ESC/POS tanpa aplikasi pendamping.
+- Jika akses langsung browser tidak kompatibel, gunakan aplikasi pendamping atau print bridge lokal; dialog cetak browser dari 7A tetap tersedia sebagai fallback.
+- Nama printer, jumlah salinan, dan orientasi baru disimpan di web setelah jalur koneksi yang dipakai sudah terbukti pada perangkat nyata.
+
 ## Rencana integrasi eksternal
 
 Integrasi harus dikembangkan bertahap. Jangan menjanjikan API langsung sebelum akses partner, dokumentasi resmi, sandbox, dan izin penggunaan data tersedia.
@@ -282,6 +290,7 @@ Integrasi harus dikembangkan bertahap. Jangan menjanjikan API langsung sebelum a
 | 9 Agustus 2026 | Laporan operasional selesai dan tervalidasi live | Enam view, CSV, snapshot kategori, permission owner/manager, query database, responsive UI, unit test, E2E, dan production build lulus |
 | 9 Agustus 2026 | Open order dan kitchen ticket selesai serta tervalidasi live | E2E membuktikan save/send, delta catatan, pembatalan, meja unik, konflik dua sesi, status dapur, lintas shift, dan layout responsif |
 | 9 Agustus 2026 | Browser printing dipilih sebagai fondasi printer struk | Aman diuji tanpa model printer tertentu; ESC/POS menunggu model serta koneksi perangkat, sedangkan KDS menunggu alur dapur nyata |
+| 9 Agustus 2026 | Printer langsung dari web direncanakan sebagai Milestone 7B | Target Android tablet dan EPPOS RPP02 58 mm; profil Bluetooth serta dukungan browser harus diuji sebelum memilih Web Bluetooth, aplikasi pendamping, atau print bridge |
 
 ## Cara memperbarui roadmap
 

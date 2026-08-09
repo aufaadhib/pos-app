@@ -120,7 +120,7 @@ Dokumen ini mencatat function dan component function yang ditambahkan pada miles
 | `getAccessibleCatalogOutlet()` | Outlet, user, role | Konteks outlet atau `null` | Menolak outlet di luar assignment dan menyerialisasi tarif pajak/layanan. |
 | `getOutletCatalogProducts()` | Filter dan outlet | Halaman produk efektif | Menggabungkan master dengan override harga/ketersediaan produk serta opsi varian. |
 | Action katalog lanjutan | State dan FormData | `CatalogActionState` | Mengulang session, permission master/outlet, Zod, mutation, dan revalidation di server. |
-| `CatalogScopeSelect()` | Outlet dan scope | Selector client | Berpindah antara master dan outlet melalui URL tanpa menyimpan state tersembunyi. |
+| `CatalogScopeSelect()` | Outlet dan scope | Selector client | Menampilkan pilihan baru secara optimistis, memberi status loading, lalu berpindah antara master dan outlet melalui URL dengan prop server sebagai sumber kebenaran. |
 | `ProductOptionsPage()` | Product ID | Halaman editor | Menyusun editor varian serta modifier owner-only secara responsif. |
 | `ModifierLibraryPage()` | Tidak ada | Halaman pustaka | Menyusun pengelolaan modifier reusable khusus owner. |
 | `OutletCatalogProductCard()` | Produk efektif dan hak edit | Card responsif | Menampilkan harga efektif serta form override produk/varian untuk outlet. |
@@ -165,7 +165,8 @@ Dokumen ini mencatat function dan component function yang ditambahkan pada miles
 | `getAutoPrintStorageKey()` | Outlet ID | Key local storage | Membentuk namespace `glutong:printer:auto-print:<outletId>`. |
 | `getAutoPrintPreference()`, `setAutoPrintPreference()`, `subscribeAutoPrintPreference()` | Outlet dan boolean/callback | Preferensi, status penyimpanan, atau cleanup | Membaca/menulis opt-in per browser, menyinkronkan external store dalam/lintas tab, dan memakai fallback manual saat storage gagal. |
 | `ReceiptRenderer()` | Outlet dan snapshot struk | Markup struk bersama | Merender markup identik untuk preview settings, checkout, 58 mm, dan 80 mm tanpa mutation. |
-| `formatReceiptMinor()` | Integer minor unit | Rupiah terformat | Memformat nominal tampilan struk tanpa dipakai sebagai sumber kalkulasi. |
+| `formatRupiah()`, `formatRupiahFromMinor()` | Decimal canonical atau integer minor unit | Rupiah bulat terformat | Menyatukan tampilan Rupiah tanpa digit desimal di seluruh aplikasi tanpa mengubah nilai sumber. |
+| `formatReceiptMinor()` | Integer minor unit | Rupiah terformat | Memformat nominal tampilan struk melalui formatter Rupiah bersama tanpa dipakai sebagai sumber kalkulasi. |
 | `PrinterSettingsForm()` | Konfigurasi outlet | Form dan preview responsif | Mengelola ukuran/footer outlet, toggle perangkat, preview langsung, pending state, dan cetak contoh. |
 | `PrinterSettingsPage()`, `PrinterSettingsLoading()` | Session/outlet atau tanpa input | Halaman dynamic/skeleton | Melindungi route dengan permission dan menjaga bentuk form plus preview saat navigasi loading. |
 
@@ -304,7 +305,8 @@ Dokumen ini mencatat function dan component function yang ditambahkan pada miles
 | `CatalogStatusActionButton()` | Jenis entity dan snapshot item | Form action | Mengarsipkan atau memulihkan entity dengan versi `updatedAt` tersembunyi. |
 | `ProductTableRow()`, `ProductCard()` | Product DTO dan hak kelola | Row desktop/card mobile | Menampilkan representasi produk sesuai viewport dan menyembunyikan kontrol mutation dari kasir. |
 | `CategoryRailLink()` | Label, count, status aktif | Link filter | Menjadikan indeks kategori sebagai navigasi fungsional pada menu ledger. |
-| `CatalogPagination()` | Halaman, total, search | Navigasi halaman | Mempertahankan query/filter saat berpindah halaman. |
+| `CatalogPagination()`, `CatalogPaginationNav()`, primitive `Pagination*()` | Halaman, total, search, pembentuk URL | Navigasi halaman responsif | Menampilkan nomor halaman di tablet/desktop, ringkasan ringkas di mobile, dan mempertahankan filter untuk katalog master maupun outlet dengan struktur shadcn. |
+| `getCatalogPaginationItems()` | Halaman aktif dan total halaman | Nomor halaman serta elipsis | Membentuk jendela nomor halaman ringkas tanpa membuat kontrol melebar pada hasil yang panjang. |
 | `catalogHref()` | Search saat ini dan perubahan | URL katalog | Membentuk query string canonical tanpa parameter default yang tidak perlu. |
 | `CatalogLoading()` | Tidak ada | Skeleton konten | Menjadi fallback route dan fallback `<Suspense>` hanya di dalam layout katalog, sehingga sidebar tetap interaktif selama data menunggu. |
 | `CatalogError()` | Error dan callback reset | Error boundary | Menyediakan pemulihan aman saat pembacaan katalog gagal. |
