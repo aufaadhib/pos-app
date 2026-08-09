@@ -38,6 +38,14 @@ describe("POS register layout", () => {
     expect(screen.getByRole("region", { name: "Daftar menu" })).toHaveClass("h-full", "min-h-0", "overflow-y-auto", "overscroll-contain");
   });
 
+  it("hides the open-order list when the outlet feature is disabled", () => {
+    const { rerender } = render(<PosRegister menu={menu} openOrders={[]} />);
+    expect(screen.queryByRole("button", { name: "Buka pesanan tersimpan" })).not.toBeInTheDocument();
+
+    rerender(<PosRegister menu={{ ...menu, outlet: { ...menu.outlet, openOrdersEnabled: true } }} openOrders={[]} />);
+    expect(screen.getByRole("button", { name: "Buka pesanan tersimpan" })).toBeVisible();
+  });
+
   it("merges an identical product and shows its quantity on the menu card", async () => {
     const user = userEvent.setup();
     render(<PosRegister menu={menu} />);
