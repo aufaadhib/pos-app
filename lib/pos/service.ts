@@ -26,6 +26,8 @@ type PosErrorCode = "FORBIDDEN" | "INVALID_CART" | "PRICE_CHANGED" | "PAYMENT_IN
 export type ResolvedItem = {
   productId: string;
   productName: string;
+  categoryId: string;
+  categoryName: string;
   sku: string | null;
   quantity: number;
   note: string | null;
@@ -196,6 +198,8 @@ export async function createSale(input: CheckoutInput, actor: PosActor): Promise
               create: items.map((item) => ({
                 productId: item.productId,
                 productName: item.productName,
+                categoryId: item.categoryId,
+                categoryName: item.categoryName,
                 sku: item.sku,
                 quantity: item.quantity,
                 note: item.note,
@@ -275,6 +279,7 @@ export async function resolveCheckoutItems(
       id: true,
       name: true,
       sku: true,
+      category: { select: { id: true, name: true } },
       basePrice: true,
       outletOverrides: { where: { outletId: input.outletId }, select: { isAvailable: true, priceOverride: true } },
       channelPrices: { where: { channelId: channel?.id ?? "" }, select: { priceOverride: true } },
@@ -370,6 +375,8 @@ export async function resolveCheckoutItems(
     return {
       productId: product.id,
       productName: product.name,
+      categoryId: product.category.id,
+      categoryName: product.category.name,
       sku: product.sku,
       quantity: cartItem.quantity,
       note: cartItem.note || null,

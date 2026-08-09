@@ -41,4 +41,12 @@ describe("workspace navigation", () => {
     expect(screen.getByRole("link", { name: "Kasir" })).toHaveAttribute("aria-current", "page");
     expect(screen.getByRole("link", { name: "Beranda" })).not.toHaveAttribute("aria-current");
   });
+
+  it("shows reports to managers but not cashiers", () => {
+    const view = render(<WorkspaceNavigation canManageStaff canViewDesignSystem={false} role="manager" />);
+    expect(screen.getByRole("link", { name: "Laporan" })).toBeVisible();
+
+    view.rerender(<WorkspaceNavigation canManageStaff={false} canViewDesignSystem={false} role="cashier" />);
+    expect(screen.queryByRole("link", { name: "Laporan" })).not.toBeInTheDocument();
+  });
 });

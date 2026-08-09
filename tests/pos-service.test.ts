@@ -40,7 +40,7 @@ describe("POS sale service", () => {
     mocks.orderFind.mockResolvedValue(null);
     mocks.outletFind.mockResolvedValue({ id: "outlet-1", code: "GLT", timezone: "Asia/Jakarta", taxRate: new Prisma.Decimal(10), serviceChargeRate: new Prisma.Decimal(5), pricesIncludeTax: false });
     mocks.channelFind.mockResolvedValue({ id: "channel-1", markupRate: new Prisma.Decimal(20), estimatedFeeRate: new Prisma.Decimal(20), roundingUnit: 500, settlementDelayHours: 24 });
-    mocks.productFindMany.mockResolvedValue([{ id: "product-1", name: "Kopi Susu", sku: "KOP-1", basePrice: new Prisma.Decimal(25000), outletOverrides: [], channelPrices: [], variantGroups: [], modifierGroups: [] }]);
+    mocks.productFindMany.mockResolvedValue([{ id: "product-1", name: "Kopi Susu", sku: "KOP-1", category: { id: "category-1", name: "Minuman" }, basePrice: new Prisma.Decimal(25000), outletOverrides: [], channelPrices: [], variantGroups: [], modifierGroups: [] }]);
     mocks.shiftFind.mockResolvedValue({ id: "shift-1", outletId: "outlet-1" });
     mocks.receiptUpsert.mockResolvedValue({ lastValue: 1 });
     mocks.saleCreate.mockResolvedValue({ id: "sale-1", receiptNumber: "GLT-20260807-0001", total: new Prisma.Decimal(57750), payment: { changeAmount: new Prisma.Decimal(42250) } });
@@ -71,7 +71,7 @@ describe("POS sale service", () => {
       shiftId: "shift-1",
       orderId: "order-1",
       subtotal: expect.objectContaining({}),
-      items: { create: [expect.objectContaining({ productName: "Kopi Susu", quantity: 2 })] },
+      items: { create: [expect.objectContaining({ productName: "Kopi Susu", categoryId: "category-1", categoryName: "Minuman", quantity: 2 })] },
       payment: { create: expect.objectContaining({ method: "CASH" }) },
     }), select: expect.any(Object) });
     expect(mocks.auditCreate).toHaveBeenCalledOnce();

@@ -13,6 +13,7 @@ export const permissionStatements = {
   catalog: ["view", "manageMaster", "manageOutlet"],
   deliveryChannel: ["view", "manage"],
   settlement: ["view", "reconcile", "reverse"],
+  report: ["view", "export"],
   outlet: ["view", "manage"],
   profile: ["view", "update"],
 } as const;
@@ -32,6 +33,7 @@ export const ownerRole = accessControl.newRole({
   catalog: ["view", "manageMaster", "manageOutlet"],
   deliveryChannel: ["view", "manage"],
   settlement: ["view", "reconcile", "reverse"],
+  report: ["view", "export"],
   outlet: ["view", "manage"],
   profile: ["view", "update"],
 });
@@ -49,6 +51,7 @@ export const managerRole = accessControl.newRole({
   catalog: ["view", "manageOutlet"],
   deliveryChannel: ["view"],
   settlement: ["view", "reconcile"],
+  report: ["view", "export"],
   outlet: ["view"],
   profile: ["view", "update"],
 });
@@ -66,6 +69,7 @@ export const cashierRole = accessControl.newRole({
   catalog: ["view"],
   deliveryChannel: [],
   settlement: [],
+  report: [],
   outlet: ["view"],
   profile: ["view", "update"],
 });

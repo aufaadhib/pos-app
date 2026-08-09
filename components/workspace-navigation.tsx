@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { BookOpen, ChefHat, HandCoins, House, Palette, ReceiptText, Settings2, ShoppingBasket, Store, Users, WalletCards } from "lucide-react";
+import { BarChart3, BookOpen, ChefHat, HandCoins, House, Palette, ReceiptText, Settings2, ShoppingBasket, Store, Users, WalletCards } from "lucide-react";
 
 import type { AppRole } from "@/lib/auth/permissions";
 import { cn } from "@/lib/utils";
@@ -13,6 +13,7 @@ const navigationItems = [
   { href: "/kitchen", label: "Dapur", route: "kitchen", icon: ChefHat },
   { href: "/shifts", label: "Shift", route: "shifts", icon: WalletCards },
   { href: "/transactions", label: "Transaksi", route: "transactions", icon: ReceiptText },
+  { href: "/reports", label: "Laporan", route: "reports", icon: BarChart3 },
   { href: "/settlements", label: "Ojol & settlement", route: "settlements", icon: HandCoins },
   { href: "/catalog", label: "Katalog", route: "catalog", icon: BookOpen },
   { href: "/outlets", label: "Outlet", route: "outlets", icon: Store },
@@ -32,7 +33,7 @@ type WorkspaceNavigationProps = {
 export function WorkspaceNavigation({ canManageStaff, canViewDesignSystem, mobile = false, role }: WorkspaceNavigationProps) {
   const pathname = usePathname();
   const items = navigationItems.filter((item) => {
-    if (item.route === "settlements" || item.route === "settings") return role !== "cashier";
+    if (item.route === "reports" || item.route === "settlements" || item.route === "settings") return role !== "cashier";
     if (item.route === "staff") return canManageStaff;
     if (item.route === "design-system") return canViewDesignSystem;
     return true;

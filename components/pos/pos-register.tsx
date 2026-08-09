@@ -80,6 +80,7 @@ export function PosRegister({ menu, openOrders = [] }: { menu: PosMenu; openOrde
       && (!query || `${product.name} ${product.sku ?? ""}`.toLocaleLowerCase("id-ID").includes(query)),
     );
   }, [categoryId, menu.products, search]);
+  const eagerImageProductId = filteredProducts.find((product) => product.imageUrl)?.id;
   const selectedCategoryName = categoryId === "all"
     ? "Semua menu"
     : menu.categories.find((category) => category.id === categoryId)?.name ?? "Menu";
@@ -198,7 +199,7 @@ export function PosRegister({ menu, openOrders = [] }: { menu: PosMenu; openOrde
                     else addLine({ productId: product.id, productName: product.name, sku: product.sku, quantity: 1, note: "", variantOptionIds: [], modifierOptionIds: [], selectionLabel: "", unitMinor: parseMoneyToMinor(productPrice), directUnitMinor: parseMoneyToMinor(product.effectiveBasePrice) });
                   }} type="button">
                     <span className="relative grid aspect-square place-items-center overflow-hidden border-b bg-accent/35">
-                      <ProductImage className="absolute inset-0" fallbackClassName="text-2xl" imageUrl={product.imageUrl} name={product.name} positionX={product.imagePositionX} positionY={product.imagePositionY} sizes="(max-width: 639px) 50vw, (max-width: 1023px) 33vw, (max-width: 1535px) 25vw, 20vw" />
+                      <ProductImage className="absolute inset-0" fallbackClassName="text-2xl" imageUrl={product.imageUrl} loading={product.id === eagerImageProductId ? "eager" : "lazy"} name={product.name} positionX={product.imagePositionX} positionY={product.imagePositionY} sizes="(max-width: 639px) 50vw, (max-width: 1023px) 33vw, (max-width: 1535px) 25vw, 20vw" />
                       {orderedQuantity > 0 && <span aria-label={`${orderedQuantity} ${product.name} dalam pesanan`} className="absolute right-2 bottom-2 grid size-7 place-items-center rounded-full bg-success font-mono text-xs font-semibold text-success-foreground shadow-md">{orderedQuantity}</span>}
                     </span>
                     <span className="block p-3"><span className="block truncate font-heading text-sm font-semibold group-hover:text-primary">{product.name}</span><span className="mt-2 flex items-center justify-between gap-2"><span className="truncate text-[0.7rem] text-muted-foreground">{product.sku ?? product.categoryName}</span><span className="shrink-0 font-mono text-xs font-semibold">{formatMinor(parseMoneyToMinor(productPrice))}</span></span>{selectedChannel && <span className="mt-1 block text-[0.65rem] font-medium text-primary">Harga {selectedChannel.label}</span>}</span>

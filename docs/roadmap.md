@@ -8,6 +8,7 @@ Terakhir diperbarui: 9 Agustus 2026
 
 - `Planned`: disetujui sebagai rencana, tetapi belum dikerjakan.
 - `In Progress`: sedang dikerjakan pada milestone aktif.
+- `Deferred`: disetujui tetapi sengaja ditunda karena belum sesuai kebutuhan operasional saat ini.
 - `Blocked`: tidak dapat dilanjutkan sebelum keputusan atau akses eksternal tersedia.
 - `Completed`: sudah diimplementasikan dan diverifikasi.
 
@@ -33,6 +34,7 @@ Hanya satu milestone utama yang sebaiknya berstatus `In Progress` agar perubahan
 | Register POS | Completed | Dine-in, takeaway, delivery, perhitungan pajak/layanan, dan pembayaran satu metode |
 | Transaksi dan struk | Completed | Nomor struk outlet, snapshot item, riwayat, rincian transaksi, dan audit create |
 | Ojol dan settlement | Completed | Harga channel, piutang platform, settlement batch, dan reversal settlement |
+| Laporan operasional | Completed | Penjualan, produk, pembayaran, shift, koreksi, settlement, filter outlet/tanggal, dan CSV |
 
 ## Urutan milestone
 
@@ -41,8 +43,8 @@ Hanya satu milestone utama yang sebaiknya berstatus `In Progress` agar perubahan
 | 1 | Shift kasir dan tutup kas | Completed | Register POS | Uang fisik dapat dicocokkan dengan transaksi per kasir dan outlet |
 | 2 | Void dan refund | Completed | Shift kasir | Kesalahan transaksi dapat dikoreksi tanpa menghapus riwayat finansial |
 | 3 | Open order dan kitchen ticket | Completed | Transaksi POS | Pesanan dapat diproses sebelum pembayaran dan diteruskan ke dapur |
-| 4 | Stok, resep, waste, dan HPP | Planned | Void/refund dan open order | Persediaan serta biaya produk dapat dihitung dari kejadian operasional nyata |
-| 5 | Laporan operasional dan keuangan | Planned | Shift, refund, stok | Owner dapat membaca penjualan, kas, margin, dan performa outlet |
+| 4 | Stok, resep, waste, dan HPP | Deferred | Proses stok usaha perlu dibakukan | Ditunda agar aplikasi tidak memaksakan inventory restoran yang terlalu rinci untuk usaha sate |
+| 5 | Laporan operasional dan keuangan | Completed | Shift, refund, transaksi, settlement | Owner dan manager dapat membaca penjualan, kas, koreksi, serta performa outlet |
 | 6 | Diskon, promo, split payment, dan pelanggan | Planned | Refund dan laporan dasar | Metode pembayaran serta retensi pelanggan menjadi lebih fleksibel |
 | 7 | Printer struk dan Kitchen Display System | Planned | Open order | Alur kasir-dapur dapat berjalan pada perangkat operasional |
 | 8 | Integrasi platform eksternal | Planned | Order, settlement, dan laporan stabil | Input manual dapat dikurangi melalui impor atau koneksi resmi |
@@ -142,6 +144,8 @@ Mengelompokkan transaksi dan pergerakan uang berdasarkan shift aktif sehingga sa
 
 ## Milestone 4 — Stok, resep, waste, dan HPP
 
+Status: `Deferred`. Operasional usaha sate saat ini belum membutuhkan pencatatan bahan mentah, resep per gram, produksi batch, supplier, transfer, atau valuasi inventory secara rinci. Scope berikut dipertahankan sebagai referensi dan baru dibuka kembali setelah proses stok nyata sudah baku.
+
 ### Cakupan MVP
 
 - Master bahan, satuan dasar, konversi satuan, supplier, dan stok per outlet.
@@ -151,28 +155,40 @@ Mengelompokkan transaksi dan pergerakan uang berdasarkan shift aktif sehingga sa
 - Peringatan stok minimum serta histori movement yang dapat difilter.
 - HPP disimpan sebagai snapshot transaksi agar laporan lama tidak berubah saat harga bahan berubah.
 
-### Keputusan terbuka
+### Arah jika dibuka kembali
 
-- Apakah stok berkurang saat order dikirim ke dapur atau saat pembayaran selesai?
-- Apakah stok negatif selalu dilarang atau owner dapat memberi override beralasan?
-- Metode valuasi awal: moving average atau FIFO.
+- Mulai dari stok sederhana yang benar-benar mudah dihitung, seperti porsi/tusuk siap jual, minuman, dan kemasan.
+- Stock opname tetap memakai blind count dan koreksi append-only.
+- HPP bahan mentah, resep produksi, transfer, serta metode valuasi diputuskan setelah cara kerja outlet sudah stabil.
 
 ## Milestone 5 — Laporan operasional dan keuangan
 
 ### Cakupan MVP
 
 - Penjualan per hari, outlet, sumber order, metode pembayaran, kategori, dan produk.
-- Ringkasan pajak, service charge, diskon, refund, void, serta net sales.
+- Ringkasan subtotal, pajak, service charge, refund, void, serta net sales.
 - Laporan shift: expected cash, actual cash, selisih, kas masuk, dan kas keluar.
 - Laporan settlement: gross, fee, promo merchant, net received, overdue, dan selisih harga direct.
-- Laporan stok/HPP: pemakaian, waste, nilai persediaan, gross profit, dan margin.
 - Filter tanggal menggunakan zona waktu outlet dan ekspor CSV yang dibatasi permission.
+
+### Belum termasuk
+
+- Stok, waste, HPP, gross profit, dan margin karena milestone inventory berstatus `Deferred`.
+- Diskon karena aturan diskon baru direncanakan pada milestone fleksibilitas pembayaran.
+
+### Keputusan implementasi
+
+- Owner melihat satu atau seluruh outlet; manager hanya outlet penugasannya; kasir tidak memperoleh akses laporan.
+- Penjualan mengikuti business date, sedangkan refund/void mengurangi laporan pada tanggal koreksi dijalankan agar cocok dengan shift dan arus pembayaran.
+- Query dibaca fresh, rentang maksimum 366 hari, detail layar dibatasi, dan CSV maksimum 10.000 baris.
+- Item penjualan baru menyimpan snapshot kategori; item lama tanpa snapshot ditampilkan sebagai “Kategori belum tersimpan”.
 
 ### Kriteria selesai
 
-- Angka laporan dapat ditelusuri kembali ke transaksi atau movement sumbernya.
+- Angka laporan dapat ditelusuri kembali ke transaksi, shift, koreksi, atau settlement sumbernya.
 - Query selalu dibatasi rentang waktu/pagination dan diuji pada data multi-outlet.
 - Total laporan cocok dengan agregasi transaksi pada skenario refund, settlement reversal, dan shift lintas hari.
+- Filter, loading, kartu/tabel, dan CSV dapat digunakan pada mobile, tablet, serta desktop tanpa overflow horizontal.
 
 ## Milestone 6 — Fleksibilitas pembayaran dan pelanggan
 
@@ -253,6 +269,10 @@ Integrasi harus dikembangkan bertahap. Jangan menjanjikan API langsung sebelum a
 | 9 Agustus 2026 | Simpan order dikonfigurasi per outlet oleh owner/manager | Kasir tetap fokus pada operasi; perubahan konfigurasi tercatat dan dibatasi outlet aktif |
 | 9 Agustus 2026 | Kitchen ticket delivery dibuat otomatis | Semua sumber pesanan berbayar masuk antrean dapur yang sama tanpa jalur khusus platform |
 | 9 Agustus 2026 | Migration production dijalankan manual | Vercel build tidak boleh mengubah schema dan development wajib memakai branch Neon terpisah |
+| 9 Agustus 2026 | Milestone inventory ditunda | Proses usaha sate belum memerlukan resep bahan mentah dan valuasi stok sedetail sistem restoran besar |
+| 9 Agustus 2026 | Laporan berjalan tanpa dependensi stok | Data transaksi, shift, refund, dan settlement sudah cukup stabil; HPP serta margin dikeluarkan dari scope |
+| 9 Agustus 2026 | Refund dilaporkan pada tanggal pelaksanaan | Angka harian harus dapat direkonsiliasi dengan shift dan arus pembayaran yang benar-benar terjadi |
+| 9 Agustus 2026 | Laporan operasional selesai dan tervalidasi live | Enam view, CSV, snapshot kategori, permission owner/manager, query database, responsive UI, unit test, E2E, dan production build lulus |
 | 9 Agustus 2026 | Open order dan kitchen ticket selesai serta tervalidasi live | E2E membuktikan save/send, delta catatan, pembatalan, meja unik, konflik dua sesi, status dapur, lintas shift, dan layout responsif |
 
 ## Cara memperbarui roadmap

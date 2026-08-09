@@ -1,6 +1,6 @@
 "use client";
 
-import Image from "next/image";
+import Image, { type ImageProps } from "next/image";
 import { useState } from "react";
 
 import { getProductMonogram } from "@/lib/catalog/normalization";
@@ -12,6 +12,7 @@ type ProductImageProps = {
   positionX: number;
   positionY: number;
   sizes: string;
+  loading?: ImageProps["loading"];
   className?: string;
   fallbackClassName?: string;
 };
@@ -26,6 +27,7 @@ function ProductImageSource({
   className,
   fallbackClassName,
   imageUrl,
+  loading,
   name,
   positionX,
   positionY,
@@ -39,6 +41,7 @@ function ProductImageSource({
           alt={`Foto produk ${name}`}
           className="object-cover"
           fill
+          loading={loading}
           onError={() => setFailed(true)}
           quality={95}
           sizes={sizes}

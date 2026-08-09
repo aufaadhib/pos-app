@@ -774,6 +774,8 @@ model SaleItem {
   saleId             String
   productId          String
   productName        String
+  categoryId         String?
+  categoryName       String?
   sku                String?
   quantity           Int
   note               String?            @db.VarChar(240)

@@ -124,7 +124,7 @@ async function cleanupShiftFixtures(runId: string) {
     prisma.product.deleteMany({ where: { categoryId: { in: categoryIds } } }),
     prisma.category.deleteMany({ where: { id: { in: categoryIds } } }),
     prisma.outlet.deleteMany({ where: { id: { in: outletIds } } }),
-  ]);
+  ], { maxWait: 10_000, timeout: 30_000 });
 }
 
 /** Creates one temporary owner through Better Auth, retrying transient Neon cold starts. */
@@ -151,7 +151,13 @@ async function createTemporaryOwner(account: TestAccount) {
   }
 }
 
-runShiftE2E().catch((error: unknown) => {
+const cleanupRunId = process.env.E2E_SHIFT_CLEANUP_RUN_ID;
+if (cleanupRunId && !/^\d{13}-[a-f0-9]{6}$/.test(cleanupRunId)) throw new Error("E2E_SHIFT_CLEANUP_RUN_ID tidak valid.");
+const operation = cleanupRunId
+  ? cleanupShiftFixtures(cleanupRunId).then(() => console.log(`Fixture shift ${cleanupRunId} dibersihkan.`)).finally(() => prisma.$disconnect())
+  : runShiftE2E();
+
+operation.catch((error: unknown) => {
   console.error(getErrorMessage(error));
   process.exitCode = 1;
 });

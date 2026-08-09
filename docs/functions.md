@@ -234,6 +234,24 @@ Dokumen ini mencatat function dan component function yang ditambahkan pada miles
 | `KitchenPage()`, `SettingsPage()` | Session dan outlet aktif | Halaman dynamic | Menjaga authorization server, data fresh, serta shell responsif mobile/tablet/desktop. |
 | `runOrderE2E()` | Flag persetujuan dan environment database | Exit process | Membuat fixture order unik, menjalankan journey live multi-session/lintas shift, lalu membersihkan seluruh row milik run di blok `finally`. |
 
+## Laporan operasional dan keuangan
+
+| Function | Input | Output | Tujuan dan side effect |
+| --- | --- | --- | --- |
+| `parseReportSearch()` | View, tanggal, dan outlet dari URL | Hasil validasi Zod | Membatasi format tanggal, jenis laporan, serta rentang maksimum 366 hari tanpa side effect. |
+| `getReportOutlets()`, `selectReportOutlets()` | User, role, outlet request/session | Outlet yang dapat dilaporkan | Membaca outlet aktif sesuai assignment lalu memilih satu atau seluruh outlet yang sah. |
+| `getReportDataset()` | View, filter, batas baris | Dataset report terdiskriminasi | Menjalankan hanya query report aktif dengan pembacaan fresh dan batas detail eksplisit. |
+| `getOverviewReport()` | Tanggal dan outlet | Ringkasan, tren, sumber order | Mengagregasi snapshot penjualan berdasarkan business date dan koreksi berdasarkan tanggal pelaksanaan lokal. |
+| `getProductReport()`, `getPaymentReport()` | Tanggal dan outlet | Baris produk atau pembayaran | Menggabungkan bruto periode penjualan dengan refund periode koreksi tanpa floating point. |
+| `getShiftReport()`, `getCorrectionReport()`, `getSettlementReport()` | Tanggal, outlet, batas baris | Detail bounded dan ringkasan | Membaca rekonsiliasi shift, ledger koreksi, piutang, serta batch settlement secara fresh. |
+| `buildOverviewReport()`, `buildProductRows()`, `buildPaymentRows()` | Agregat database serializable | DTO laporan | Menyatukan gross/refund/void menggunakan Prisma Decimal dan menjaga refund lintas tanggal dapat menghasilkan nilai net negatif. |
+| `createReportCsv()`, `escapeCsvCell()`, `getReportCsvRowCount()` | Dataset dan filter | CSV serta jumlah baris | Membentuk ekspor per view, mengutip delimiter, dan menetralkan formula spreadsheet. |
+| Route report export `GET()` | Request dengan filter laporan | CSV atau JSON error | Mengulang validasi session, permission, outlet, tanggal, batas 10.000 baris, lalu mengirim CSV non-cache. |
+| `ReportsPage()`, `ReportsLoading()`, `ReportsError()` | Session dan URL report | Route dynamic, skeleton, atau retry | Menjaga shared shell, data fresh, loading berbentuk akhir, dan pemulihan error lokal. |
+| `ReportDashboard()`, `ReportFilters()`, `SummaryGrid()` | Selection, outlet, overview, dataset | Workspace laporan responsif | Menyusun filter URL, preset periode, KPI ledger, tab, serta tautan CSV tanpa state client tambahan. |
+| `ReportView()`, `OverviewView()`, `ProductsView()`, `PaymentsView()`, `ShiftsView()`, `CorrectionsView()`, `SettlementsView()` | Dataset terpilih | Tampilan report | Merender kartu mobile dan tabel layar lebar sesuai jenis data tanpa overflow horizontal. |
+| `SalesPulse()`, `MetricCard()`, `LedgerValue()`, `TruncationNotice()`, `EmptyReport()` | Nilai laporan | Primitive presentasi | Menyajikan tren SVG native, nilai presisi, batas hasil, dan empty state yang tetap aksesibel. |
+
 ## Interaksi pengguna
 
 | Function | Input | Output | Tujuan dan side effect |

@@ -134,9 +134,14 @@ describe("POS register layout", () => {
     expect(await screen.findByText("Pembayaran berhasil")).toBeVisible();
   });
 
-  it("renders the stored product image with a meaningful label", () => {
-    render(<PosRegister menu={{ ...menu, products: [{ ...menu.products[0], imageUrl: "https://store.public.blob.vercel-storage.com/products/product-1/cover.jpg" }] }} />);
-    expect(screen.getByRole("img", { name: "Foto produk Kopi Susu" })).toBeVisible();
+  it("eagerly loads only the first stored product image", () => {
+    render(<PosRegister menu={{ ...menu, products: [
+      menu.products[0],
+      { ...menu.products[0], id: "product-2", name: "Kopi Hitam", imageUrl: "https://store.public.blob.vercel-storage.com/products/product-2/cover.jpg" },
+      { ...menu.products[0], id: "product-3", name: "Kopi Tubruk", imageUrl: "https://store.public.blob.vercel-storage.com/products/product-3/cover.jpg" },
+    ] }} />);
+    expect(screen.getByRole("img", { name: "Foto produk Kopi Hitam" })).toHaveAttribute("loading", "eager");
+    expect(screen.getByRole("img", { name: "Foto produk Kopi Tubruk" })).toHaveAttribute("loading", "lazy");
   });
 
   it("keeps the paid receipt in the register and prints it", async () => {

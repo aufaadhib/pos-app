@@ -1,6 +1,6 @@
 # Glutong POS
 
-Fondasi aplikasi POS untuk kafe/restoran: login staf dengan Better Auth, RBAC, Prisma 7, Neon PostgreSQL, workspace terlindungi, katalog master multi-outlet, transaksi outlet, varian, modifier, penugasan staf, dan design system responsif.
+Fondasi aplikasi POS untuk kafe/restoran: login staf dengan Better Auth, RBAC, Prisma 7, Neon PostgreSQL, workspace terlindungi, katalog master multi-outlet, transaksi outlet, varian, modifier, laporan operasional, penugasan staf, dan design system responsif.
 
 Rencana pengembangan berikutnya tersedia di [`docs/roadmap.md`](docs/roadmap.md).
 
@@ -131,6 +131,17 @@ Migration `add_delivery_channels_and_settlements` menambahkan harga GoFood, Grab
 - Hanya owner yang dapat membalik settlement; batch tidak dihapus dan seluruh transaksi memperoleh audit.
 - Tahap ini belum mengambil order/API atau laporan CSV langsung dari platform dan belum menghitung HPP bahan.
 
+## Laporan operasional dan keuangan
+
+Migration `add_report_category_snapshots` menyimpan kategori pada item penjualan baru agar laporan historis tidak berubah ketika katalog diedit. Item lama tetap masuk kelompok “Kategori belum tersimpan” karena kategori historisnya tidak boleh ditebak.
+
+- `/reports` tersedia untuk owner dan manager; owner dapat menggabungkan semua outlet, sedangkan manager dibatasi outlet penugasannya.
+- Filter hari ini, 7 hari, 30 hari, bulan berjalan, dan rentang khusus maksimum 366 hari tersimpan di URL.
+- Paket laporan mencakup ringkasan harian, produk/kategori, metode pembayaran, shift, refund/void, dan settlement.
+- Net sales memakai penjualan bruto dikurangi refund/void pada tanggal koreksi dijalankan agar cocok dengan aktivitas shift dan pembayaran.
+- Setiap tampilan dapat diekspor sebagai CSV UTF-8 yang dibatasi permission, outlet, rentang tanggal, 10.000 baris, serta perlindungan formula spreadsheet.
+- Data finansial selalu dibaca fresh. Stok, waste, HPP, margin, gross profit, dan diskon belum termasuk karena milestone inventory ditunda.
+
 ## Menjalankan aplikasi
 
 ```powershell
@@ -148,6 +159,7 @@ Route utama:
 - `/transactions` — riwayat struk outlet aktif.
 - `/transactions/[saleId]` — rincian snapshot transaksi yang sudah dibayar.
 - `/settlements` — konfigurasi harga ojol, piutang platform, dan rekonsiliasi batch untuk owner/manager.
+- `/reports` — laporan penjualan, produk, pembayaran, shift, koreksi, settlement, dan ekspor CSV untuk owner/manager.
 - `/catalog` — katalog master untuk owner dan menu outlet efektif untuk manager/kasir.
 - `/catalog/products/[productId]` — editor varian dan pemasangan modifier khusus owner.
 - `/catalog/modifiers` — pustaka modifier reusable khusus owner.
@@ -198,7 +210,7 @@ $env:E2E_ALLOW_TEST_USERS="true"
 npm run test:e2e:admin-live
 ```
 
-Runner admin membuat dua outlet dan tiga akun sementara, menjalankan journey CRUD/authorization, menyimpan screenshot ke `.artifacts/admin`, lalu membersihkan seluruh fixture.
+Runner admin membuat dua outlet dan tiga akun sementara, menjalankan journey CRUD/authorization termasuk akses laporan manager/kasir, menyimpan screenshot ke `.artifacts/admin`, lalu membersihkan seluruh fixture.
 
 Untuk menguji alur live buka shift, checkout tunai/QRIS, movement, blind close, rekonsiliasi, serta viewport tablet/mobile:
 
@@ -207,7 +219,7 @@ $env:E2E_ALLOW_TEST_USERS="true"
 npm run test:e2e:shift-live
 ```
 
-Runner shift memakai server Next.js dan folder build terisolasi, membuat fixture sementara pada database development/test, menyimpan screenshot ke `.artifacts/shifts`, lalu membersihkan seluruh data finansial dan akun fixture. Jangan jalankan flag ini pada database production.
+Runner shift memakai server Next.js dan folder build terisolasi, membuat fixture sementara pada database development/test, memverifikasi laporan/CSV serta screenshot report responsif di `.artifacts/shifts`, lalu membersihkan seluruh data finansial dan akun fixture. Jangan jalankan flag ini pada database production.
 
 Untuk menguji save/send, delta catatan, pembatalan, konflik dua sesi, meja unik, status dapur, dan pembayaran lintas shift:
 

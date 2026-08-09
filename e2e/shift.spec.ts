@@ -96,16 +96,29 @@ test("cashier shift reconciles cash while summarizing non-cash payments", async 
   const cashSummary = page.getByLabel("Ringkasan kas");
   await expect(cashSummary).toBeVisible({ timeout: 30_000 });
   await expect(cashSummary.getByText(/Rp\s*100\.000/u)).toBeVisible();
-  await expect(cashSummary.getByText(/Rp\s*25\.000/u)).toBeVisible();
+  await expect(cashSummary.getByText(/Rp\s*25\.000/u).first()).toBeVisible();
   await expect(cashSummary.getByText(/Refund tunai/u).locator("..")).toContainText(/Rp\s*25\.000/u);
   await expect(cashSummary.getByText(/Rp\s*10\.000 \/ Rp\s*0/u)).toBeVisible();
   await expect(cashSummary.getByText(/Rp\s*110\.000 \/ Rp\s*0/u)).toBeVisible();
   await expect(page.getByText("QRIS", { exact: true })).toBeVisible();
 
+  await page.goto("/reports");
+  await expect(page.getByRole("heading", { name: "Laporan usaha" })).toBeVisible({ timeout: 30_000 });
+  await expect(page.getByLabel("Ringkasan angka utama")).toContainText("Net sales");
+  await page.getByRole("link", { name: "Produk", exact: true }).click();
+  await expect(page.getByText(productName!, { exact: true }).first()).toBeVisible();
+  await page.getByRole("link", { name: "Refund & void", exact: true }).click();
+  await expect(page.getByText("Refund pengujian shift")).toBeVisible();
+  await page.getByLabel("Jenis laporan").getByRole("link", { name: "Shift", exact: true }).click();
+  await expect(page.getByText("E2E Shift Owner", { exact: true }).first()).toBeVisible();
+  const download = page.waitForEvent("download");
+  await page.getByRole("link", { name: "Unduh CSV" }).click();
+  expect((await download).suggestedFilename()).toMatch(/^glutong-shifts-.*\.csv$/);
+
   for (const viewport of [{ name: "tablet", width: 820, height: 1180 }, { name: "mobile", width: 390, height: 844 }]) {
     await page.setViewportSize(viewport);
     await expect(page.locator("main")).toBeVisible();
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
-    await page.screenshot({ fullPage: true, path: `.artifacts/shifts/detail-${viewport.name}.png` });
+    await page.screenshot({ fullPage: true, path: `.artifacts/shifts/reports-${viewport.name}.png` });
   }
 });

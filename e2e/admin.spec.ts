@@ -82,6 +82,7 @@ test.describe("live outlet and staff administration", () => {
   });
 
   test("manager is constrained to cashier assignments and cashier is denied", async ({ page }) => {
+    test.setTimeout(120_000);
     await signIn(page, managerEmail!, managerPassword!);
     await page.goto("/outlets");
     await expect(page.getByRole("button", { name: "Outlet baru" })).toHaveCount(0);
@@ -92,11 +93,15 @@ test.describe("live outlet and staff administration", () => {
 
     await page.keyboard.press("Escape");
     await page.getByRole("button", { name: "Tutup dialog" }).click();
+    await page.goto("/reports");
+    await expect(page.getByRole("heading", { name: "Laporan usaha" })).toBeVisible({ timeout: 30_000 });
     await page.getByRole("button", { name: "Keluar dari Glutong POS" }).click();
     await expect(page).toHaveURL(/\/sign-in$/);
     await signIn(page, cashierEmail!, cashierPassword!);
     await page.goto("/staff");
     await expect(page).toHaveURL(/\/workspace\?access=denied$/);
     await expect(page.getByText("Akses dibatasi")).toBeVisible();
+    await page.goto("/reports");
+    await expect(page).toHaveURL(/\/workspace\?access=denied$/);
   });
 });
