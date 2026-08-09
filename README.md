@@ -1,6 +1,6 @@
 # Glutong POS
 
-Fondasi aplikasi POS untuk kafe/restoran: login staf dengan Better Auth, RBAC, Prisma 7, Neon PostgreSQL, workspace terlindungi, katalog master multi-outlet, transaksi outlet, varian, modifier, laporan operasional, penugasan staf, dan design system responsif.
+Fondasi aplikasi POS untuk kafe/restoran: login staf dengan Better Auth, RBAC, Prisma 7, Neon PostgreSQL, workspace terlindungi, katalog master multi-outlet, transaksi outlet, varian, modifier, laporan operasional, penugasan staf, absensi wajah/lokasi, dan design system responsif.
 
 Rencana pengembangan berikutnya tersedia di [`docs/roadmap.md`](docs/roadmap.md).
 
@@ -107,6 +107,24 @@ Migration `add_receipt_printer_settings` menambahkan ukuran kertas dan footer st
 - Checkout selalu mempertahankan preview serta tombol **Cetak struk**. Printer fisik, jumlah salinan, dan orientasi tetap dipilih lewat dialog browser.
 - Printer dapur, KDS perangkat penuh, ESC/POS, USB/LAN/Bluetooth, logo, dan jumlah salinan tersimpan belum termasuk tahap ini.
 
+### Absensi karyawan
+
+Migration `add_employee_attendance` menambahkan profil wajah terenkripsi, challenge sekali pakai, attempt dan foto bukti privat, sesi masuk/pulang, pengecualian, koreksi append-only, audit, serta geofence outlet.
+
+- Setiap staf menggunakan akun Better Auth sendiri. Pencocokan selalu `1:1` terhadap profil akun login, bukan pencarian wajah seluruh staf.
+- `/attendance` mendukung pendaftaran tiga sampel, check-in/check-out, liveness ringan, GPS maksimal 100 m, geofence 50–500 m, dan riwayat pribadi. Mode tablet bersama hanya menyimpan preferensi logout otomatis di browser dengan key `glutong:attendance:shared-device`.
+- `/settings/attendance` menyediakan peta OpenStreetMap interaktif: pusat dan handle radius dapat digeser, lokasi perangkat dapat dipakai, dan koordinat/radius manual tetap tersinkron dua arah.
+- Setelah tiga kegagalan dalam verification session 15 menit, staf dapat meminta pengecualian. `/attendance/manage` membatasi manager ke outlet penugasannya, menolak self-approval, menyediakan koreksi waktu append-only, pembatalan profil, serta ekspor CSV maksimal 10.000 baris.
+- Waktu server menjadi sumber kebenaran dan tanggal bisnis mengikuti zona outlet. Satu staf hanya dapat memiliki satu sesi terbuka; check-out wajib pada outlet check-in.
+- Foto attempt disimpan pada Vercel Blob private terpisah dan cron menghapusnya setelah 30 hari. Embedding probe tidak disimpan; template aktif dienkripsi AES-256-GCM dan dihapus saat dibatalkan.
+- Liveness browser hanya mitigasi ringan, bukan jaminan anti-spoof tingkat tinggi. Model dan threshold `0,60` wajib dikalibrasi lagi pada tablet/ponsel Android nyata sebelum dipakai sebagai dasar payroll.
+
+Siapkan private Blob store dan tiga environment khusus absensi. `ATTENDANCE_EMBEDDING_KEY` harus berupa 32 byte acak dalam base64; credential ini divalidasi hanya saat fitur absensi digunakan.
+
+```powershell
+node -e "console.log(require('crypto').randomBytes(32).toString('base64'))"
+```
+
 ### Void dan refund
 
 Migration `add_sale_voids_and_refunds` menambahkan status transaksi serta ledger koreksi append-only tanpa mengubah snapshot struk asli.
@@ -167,6 +185,8 @@ Route utama:
 - `/kitchen` — antrean kitchen ticket outlet aktif.
 - `/shifts` — shift pribadi, shift terbuka, dan riwayat outlet aktif.
 - `/shifts/[shiftId]` — rincian rekonsiliasi, pembayaran, movement, transaksi, dan audit shift.
+- `/attendance` — pendaftaran wajah serta absensi masuk/pulang milik akun aktif.
+- `/attendance/manage` — review pengecualian, koreksi, profil wajah, dan ekspor untuk owner/manager.
 - `/transactions` — riwayat struk outlet aktif.
 - `/transactions/[saleId]` — rincian snapshot transaksi yang sudah dibayar.
 - `/settlements` — konfigurasi harga ojol, piutang platform, dan rekonsiliasi batch untuk owner/manager.
@@ -177,6 +197,7 @@ Route utama:
 - `/outlets` — directory outlet; owner mengelola, role lain melihat cakupan masing-masing.
 - `/staff` — roster staf; owner mengelola manager/kasir, manager mengelola kasir pada outlet tugasnya.
 - `/settings` — pengaturan operasional outlet aktif untuk owner/manager.
+- `/settings/attendance` — editor peta, koordinat, radius, dan status absensi outlet aktif.
 - `/select-outlet` — memilih konteks outlet aktif untuk session.
 - `/change-password` — penggantian wajib untuk password sementara.
 - `/design-system` — referensi UI khusus owner.

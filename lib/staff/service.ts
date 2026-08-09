@@ -6,6 +6,7 @@ import { hashPassword, verifyPassword } from "better-auth/crypto";
 import {
   AdminAuditAction,
   AdminAuditEntityType,
+  AttendanceAuditAction,
   OutletStatus,
   Prisma,
 } from "@/generated/prisma/client";
@@ -101,6 +102,10 @@ export async function updateStaff(input: UpdateStaffInput, actor: AdminActor) {
       const openShift = await transaction.cashShift.findUnique({ where: { openUserKey: current.id }, select: { outletId: true } });
       if (openShift && removedOutletIds.includes(openShift.outletId)) {
         throw new StaffError("CONFLICT", "Staf masih memiliki shift terbuka pada outlet yang akan dilepas.");
+      }
+      const openAttendance = await transaction.attendanceSession.findUnique({ where: { openUserKey: current.id }, select: { outletId: true } });
+      if (openAttendance && removedOutletIds.includes(openAttendance.outletId)) {
+        throw new StaffError("CONFLICT", "Staf masih memiliki absensi masuk aktif pada outlet yang akan dilepas.");
       }
     }
 
@@ -246,6 +251,8 @@ async function changeStaffStatus(target: StaffMutationTarget, actor: AdminActor,
     if (banned) {
       const openShift = await transaction.cashShift.findUnique({ where: { openUserKey: current.id }, select: { id: true } });
       if (openShift) throw new StaffError("CONFLICT", "Staf masih memiliki shift terbuka. Tutup shift sebelum menonaktifkan akun.");
+      const openAttendance = await transaction.attendanceSession.findUnique({ where: { openUserKey: current.id }, select: { id: true } });
+      if (openAttendance) throw new StaffError("CONFLICT", "Staf masih memiliki absensi masuk aktif. Selesaikan atau koreksi absensi sebelum menonaktifkan akun.");
     }
     const update = await transaction.user.updateMany({
       where: { id: current.id, updatedAt: current.updatedAt },
@@ -256,7 +263,14 @@ async function changeStaffStatus(target: StaffMutationTarget, actor: AdminActor,
       },
     });
     assertUpdateSucceeded(update.count);
-    if (banned) await transaction.session.deleteMany({ where: { userId: current.id } });
+    if (banned) {
+      await transaction.session.deleteMany({ where: { userId: current.id } });
+      const faceProfile = await transaction.faceProfile.findUnique({ where: { activeUserKey: current.id }, select: { id: true } });
+      if (faceProfile) {
+        await transaction.faceProfile.update({ where: { id: faceProfile.id }, data: { activeUserKey: null, embeddingCiphertext: null, embeddingIv: null, revokedAt: new Date() } });
+        await transaction.attendanceAuditLog.create({ data: { entityType: "FACE_PROFILE", entityId: faceProfile.id, action: AttendanceAuditAction.REVOKE, actorUserId: actor.id, actorEmail: actor.email, before: { userId: current.id }, after: { revokedByStaffDeactivation: true } } });
+      }
+    }
     const updated = await transaction.user.findUniqueOrThrow({ where: { id: current.id } });
     await writeAdminAudit(transaction, {
       entityType: AdminAuditEntityType.STAFF,

@@ -3,6 +3,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 const mocks = vi.hoisted(() => ({
   cashShiftFindFirst: vi.fn(),
   cashShiftFindUnique: vi.fn(),
+  attendanceSessionFindUnique: vi.fn(),
   outletFindFirst: vi.fn(),
   outletFindUnique: vi.fn(),
   sessionUpdate: vi.fn(),
@@ -24,6 +25,7 @@ describe("open shift administration guards", () => {
     mocks.transaction.mockImplementation(async (callback) => callback({
       outlet: { findFirst: mocks.outletFindFirst, findUnique: mocks.outletFindUnique },
       cashShift: { findFirst: mocks.cashShiftFindFirst, findUnique: mocks.cashShiftFindUnique },
+      attendanceSession: { findUnique: mocks.attendanceSessionFindUnique },
       session: { update: mocks.sessionUpdate },
       user: { findUnique: mocks.userFindUnique },
     }));
@@ -47,6 +49,14 @@ describe("open shift administration guards", () => {
     const updatedAt = new Date("2026-08-08T00:00:00.000Z");
     mocks.userFindUnique.mockResolvedValue({ id: "cashier-1", role: "cashier", banned: false, updatedAt, outletAssignments: [{ outletId: "outlet-1" }] });
     mocks.cashShiftFindUnique.mockResolvedValue({ id: "shift-1" });
+    await expect(deactivateStaff({ id: "cashier-1", expectedUpdatedAt: updatedAt.toISOString() }, owner)).rejects.toBeInstanceOf(StaffError);
+  });
+
+  it("blocks deactivating a staff member who still has an open attendance session", async () => {
+    const updatedAt = new Date("2026-08-08T00:00:00.000Z");
+    mocks.userFindUnique.mockResolvedValue({ id: "cashier-1", role: "cashier", banned: false, updatedAt, outletAssignments: [{ outletId: "outlet-1" }] });
+    mocks.cashShiftFindUnique.mockResolvedValue(null);
+    mocks.attendanceSessionFindUnique.mockResolvedValue({ id: "attendance-1" });
     await expect(deactivateStaff({ id: "cashier-1", expectedUpdatedAt: updatedAt.toISOString() }, owner)).rejects.toBeInstanceOf(StaffError);
   });
 });

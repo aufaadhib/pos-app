@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import {
   parseOwnerEnvironment,
+  parseAttendanceEnvironment,
   parseServerEnvironment,
 } from "@/lib/env-schema";
 
@@ -31,5 +32,16 @@ describe("environment validation", () => {
         INITIAL_OWNER_PASSWORD: "12345678901",
       }),
     ).toThrow();
+  });
+
+  it("accepts only a 32-byte base64 attendance encryption key", () => {
+    expect(parseAttendanceEnvironment({
+      ATTENDANCE_BLOB_READ_WRITE_TOKEN: "blob-token",
+      ATTENDANCE_EMBEDDING_KEY: Buffer.alloc(32, 7).toString("base64"),
+    }).ATTENDANCE_BLOB_READ_WRITE_TOKEN).toBe("blob-token");
+    expect(() => parseAttendanceEnvironment({
+      ATTENDANCE_BLOB_READ_WRITE_TOKEN: "blob-token",
+      ATTENDANCE_EMBEDDING_KEY: Buffer.alloc(16).toString("base64"),
+    })).toThrow();
   });
 });

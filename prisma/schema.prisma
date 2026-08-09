@@ -8,25 +8,31 @@ datasource db {
 }
 
 model User {
-  id                 String                 @id
-  name               String
-  email              String                 @unique
-  emailVerified      Boolean                @default(false)
-  image              String?
-  role               String?
-  banned             Boolean?               @default(false)
-  banReason          String?
-  banExpires         DateTime?
-  mustChangePassword Boolean                @default(false)
-  createdAt          DateTime               @default(now())
-  updatedAt          DateTime               @updatedAt
-  sessions           Session[]
-  accounts           Account[]
-  outletAssignments  UserOutletAssignment[]
-  openedCashShifts   CashShift[]            @relation("CashShiftOpenedBy")
-  closedCashShifts   CashShift[]            @relation("CashShiftClosedBy")
-  cashMovements      CashMovement[]         @relation("CashMovementActor")
-  cashShiftAuditLogs CashShiftAuditLog[]    @relation("CashShiftAuditActor")
+  id                      String                       @id
+  name                    String
+  email                   String                       @unique
+  emailVerified           Boolean                      @default(false)
+  image                   String?
+  role                    String?
+  banned                  Boolean?                     @default(false)
+  banReason               String?
+  banExpires              DateTime?
+  mustChangePassword      Boolean                      @default(false)
+  createdAt               DateTime                     @default(now())
+  updatedAt               DateTime                     @updatedAt
+  sessions                Session[]
+  accounts                Account[]
+  outletAssignments       UserOutletAssignment[]
+  openedCashShifts        CashShift[]                  @relation("CashShiftOpenedBy")
+  closedCashShifts        CashShift[]                  @relation("CashShiftClosedBy")
+  cashMovements           CashMovement[]               @relation("CashMovementActor")
+  cashShiftAuditLogs      CashShiftAuditLog[]          @relation("CashShiftAuditActor")
+  faceProfiles            FaceProfile[]
+  attendanceVerifications AttendanceVerification[]
+  attendanceAttempts      AttendanceAttempt[]
+  attendanceSessions      AttendanceSession[]
+  attendanceExceptions    AttendanceExceptionRequest[]
+  attendanceCorrections   AttendanceCorrection[]       @relation("AttendanceCorrectionActor")
 
   @@map("user")
 }
@@ -327,40 +333,261 @@ enum AdminAuditAction {
   ACTIVE_OUTLET_CHANGE
 }
 
+enum AttendanceKind {
+  CHECK_IN
+  CHECK_OUT
+}
+
+enum AttendanceVerificationStatus {
+  ACTIVE
+  VERIFIED
+  EXCEPTION_AVAILABLE
+  EXPIRED
+}
+
+enum AttendanceAttemptResult {
+  SUCCESS
+  FAILED
+}
+
+enum AttendanceFailureReason {
+  FACE_PROFILE_MISSING
+  FACE_MISMATCH
+  FACE_INVALID
+  LIVENESS_FAILED
+  CAMERA_UNAVAILABLE
+  LOCATION_UNAVAILABLE
+  LOCATION_INACCURATE
+  LOCATION_OUTSIDE
+  CHALLENGE_INVALID
+  CONFIGURATION_MISSING
+  ALREADY_CHECKED_IN
+  SESSION_MISSING
+  OUTLET_MISMATCH
+}
+
+enum AttendanceSessionStatus {
+  OPEN
+  CLOSED
+}
+
+enum AttendanceExceptionStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+enum AttendanceAuditAction {
+  ENROLL
+  REVOKE
+  CHECK_IN
+  CHECK_OUT
+  EXCEPTION_REQUEST
+  EXCEPTION_APPROVE
+  EXCEPTION_REJECT
+  CORRECT
+  SETTINGS_UPDATE
+  EVIDENCE_DELETE
+}
+
 model Outlet {
-  id                     String                        @id @default(cuid())
-  code                   String                        @unique
-  name                   String
-  normalizedName         String                        @unique
-  timezone               String                        @default("Asia/Jakarta")
-  addressLine            String?                       @db.VarChar(240)
-  provinceCode           String
-  provinceName           String
-  cityCode               String
-  cityName               String
-  taxRate                Decimal                       @default(0) @db.Decimal(5, 2)
-  serviceChargeRate      Decimal                       @default(0) @db.Decimal(5, 2)
-  pricesIncludeTax       Boolean                       @default(false)
-  openOrdersEnabled      Boolean                       @default(false)
-  receiptPaperSize       ReceiptPaperSize              @default(MM80)
-  receiptFooter          String                        @default("Terima kasih atas kunjungan Anda.") @db.VarChar(160)
-  status                 OutletStatus                  @default(ACTIVE)
-  archivedAt             DateTime?
-  createdAt              DateTime                      @default(now())
-  updatedAt              DateTime                      @updatedAt
-  assignments            UserOutletAssignment[]
-  sessions               Session[]
-  productOverrides       OutletProductOverride[]
-  variantOptionOverrides OutletVariantOptionOverride[]
-  sales                  Sale[]
-  receiptSequences       ReceiptSequence[]
-  deliveryChannels       OutletDeliveryChannel[]
-  cashShifts             CashShift[]
-  orders                 Order[]
-  kitchenTickets         KitchenTicket[]
+  id                      String                        @id @default(cuid())
+  code                    String                        @unique
+  name                    String
+  normalizedName          String                        @unique
+  timezone                String                        @default("Asia/Jakarta")
+  addressLine             String?                       @db.VarChar(240)
+  provinceCode            String
+  provinceName            String
+  cityCode                String
+  cityName                String
+  taxRate                 Decimal                       @default(0) @db.Decimal(5, 2)
+  serviceChargeRate       Decimal                       @default(0) @db.Decimal(5, 2)
+  pricesIncludeTax        Boolean                       @default(false)
+  openOrdersEnabled       Boolean                       @default(false)
+  receiptPaperSize        ReceiptPaperSize              @default(MM80)
+  receiptFooter           String                        @default("Terima kasih atas kunjungan Anda.") @db.VarChar(160)
+  attendanceEnabled       Boolean                       @default(false)
+  attendanceLatitude      Decimal?                      @db.Decimal(9, 6)
+  attendanceLongitude     Decimal?                      @db.Decimal(9, 6)
+  attendanceRadiusMeters  Int                           @default(100)
+  status                  OutletStatus                  @default(ACTIVE)
+  archivedAt              DateTime?
+  createdAt               DateTime                      @default(now())
+  updatedAt               DateTime                      @updatedAt
+  assignments             UserOutletAssignment[]
+  sessions                Session[]
+  productOverrides        OutletProductOverride[]
+  variantOptionOverrides  OutletVariantOptionOverride[]
+  sales                   Sale[]
+  receiptSequences        ReceiptSequence[]
+  deliveryChannels        OutletDeliveryChannel[]
+  cashShifts              CashShift[]
+  orders                  Order[]
+  kitchenTickets          KitchenTicket[]
+  attendanceVerifications AttendanceVerification[]
+  attendanceAttempts      AttendanceAttempt[]
+  attendanceSessions      AttendanceSession[]
 
   @@index([status, name])
   @@map("outlet")
+}
+
+model FaceProfile {
+  id                  String    @id @default(cuid())
+  userId              String
+  activeUserKey       String?   @unique
+  embeddingCiphertext Bytes?
+  embeddingIv         Bytes?
+  embeddingLength     Int       @default(1024)
+  modelVersion        String    @db.VarChar(80)
+  consentAt           DateTime
+  enrolledAt          DateTime  @default(now())
+  revokedAt           DateTime?
+  createdAt           DateTime  @default(now())
+  updatedAt           DateTime  @updatedAt
+  user                User      @relation(fields: [userId], references: [id], onDelete: Restrict)
+
+  @@index([userId, enrolledAt])
+  @@map("face_profile")
+}
+
+model AttendanceVerification {
+  id              String                       @id @default(cuid())
+  userId          String
+  outletId        String
+  kind            AttendanceKind
+  status          AttendanceVerificationStatus @default(ACTIVE)
+  nonceHash       String                       @unique @db.VarChar(64)
+  challengeAction String                       @db.VarChar(24)
+  attemptCount    Int                          @default(0)
+  expiresAt       DateTime
+  completedAt     DateTime?
+  createdAt       DateTime                     @default(now())
+  updatedAt       DateTime                     @updatedAt
+  user            User                         @relation(fields: [userId], references: [id], onDelete: Restrict)
+  outlet          Outlet                       @relation(fields: [outletId], references: [id], onDelete: Restrict)
+  attempts        AttendanceAttempt[]
+  exception       AttendanceExceptionRequest?
+
+  @@index([userId, status, expiresAt])
+  @@index([outletId, createdAt])
+  @@map("attendance_verification")
+}
+
+model AttendanceAttempt {
+  id                String                       @id @default(cuid())
+  verificationId    String
+  userId            String
+  outletId          String
+  kind              AttendanceKind
+  result            AttendanceAttemptResult
+  failureReason     AttendanceFailureReason?
+  similarity        Decimal?                     @db.Decimal(6, 5)
+  livenessPassed    Boolean
+  latitude          Decimal?                     @db.Decimal(9, 6)
+  longitude         Decimal?                     @db.Decimal(9, 6)
+  accuracyMeters    Decimal?                     @db.Decimal(8, 2)
+  distanceMeters    Decimal?                     @db.Decimal(10, 2)
+  evidencePath      String?                      @db.VarChar(500)
+  evidenceExpiresAt DateTime?
+  evidenceDeletedAt DateTime?
+  attemptedAt       DateTime                     @default(now())
+  idempotencyKey    String                       @unique @db.VarChar(80)
+  verification      AttendanceVerification       @relation(fields: [verificationId], references: [id], onDelete: Restrict)
+  user              User                         @relation(fields: [userId], references: [id], onDelete: Restrict)
+  outlet            Outlet                       @relation(fields: [outletId], references: [id], onDelete: Restrict)
+  checkInSession    AttendanceSession?           @relation("AttendanceCheckInAttempt")
+  checkOutSession   AttendanceSession?           @relation("AttendanceCheckOutAttempt")
+  exceptionRequests AttendanceExceptionRequest[]
+
+  @@index([userId, attemptedAt])
+  @@index([outletId, attemptedAt])
+  @@index([evidenceExpiresAt, evidenceDeletedAt])
+  @@map("attendance_attempt")
+}
+
+model AttendanceSession {
+  id                String                  @id @default(cuid())
+  userId            String
+  outletId          String
+  businessDate      DateTime                @db.Date
+  status            AttendanceSessionStatus @default(OPEN)
+  openUserKey       String?                 @unique
+  checkInAt         DateTime
+  checkInAttemptId  String                  @unique
+  checkOutAt        DateTime?
+  checkOutAttemptId String?                 @unique
+  createdAt         DateTime                @default(now())
+  updatedAt         DateTime                @updatedAt
+  user              User                    @relation(fields: [userId], references: [id], onDelete: Restrict)
+  outlet            Outlet                  @relation(fields: [outletId], references: [id], onDelete: Restrict)
+  checkInAttempt    AttendanceAttempt       @relation("AttendanceCheckInAttempt", fields: [checkInAttemptId], references: [id], onDelete: Restrict)
+  checkOutAttempt   AttendanceAttempt?      @relation("AttendanceCheckOutAttempt", fields: [checkOutAttemptId], references: [id], onDelete: Restrict)
+  corrections       AttendanceCorrection[]
+
+  @@index([userId, checkInAt])
+  @@index([outletId, businessDate])
+  @@map("attendance_session")
+}
+
+model AttendanceExceptionRequest {
+  id               String                    @id @default(cuid())
+  verificationId   String                    @unique
+  attemptId        String
+  userId           String
+  reason           String                    @db.VarChar(240)
+  status           AttendanceExceptionStatus @default(PENDING)
+  reviewedByUserId String?
+  reviewedByName   String?
+  reviewedByEmail  String?
+  reviewReason     String?                   @db.VarChar(240)
+  reviewedAt       DateTime?
+  createdSessionId String?
+  requestedAt      DateTime                  @default(now())
+  createdAt        DateTime                  @default(now())
+  updatedAt        DateTime                  @updatedAt
+  verification     AttendanceVerification    @relation(fields: [verificationId], references: [id], onDelete: Restrict)
+  attempt          AttendanceAttempt         @relation(fields: [attemptId], references: [id], onDelete: Restrict)
+  user             User                      @relation(fields: [userId], references: [id], onDelete: Restrict)
+
+  @@index([status, requestedAt])
+  @@index([userId, requestedAt])
+  @@map("attendance_exception_request")
+}
+
+model AttendanceCorrection {
+  id                  String            @id @default(cuid())
+  attendanceSessionId String
+  correctedCheckInAt  DateTime?
+  correctedCheckOutAt DateTime?
+  reason              String            @db.VarChar(240)
+  actorUserId         String
+  actorName           String
+  actorEmail          String
+  createdAt           DateTime          @default(now())
+  attendanceSession   AttendanceSession @relation(fields: [attendanceSessionId], references: [id], onDelete: Restrict)
+  actor               User              @relation("AttendanceCorrectionActor", fields: [actorUserId], references: [id], onDelete: Restrict)
+
+  @@index([attendanceSessionId, createdAt])
+  @@index([actorUserId, createdAt])
+  @@map("attendance_correction")
+}
+
+model AttendanceAuditLog {
+  id          String                @id @default(cuid())
+  entityType  String                @db.VarChar(40)
+  entityId    String
+  action      AttendanceAuditAction
+  actorUserId String
+  actorEmail  String
+  before      Json?
+  after       Json?
+  createdAt   DateTime              @default(now())
+
+  @@index([entityType, entityId, createdAt])
+  @@index([actorUserId, createdAt])
+  @@map("attendance_audit_log")
 }
 
 enum SaleOrderType {

@@ -1,0 +1,8 @@
+{
+  "crons": [
+    {
+      "path": "/api/cron/attendance-evidence-cleanup",
+      "schedule": "17 18 * * *"
+    }
+  ]
+}

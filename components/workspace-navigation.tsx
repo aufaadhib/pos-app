@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useState } from "react";
-import { BarChart3, BookOpen, ChefHat, HandCoins, House, Menu, Palette, ReceiptText, Settings2, ShoppingBasket, Store, Users, WalletCards } from "lucide-react";
+import { BarChart3, BookOpen, CalendarCheck2, ChefHat, HandCoins, House, Menu, Palette, ReceiptText, Settings2, ShoppingBasket, Store, Users, WalletCards } from "lucide-react";
 
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import type { AppRole } from "@/lib/auth/permissions";
@@ -14,6 +14,7 @@ const navigationItems = [
   { href: "/pos", label: "Kasir", route: "pos", icon: ShoppingBasket },
   { href: "/kitchen", label: "Dapur", route: "kitchen", icon: ChefHat },
   { href: "/shifts", label: "Shift", route: "shifts", icon: WalletCards },
+  { href: "/attendance", label: "Absensi", route: "attendance", icon: CalendarCheck2 },
   { href: "/transactions", label: "Transaksi", route: "transactions", icon: ReceiptText },
   { href: "/reports", label: "Laporan", route: "reports", icon: BarChart3 },
   { href: "/settlements", label: "Ojol & settlement", route: "settlements", icon: HandCoins },

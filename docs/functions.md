@@ -170,6 +170,35 @@ Dokumen ini mencatat function dan component function yang ditambahkan pada miles
 | `PrinterSettingsForm()` | Konfigurasi outlet | Form dan preview responsif | Mengelola ukuran/footer outlet, toggle perangkat, preview langsung, pending state, dan cetak contoh. |
 | `PrinterSettingsPage()`, `PrinterSettingsLoading()` | Session/outlet atau tanpa input | Halaman dynamic/skeleton | Melindungi route dengan permission dan menjaga bentuk form plus preview saat navigasi loading. |
 
+## Absensi karyawan
+
+| Function | Input | Output | Tujuan dan side effect |
+| --- | --- | --- | --- |
+| `parseAttendanceEnvironment()` | Object environment | Token Blob dan key AES tervalidasi | Memvalidasi credential absensi secara lazy; key wajib base64 32 byte dan tidak menjadi syarat startup fitur lain. |
+| `normalizeEmbedding()`, `averageEmbeddings()`, `faceSimilarity()` | Sampel/probe embedding | Template normal atau similarity | Menolak nilai non-finite, merata-ratakan tepat tiga sampel, serta menghitung cosine similarity tanpa menyimpan probe. |
+| `encryptEmbedding()`, `decryptEmbedding()` | Embedding dan key opsional | Ciphertext/IV atau embedding | Mengenkripsi template memakai AES-256-GCM beserta authentication tag dan menolak payload/key yang berubah. |
+| `createAttendanceNonce()`, `hashAttendanceNonce()` | Tidak ada atau nonce | Nonce acak atau hash SHA-256 | Membentuk challenge sekali pakai; database hanya menyimpan hash. |
+| `getSharedDevicePreference()`, `setSharedDevicePreference()`, `subscribeSharedDevicePreference()` | Boolean/callback browser | Preferensi, status simpan, atau cleanup | Menyimpan logout otomatis per browser, menyinkronkan tab, dan kembali nonaktif ketika local storage tidak tersedia. |
+| `distanceInMeters()`, `businessDateAt()` | Dua koordinat atau timestamp/timezone | Jarak meter atau tanggal bisnis | Menggunakan Haversine serta kalender lokal outlet tanpa menjadikan waktu browser sebagai sumber kebenaran. |
+| Schema attendance | Payload enrollment/challenge/verify/settings/review/correction/report | Input tervalidasi atau error | Membatasi embedding, koordinat, radius 50–500 m, alasan, timestamp koreksi, dan filter laporan pada trust boundary. |
+| `uploadAttendanceEvidence()`, `readAttendanceEvidence()`, `deleteAttendanceEvidence()` | JPEG/Path private | Path, stream, atau void | Memvalidasi JPEG maksimal 300 KB dan memakai Blob private tanpa mengekspos URL storage ke UI. |
+| `enrollFaceProfile()`, `revokeFaceProfile()` | Tiga sampel atau user target, actor | Profil atau void | Mengganti profil aktif secara atomik, mengenkripsi template, menghapus payload profil lama, memeriksa scope, dan menulis audit. |
+| `createAttendanceChallenge()` | Outlet, jenis, actor | Nonce/action 15 menit | Memeriksa assignment serta state sesi, lalu membuat atau merotasi challenge liveness satu kali pakai. |
+| `verifyAttendance()` | Probe, liveness, GPS, nonce, idempotency, JPEG, actor | Hasil attempt/sesi | Mengunggah bukti privat, memverifikasi akun `1:1`, akurasi, radius, dan nonce, lalu check-in/out dalam transaction serializable; retry aman melalui idempotency key. |
+| `requestAttendanceException()`, `reviewAttendanceException()` | Verification/alasan atau keputusan, actor | Request/review | Membuka permintaan setelah kegagalan ketiga, membatasi scope manager, menolak self-approval, dan memakai waktu attempt asli saat disetujui. |
+| `correctAttendanceSession()` | Session, timestamp efektif, alasan, actor | Correction | Menambahkan ledger koreksi dan audit tanpa menimpa waktu asli. |
+| `updateAttendanceSettings()` | Geofence tervalidasi dan actor | `void` | Memperbarui outlet aktif/assigned dan audit before/after dalam satu transaction. |
+| `cleanupExpiredAttendanceEvidence()` | Batas batch | Jumlah scan/hapus | Menghapus foto kedaluwarsa secara best effort, menandai record sukses, dan menulis audit sistem. |
+| `getAttendanceHome()`, `getAttendanceManagement()`, `getAttendanceSettings()` | User/outlet/actor/page | DTO serializable | Membaca profil, outlet tugas, sesi, exception, staf, serta geofence secara fresh dan bounded. |
+| `getAttendanceEvidencePath()`, `getAttendanceExportRows()` | Attempt/filter dan actor | Path/rows atau penolakan | Mengulang ownership/assignment dan membatasi ekspor maksimal 10.000 baris di Route Handler. |
+| Attendance Route Handlers | Request enrollment/challenge/verify/evidence/export/cron | JSON, stream, atau CSV | Mengulang session, permission, validasi, no-store, scope, dan secret cron pada server. |
+| Attendance Server Actions | Input exception/review/correction/revoke/settings | `AttendanceActionState` | Mengulang permission dan actor dari session, memanggil domain service, lalu me-revalidate route terdampak. |
+| `AttendanceClock()` | Akun dan DTO absensi | UI kamera/lokasi | Memuat Human secara lazy dengan WebGL/WASM fallback, mengelola tiga sampel, liveness, geolocation, bukti JPEG, pengecualian, dan logout tablet bersama. |
+| `AttendanceMap()`, `MapViewport()` | Koordinat/radius dan callback | Peta editor | Menyinkronkan marker pusat, handle radius, input luar, dan viewport dengan target drag sentuh serta attribution OSM. |
+| `AttendanceSettingsForm()` | Konfigurasi outlet | Form/peta responsif | Menyatukan lokasi terkini, koordinat manual, radius, status aktif, pending, serta feedback simpan. |
+| `AttendanceManagement()` | Queue, sessions, profiles, outlet | Workspace review/report | Menyediakan kartu mobile, tabel desktop, bukti privat, koreksi, revoke, dan filter ekspor tanpa overflow horizontal. |
+| Attendance pages/loading | Session, active outlet, search params | Route dynamic/skeleton | Melindungi tiga route dengan permission dan menjaga bentuk final pada mobile, tablet, serta desktop. |
+
 ## Void dan refund transaksi
 
 | Function | Input | Output | Tujuan dan side effect |

@@ -15,6 +15,7 @@ export const permissionStatements = {
   settlement: ["view", "reconcile", "reverse"],
   report: ["view", "export"],
   outlet: ["view", "manage"],
+  attendance: ["clock", "viewOwn", "review", "correct", "viewReport", "export", "manage"],
   profile: ["view", "update"],
 } as const;
 
@@ -35,6 +36,7 @@ export const ownerRole = accessControl.newRole({
   settlement: ["view", "reconcile", "reverse"],
   report: ["view", "export"],
   outlet: ["view", "manage"],
+  attendance: ["clock", "viewOwn", "review", "correct", "viewReport", "export", "manage"],
   profile: ["view", "update"],
 });
 
@@ -53,6 +55,7 @@ export const managerRole = accessControl.newRole({
   settlement: ["view", "reconcile"],
   report: ["view", "export"],
   outlet: ["view"],
+  attendance: ["clock", "viewOwn", "review", "correct", "viewReport", "export", "manage"],
   profile: ["view", "update"],
 });
 
@@ -71,6 +74,7 @@ export const cashierRole = accessControl.newRole({
   settlement: [],
   report: [],
   outlet: ["view"],
+  attendance: ["clock", "viewOwn"],
   profile: ["view", "update"],
 });
 

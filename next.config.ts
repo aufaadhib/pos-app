@@ -24,6 +24,9 @@ const nextConfig: NextConfig = {
   },
   turbopack: {
     root: process.cwd(),
+    resolveAlias: {
+      "@vladmandic/human": "./node_modules/@vladmandic/human/dist/human.esm.js",
+    },
   },
 };
 

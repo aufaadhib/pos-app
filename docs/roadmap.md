@@ -46,8 +46,9 @@ Hanya satu milestone utama yang sebaiknya berstatus `In Progress` agar perubahan
 | 4 | Stok, resep, waste, dan HPP | Deferred | Proses stok usaha perlu dibakukan | Ditunda agar aplikasi tidak memaksakan inventory restoran yang terlalu rinci untuk usaha sate |
 | 5 | Laporan operasional dan keuangan | Completed | Shift, refund, transaksi, settlement | Owner dan manager dapat membaca penjualan, kas, koreksi, serta performa outlet |
 | 6 | Diskon, promo, split payment, dan pelanggan | Planned | Refund dan laporan dasar | Metode pembayaran serta retensi pelanggan menjadi lebih fleksibel |
-| 7 | Printer struk dan Kitchen Display System | In Progress | Open order | Browser printing pelanggan selesai; perangkat dapur dan integrasi printer masih menunggu kebutuhan nyata |
+| 7 | Printer struk dan Kitchen Display System | Deferred | Open order | Browser printing pelanggan selesai; perangkat dapur dan integrasi printer menunggu pembelian serta pengujian perangkat |
 | 8 | Integrasi platform eksternal | Planned | Order, settlement, dan laporan stabil | Input manual dapat dikurangi melalui impor atau koneksi resmi |
+| 9 | Absensi karyawan berbasis wajah dan lokasi | In Progress | Authentication, staf, outlet, RBAC, dan audit | Implementasi web selesai; aktivasi menunggu migration deployment dan pilot perangkat Android nyata |
 
 ## Milestone 1 — Shift kasir dan tutup kas
 
@@ -68,7 +69,7 @@ Mengelompokkan transaksi dan pergerakan uang berdasarkan shift aktif sehingga sa
 
 ### Belum termasuk
 
-- Absensi, payroll, jadwal kerja, dan perhitungan lembur.
+- Absensi dipindahkan ke Milestone 9; payroll, jadwal kerja, dan perhitungan lembur tetap belum direncanakan.
 - Integrasi cash drawer atau mesin penghitung uang.
 - Persetujuan selisih berdasarkan nominal otomatis sebelum kebutuhan bisnis ditentukan.
 - Tidak ada lagi; refund tunai dan non-tunai sudah dikerjakan pada milestone berikutnya.
@@ -211,7 +212,7 @@ Status: `Deferred`. Operasional usaha sate saat ini belum membutuhkan pencatatan
 
 - Konfigurasi outlet, permission `settings.manage`, active-outlet scope, transaction, dan audit before/after sudah diterapkan.
 - Browser tetap menentukan printer fisik, jumlah salinan, dan orientasi.
-- Milestone tetap `In Progress` karena printer dapur, KDS perangkat penuh, ESC/POS, USB/LAN/Bluetooth, dan print bridge belum dikerjakan.
+- Milestone berstatus `Deferred` karena printer dapur, KDS perangkat penuh, ESC/POS, USB/LAN/Bluetooth, dan print bridge menunggu pembelian serta pengujian perangkat nyata.
 
 ### Rencana 7B — printer langsung dari web
 
@@ -231,7 +232,7 @@ Integrasi harus dikembangkan bertahap. Jangan menjanjikan API langsung sebelum a
 | GrabFood | Impor CSV settlement/order jika format tersedia | API/webhook resmi | Planned | Akses merchant/partner dan dokumentasi resmi |
 | ShopeeFood | Impor CSV settlement/order jika format tersedia | API/webhook resmi | Planned | Akses merchant/partner dan dokumentasi resmi |
 | Payment gateway/QRIS | Pencatatan referensi manual | Create payment, callback, reconciliation | Planned | Provider dipilih dan webhook sandbox tersedia |
-| Printer struk | Browser print | ESC/POS lokal atau print bridge | In Progress | Browser print selesai; model printer dan topologi perangkat belum diketahui |
+| Printer struk | Browser print | ESC/POS lokal atau print bridge | Deferred | Browser print selesai; EPPOS RPP02 dan topologi Bluetooth belum diuji pada Android tablet |
 | Akuntansi | Ekspor CSV terstruktur | API jurnal otomatis | Planned | Target software dan mapping chart of accounts |
 
 ### Aturan wajib integrasi
@@ -255,6 +256,81 @@ Integrasi harus dikembangkan bertahap. Jangan menjanjikan API langsung sebelum a
 - [ ] Strategi idempotency, retry, rate limit, dan observability ditentukan.
 - [ ] Retention, privasi, serta permission data disetujui.
 - [ ] Acceptance test dan prosedur rollback tersedia.
+
+## Milestone 9 — Absensi karyawan berbasis wajah dan lokasi
+
+Status: `In Progress`. Implementasi web, schema, migration, RBAC, verifikasi `1:1`, geofence, pengecualian, koreksi, laporan, retensi, UI responsif, test, dan production build sudah tersedia. Status baru menjadi `Completed` setelah migration diterapkan pada environment tujuan serta pilot kamera/GPS pada Android tablet dan ponsel mengalibrasi threshold nyata.
+
+### Status implementasi
+
+- `/attendance`, `/attendance/manage`, dan `/settings/attendance` sudah tersedia sebagai halaman dynamic dengan skeleton responsif.
+- Enrollment tiga sampel, template AES-256-GCM, nonce sekali pakai, similarity `0,60`, liveness ringan, geofence, idempotency, dan sesi masuk/pulang dijalankan di server sesuai scope akun/outlet.
+- Peta OSM menyinkronkan marker pusat, handle radius 44 px, lokasi perangkat, serta input koordinat/radius manual.
+- Foto JPEG maksimal 300 KB disimpan privat selama 30 hari dan dihapus melalui Vercel Cron; akses bukti selalu melalui Route Handler terotorisasi.
+- Pengecualian setelah tiga kegagalan, larangan self-approval, koreksi append-only, revoke profile, CSV, dan pembersihan profil saat staf dinonaktifkan sudah diterapkan.
+- Prisma validate/generate, Next typegen, seluruh test, lint, typecheck, dan production build lulus. Migration production tetap manual.
+- Tersisa sebelum `Completed`: konfigurasi secret/store, `prisma migrate deploy`, serta pilot Android nyata untuk izin kamera/GPS, performa WebGL/WASM, kondisi cahaya, false accept/reject, dan threshold.
+
+### Tujuan
+
+Mencatat waktu masuk dan pulang staf dengan bukti wajah, lokasi outlet, waktu server, serta jalur pengecualian yang dapat diaudit.
+
+### Cakupan MVP
+
+- Absensi dapat dibuka dari tablet atau ponsel tanpa membuat aplikasi native terpisah, tetapi setiap staf wajib menggunakan akun Better Auth miliknya sendiri.
+- Semua perangkat memakai verifikasi `1:1`: wajah hanya dibandingkan dengan profil wajah akun yang sedang login, bukan dicari dari seluruh staf outlet.
+- Jika staf ditugaskan ke beberapa outlet, staf memilih outlet tujuan dari daftar penugasannya sebelum kamera dan validasi lokasi dijalankan.
+- Tablet bersama tidak memiliki session khusus; staf wajib login dan logout akun sendiri, sedangkan layar absensi selalu menampilkan nama akun sebelum kamera dibuka untuk mencegah salah akun.
+- Pendaftaran wajah dilakukan sendiri melalui session akun aktif dan langsung dapat digunakan; owner/manager dapat membatalkan profil serta mewajibkan pendaftaran ulang.
+- Model `@vladmandic/human` dimuat secara lazy hanya pada layar absensi, memakai WebGL dengan WASM sebagai fallback.
+- Liveness ringan menggunakan challenge acak seperti berkedip atau menoleh, nonce sekali pakai, dan masa berlaku singkat. Pendekatan browser-only tidak dianggap sebagai perlindungan spoofing tingkat tinggi.
+- Setiap percobaan menyimpan akun pelaksana, hasil pengenalan, foto bukti privat, koordinat, akurasi GPS, jarak dari outlet, dan waktu server.
+- Outlet memiliki koordinat serta radius geofence yang dapat diatur 50–500 meter dengan default 100 meter; pembacaan GPS dengan akurasi di atas 100 meter ditolak.
+- Pengaturan geofence memakai peta interaktif yang menampilkan marker pusat outlet dan lingkaran cakupan sesuai radius tersimpan.
+- Owner/manager dapat memakai lokasi perangkat saat ini, menggeser marker pusat, memperbesar/memperkecil lingkaran melalui handle sentuh, atau mengetik radius dalam meter; peta dan input selalu tersinkron dua arah.
+- Setelah tiga kegagalan dalam satu sesi 15 menit, staf dapat mengirim permintaan pengecualian dengan alasan untuk disetujui atau ditolak.
+- Owner dapat meninjau seluruh outlet; manager hanya staf/outlet dalam cakupannya dan tidak boleh menyetujui permintaannya sendiri.
+- Foto bukti dihapus otomatis setelah 30 hari. Template wajah dienkripsi dan dihapus ketika profil dibatalkan atau staf dinonaktifkan.
+
+### Interface dan data yang direncanakan
+
+- Tambahkan konfigurasi `attendanceEnabled`, latitude, longitude, dan radius pada `Outlet` melalui migration versioned.
+- Tambahkan profil wajah terenkripsi dan berversi model, percobaan verifikasi, sesi absensi, serta permintaan pengecualian.
+- Batasi satu sesi absensi terbuka per staf secara global; check-out normal harus dilakukan pada outlet check-in yang sama.
+- Waktu server menjadi sumber kebenaran dan tanggal bisnis mengikuti zona waktu outlet.
+- Tambahkan permission terpusat untuk clock-in/out, melihat absensi sendiri, review pengecualian, pengaturan outlet, serta laporan absensi.
+- Rencanakan halaman `/attendance`, `/attendance/manage`, dan `/settings/attendance` dengan state akun aktif, kamera, lokasi, loading, error, izin ditolak, fallback pengecualian, serta editor peta geofence.
+- Route Handler melayani challenge dan verifikasi wajah dari session akun aktif; Server Action menangani enrollment, pengaturan, review, dan koreksi internal yang dilindungi session/permission.
+- Semua event penting memakai idempotency key, transaction, dan audit trail. Koreksi tidak menimpa catatan asal.
+
+### Keputusan pencocokan dan keamanan
+
+- Embedding probe dibuat di browser, tetapi pencocokan dengan template terenkripsi dan validasi geofence tetap dilakukan di server.
+- Threshold awal similarity verifikasi `1:1` adalah `0,60`. Nilai disimpan bersama versi model dan wajib dikalibrasi pada perangkat nyata sebelum rilis.
+- Server selalu mengambil template dari user ID session terverifikasi dan menolak probe wajah yang tidak cocok dengan akun tersebut.
+- Editor peta dimuat dinamis sebagai Client Component kecil. Tombol “Gunakan lokasi saya” meminta geolocation hanya saat ditekan; perubahan marker, handle radius, dan input angka belum mengubah database sampai form disimpan.
+- Marker dan lingkaran otomatis difokuskan agar seluruh radius terlihat. Input radius memakai satuan meter, dibatasi 50–500, dan menyediakan alternatif keyboard ketika drag peta tidak dapat digunakan.
+- Foto bukti berada di object storage privat dengan akses terotorisasi; tidak memakai URL publik katalog.
+- Enrollment menampilkan persetujuan penggunaan data wajah dan kebijakan retensi sebelum kamera dibuka.
+- Absensi membutuhkan koneksi internet karena challenge, waktu, pencocokan, geofence, dan idempotency harus diverifikasi server.
+
+### Belum termasuk
+
+- Jadwal/roster kerja, status terlambat atau pulang cepat, istirahat, lembur, cuti, payroll, dan perhitungan gaji.
+- Mode offline, aplikasi Android native, device attestation, dan jaminan anti-spoof setara layanan liveness khusus.
+- Pelacakan lokasi terus-menerus; koordinat hanya diminta ketika enrollment atau absensi dijalankan.
+
+### Kriteria selesai
+
+- Check-in/check-out valid menghasilkan satu sesi yang konsisten meskipun request dikirim ulang atau bersamaan.
+- Wajah yang tidak sesuai dengan akun, foto statis, nonce replay/kedaluwarsa, lokasi di luar radius, serta GPS tidak akurat ditolak dan tercatat aman.
+- Peta menginisialisasi koordinat tersimpan atau lokasi perangkat, menyinkronkan drag/input radius tanpa loop, membatasi nilai 50–500 meter, dan tetap dapat dioperasikan dengan sentuhan maupun keyboard.
+- Izin lokasi ditolak, lokasi tidak akurat, peta gagal dimuat, dan outlet belum memiliki koordinat menampilkan petunjuk pemulihan tanpa menghilangkan input manual.
+- Kegagalan ketiga membuka pengecualian; approval memakai waktu percobaan asli, menyimpan reviewer/alasan, dan menolak self-approval.
+- Profil wajah, bukti foto, session akun, permission, outlet assignment, penghapusan 30 hari, dan pencabutan staf diuji.
+- Pilot pada Android tablet dan Android phone membuktikan login akun sendiri, verifikasi `1:1`, serta model/fallback dapat digunakan tanpa menghambat navigasi aplikasi lain.
+- Loading, camera/location permission, empty, success, failure, dan review state dapat digunakan pada mobile, tablet, serta desktop tanpa overflow horizontal.
+- README dan dokumentasi fungsi baru diperbarui hanya setelah implementasi selesai dan milestone siap ditandai `Completed`.
 
 ## Definition of Done setiap milestone
 
@@ -291,6 +367,9 @@ Integrasi harus dikembangkan bertahap. Jangan menjanjikan API langsung sebelum a
 | 9 Agustus 2026 | Open order dan kitchen ticket selesai serta tervalidasi live | E2E membuktikan save/send, delta catatan, pembatalan, meja unik, konflik dua sesi, status dapur, lintas shift, dan layout responsif |
 | 9 Agustus 2026 | Browser printing dipilih sebagai fondasi printer struk | Aman diuji tanpa model printer tertentu; ESC/POS menunggu model serta koneksi perangkat, sedangkan KDS menunggu alur dapur nyata |
 | 9 Agustus 2026 | Printer langsung dari web direncanakan sebagai Milestone 7B | Target Android tablet dan EPPOS RPP02 58 mm; profil Bluetooth serta dukungan browser harus diuji sebelum memilih Web Bluetooth, aplikasi pendamping, atau print bridge |
+| 9 Agustus 2026 | Absensi wajah dan geofence direncanakan sebagai Milestone 9 | Setiap staf memakai akun sendiri dan verifikasi wajah `1:1` pada tablet atau ponsel; geofence default 100 meter, pengecualian setelah tiga kegagalan, serta retensi foto 30 hari |
+| 9 Agustus 2026 | Geofence dikonfigurasi melalui peta dan input radius dua arah | Owner/manager dapat melihat cakupan nyata, menggeser pusat, serta mengubah radius lewat drag atau angka tanpa menebak koordinat mentah |
+| 9 Agustus 2026 | Milestone 7 ditunda dan Milestone 9 menjadi aktif | Printer Bluetooth menunggu perangkat EPPOS RPP02; absensi web selesai di source tetapi tetap `In Progress` sampai migration deployment dan pilot Android nyata lulus |
 
 ## Cara memperbarui roadmap
 
