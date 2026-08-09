@@ -49,4 +49,29 @@ describe("workspace navigation", () => {
     view.rerender(<WorkspaceNavigation canManageStaff={false} canViewDesignSystem={false} role="cashier" />);
     expect(screen.queryByRole("link", { name: "Laporan" })).not.toBeInTheDocument();
   });
+
+  it("opens all role-allowed secondary routes from the mobile more menu", async () => {
+    const user = userEvent.setup();
+    render(<WorkspaceNavigation canManageStaff canViewDesignSystem role="owner" mobile />);
+
+    expect(screen.queryByRole("link", { name: "Transaksi" })).not.toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Lainnya" }));
+
+    const menu = screen.getByRole("navigation", { name: "Menu lainnya" });
+    expect(menu).toBeVisible();
+    expect(screen.getByRole("link", { name: "Transaksi" })).toBeVisible();
+    expect(screen.getByRole("link", { name: "Laporan" })).toBeVisible();
+    expect(screen.getByRole("link", { name: "Pengaturan" })).toBeVisible();
+  });
+
+  it("keeps restricted secondary routes out of the cashier mobile menu", async () => {
+    const user = userEvent.setup();
+    render(<WorkspaceNavigation canManageStaff={false} canViewDesignSystem={false} role="cashier" mobile />);
+    await user.click(screen.getByRole("button", { name: "Lainnya" }));
+
+    expect(screen.getByRole("link", { name: "Transaksi" })).toBeVisible();
+    expect(screen.getByRole("link", { name: "Katalog" })).toBeVisible();
+    expect(screen.queryByRole("link", { name: "Laporan" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: "Pengaturan" })).not.toBeInTheDocument();
+  });
 });
