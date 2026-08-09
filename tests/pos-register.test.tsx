@@ -82,6 +82,18 @@ describe("POS register layout", () => {
     expect(screen.getAllByRole("article")).toHaveLength(1);
   });
 
+  it("keeps the mobile cart dialog content-sized with an inline close action", async () => {
+    const user = userEvent.setup();
+    render(<PosRegister menu={menu} />);
+
+    await user.click(screen.getByRole("button", { name: "Tambah Kopi Susu ke pesanan" }));
+    await user.click(screen.getByRole("button", { name: /Buka pesanan, 1 item/ }));
+
+    const dialog = screen.getByRole("dialog", { name: "Pesanan saat ini" });
+    expect(dialog).toHaveClass("bottom-auto", "max-h-[calc(100svh-2rem)]", "overflow-hidden");
+    expect(within(dialog).getByRole("button", { name: "Tutup rincian pesanan" })).toBeVisible();
+  });
+
   it("edits and clears a new cart item note", async () => {
     const user = userEvent.setup();
     render(<PosRegister menu={menu} />);
