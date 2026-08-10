@@ -284,6 +284,22 @@
   }
 }
 
+@supports (-webkit-touch-callout: none) {
+  .ios-date-input {
+    display: block;
+    inline-size: 100%;
+    min-inline-size: 0;
+    max-inline-size: 100%;
+    appearance: none;
+    -webkit-appearance: none;
+  }
+
+  .ios-date-input::-webkit-date-and-time-value {
+    min-inline-size: 0;
+    text-align: left;
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
   *,
   *::before,

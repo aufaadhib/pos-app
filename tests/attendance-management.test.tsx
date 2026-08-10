@@ -33,6 +33,8 @@ describe("attendance management", () => {
       timezone="Asia/Jayapura"
     />);
 
+    expect(screen.getByLabelText("Dari")).toHaveClass("ios-date-input");
+    expect(screen.getByLabelText("Sampai")).toHaveClass("ios-date-input");
     expect(screen.getAllByText(/21\.30 WIT/).length).toBeGreaterThan(0);
     for (const link of screen.getAllByRole("button", { name: "Foto masuk" })) {
       expect(link).toHaveAttribute("href", "/api/attendance/evidence/attempt-in");
