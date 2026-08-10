@@ -23,6 +23,12 @@ type AttendanceOutlet = { id: string; code: string; name: string; attendanceEnab
 type RecentSession = { id: string; status: "OPEN" | "CLOSED"; checkInAt: string; checkOutAt: string | null; outlet: { code: string; name: string; timezone: string }; correction: { reason: string } | null };
 type HumanInstance = { load: () => Promise<unknown>; detect: (input: HTMLVideoElement) => Promise<{ face: Array<{ embedding?: number[]; real?: number; live?: number }>; gesture: Array<{ gesture: string }> }> };
 
+const enrollmentSteps = [
+  "Hadapkan wajah lurus ke kamera dan tahan sebentar.",
+  "Arahkan wajah sedikit ke kiri dan tahan sebentar.",
+  "Arahkan wajah sedikit ke kanan dan tahan sebentar.",
+] as const;
+
 /** Runs enrollment and 1:1 attendance for the signed-in account with optional shared-device logout. */
 export function AttendanceClock({ user, outlets, profile, openSession, recentSessions }: {
   user: { name: string; email: string };
@@ -35,11 +41,13 @@ export function AttendanceClock({ user, outlets, profile, openSession, recentSes
   const videoRef = useRef<HTMLVideoElement>(null);
   const streamRef = useRef<MediaStream | null>(null);
   const humanRef = useRef<HumanInstance | null>(null);
+  const enrollmentRunRef = useRef(0);
   const [selectedOutletId, setSelectedOutletId] = useState(openSession?.outlet.id ?? outlets[0]?.id ?? "");
   const [dialogMode, setDialogMode] = useState<"enroll" | "verify" | null>(null);
   const [cameraStatus, setCameraStatus] = useState<"idle" | "loading" | "ready" | "error">("idle");
   const [consent, setConsent] = useState(false);
-  const [samples, setSamples] = useState<number[][]>([]);
+  const [enrollmentProgress, setEnrollmentProgress] = useState(0);
+  const [enrollmentMessage, setEnrollmentMessage] = useState("Centang persetujuan untuk memulai pengambilan otomatis.");
   const [challenge, setChallenge] = useState<{ verificationId: string; nonce: string; action: AttendanceChallengeAction; actionLabel: string } | null>(null);
   const [exceptionReason, setExceptionReason] = useState("");
   const [exceptionAvailable, setExceptionAvailable] = useState(false);
@@ -60,7 +68,9 @@ export function AttendanceClock({ user, outlets, profile, openSession, recentSes
   }
 
   async function openEnrollment() {
-    setSamples([]);
+    enrollmentRunRef.current += 1;
+    setEnrollmentProgress(0);
+    setEnrollmentMessage("Centang persetujuan untuk memulai pengambilan otomatis.");
     setConsent(false);
     setDialogMode("enroll");
     await startCamera();
@@ -106,40 +116,91 @@ export function AttendanceClock({ user, outlets, profile, openSession, recentSes
     }
   }
 
-  function closeDialog() {
+  const closeDialog = useCallback(() => {
+    enrollmentRunRef.current += 1;
     streamRef.current?.getTracks().forEach((track) => track.stop());
     streamRef.current = null;
     if (videoRef.current) videoRef.current.srcObject = null;
     setDialogMode(null);
     setCameraStatus("idle");
     setChallenge(null);
-  }
+  }, []);
 
-  function captureEnrollmentSample() {
-    startTransition(async () => {
+  useEffect(() => {
+    if (dialogMode !== "enroll" || cameraStatus !== "ready" || !consent) return;
+    const runId = ++enrollmentRunRef.current;
+    const cancelled = () => enrollmentRunRef.current !== runId;
+
+    async function enrollAutomatically() {
+      const capturedSamples: number[][] = [];
+      for (let step = 0; step < enrollmentSteps.length; step += 1) {
+        while (!cancelled() && capturedSamples.length === step) {
+          setEnrollmentMessage(enrollmentSteps[step]);
+          await wait(900);
+          if (cancelled()) return;
+          try {
+            const detection = await detectFace(humanRef.current, videoRef.current);
+            if (!enrollmentPoseMatches(step, detection.gestures)) {
+              setEnrollmentMessage(`${enrollmentSteps[step]} Posisi belum sesuai.`);
+              await wait(600);
+              continue;
+            }
+            if (detection.real < 0.5 || detection.live < 0.5) {
+              setEnrollmentMessage("Pastikan wajah asli terlihat jelas dan pencahayaan cukup.");
+              await wait(600);
+              continue;
+            }
+            setEnrollmentMessage(`${enrollmentSteps[step]} Tahan posisi…`);
+            await wait(350);
+            if (cancelled()) return;
+            const stableDetection = await detectFace(humanRef.current, videoRef.current);
+            if (!enrollmentPoseMatches(step, stableDetection.gestures) || stableDetection.real < 0.5 || stableDetection.live < 0.5) {
+              setEnrollmentMessage("Posisi berubah. Sejajarkan kembali wajah dan tahan sebentar.");
+              await wait(600);
+              continue;
+            }
+            capturedSamples.push(stableDetection.embedding);
+            setEnrollmentProgress(capturedSamples.length);
+            setEnrollmentMessage(`Sampel ${capturedSamples.length} dari 3 berhasil diambil.`);
+            await wait(700);
+          } catch (error) {
+            setEnrollmentMessage(error instanceof Error ? error.message : "Wajah belum terbaca. Tetap berada di dalam sketsa.");
+            await wait(700);
+          }
+        }
+      }
+      if (cancelled()) return;
+      setEnrollmentMessage("Tiga sampel lengkap. Menyimpan profil wajah…");
       try {
-        if (!consent) throw new Error("Setujui penggunaan template wajah terlebih dahulu.");
-        let nextSamples = samples.slice(0, 3);
-        if (nextSamples.length !== samples.length) setSamples(nextSamples);
-        if (nextSamples.length < 3) {
-          const detection = await detectFace(humanRef.current, videoRef.current);
-          nextSamples = [...nextSamples, detection.embedding].slice(0, 3);
-          setSamples(nextSamples);
-        }
-        if (nextSamples.length < 3) {
-          toast.success(`Sampel ${nextSamples.length} dari 3 tersimpan. Ubah sedikit sudut wajah.`);
-          return;
-        }
-        const response = await fetch("/api/attendance/enroll", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ samples: nextSamples, modelVersion: "human-3.3.6", consent: true }) });
+        const response = await fetch("/api/attendance/enroll", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ samples: capturedSamples, modelVersion: "human-3.3.6", consent: true }) });
         const data = await response.json();
         if (!response.ok) throw new Error(data.message);
+        if (cancelled()) return;
         toast.success("Wajah akun berhasil didaftarkan.");
         closeDialog();
         router.refresh();
       } catch (error) {
+        if (cancelled()) return;
+        setConsent(false);
+        setEnrollmentProgress(0);
+        setEnrollmentMessage("Profil belum tersimpan. Centang kembali persetujuan untuk mencoba lagi.");
         toast.error(error instanceof Error ? error.message : "Sampel wajah belum dapat disimpan.");
       }
-    });
+    }
+
+    void enrollAutomatically();
+    return () => {
+      if (enrollmentRunRef.current === runId) enrollmentRunRef.current += 1;
+    };
+  }, [cameraStatus, closeDialog, consent, dialogMode, router]);
+
+  function changeConsent(value: boolean) {
+    setConsent(value);
+    if (!value) {
+      enrollmentRunRef.current += 1;
+      setEnrollmentProgress(0);
+      setEnrollmentMessage("Centang persetujuan untuk memulai pengambilan otomatis.");
+    }
   }
 
   function verify() {
@@ -220,7 +281,7 @@ export function AttendanceClock({ user, outlets, profile, openSession, recentSes
       <div className="mt-6"><h3 className="font-semibold">Riwayat terakhir</h3><div className="mt-3 grid gap-2">{recentSessions.length ? recentSessions.slice(0, 5).map((session) => <div className="rounded-lg border p-3 text-sm" key={session.id}><div className="flex items-center justify-between gap-2"><span className="font-semibold">{session.outlet.code}</span><Badge variant="outline">{session.status === "OPEN" ? "Terbuka" : "Selesai"}</Badge></div><p className="mt-1 text-muted-foreground">{formatAttendanceTime(session.checkInAt)} — {session.checkOutAt ? formatAttendanceTime(session.checkOutAt) : "Belum pulang"}</p>{session.correction && <p className="mt-1 text-xs text-primary">Dikoreksi: {session.correction.reason}</p>}</div>) : <p className="text-sm text-muted-foreground">Belum ada riwayat absensi.</p>}</div></div>
     </aside>
 
-    <Dialog onOpenChange={(open) => { if (!open) closeDialog(); }} open={dialogMode !== null}><DialogContent className="sm:w-[min(34rem,calc(100vw-3rem))]"><DialogHeader><DialogTitle>{dialogMode === "enroll" ? "Daftarkan wajah akun" : openSession ? "Verifikasi absensi pulang" : "Verifikasi absensi masuk"}</DialogTitle><DialogDescription>{dialogMode === "enroll" ? "Ambil tiga sampel wajah terang dan tajam. Template disimpan terenkripsi." : challenge?.actionLabel ?? "Menyiapkan challenge liveness…"}</DialogDescription></DialogHeader>
+    <Dialog onOpenChange={(open) => { if (!open) closeDialog(); }} open={dialogMode !== null}><DialogContent className="sm:w-[min(34rem,calc(100vw-3rem))]"><DialogHeader><DialogTitle>{dialogMode === "enroll" ? "Daftarkan wajah akun" : openSession ? "Verifikasi absensi pulang" : "Verifikasi absensi masuk"}</DialogTitle><DialogDescription>{dialogMode === "enroll" ? "Setelah disetujui, tiga sampel diambil otomatis dan disimpan sebagai template terenkripsi." : challenge?.actionLabel ?? "Menyiapkan challenge liveness…"}</DialogDescription></DialogHeader>
       <figure className="mx-auto grid w-full max-w-[19rem] gap-3">
         <div className="relative aspect-[3/4] w-full overflow-hidden rounded-2xl bg-black ring-1 ring-white/10">
           <video aria-label="Pratinjau kamera absensi" className="h-full w-full scale-x-[-1] object-cover" muted playsInline ref={videoRef} />
@@ -234,10 +295,11 @@ export function AttendanceClock({ user, outlets, profile, openSession, recentSes
         </div>
         <figcaption className="text-center text-sm font-medium leading-5 text-muted-foreground">Tegakkan kepala, arahkan mata ke kamera, lalu sejajarkan wajah dengan sketsa.</figcaption>
       </figure>
-      {dialogMode === "enroll" && <label className="grid h-auto grid-cols-[auto_minmax(0,1fr)] items-start gap-3 rounded-xl border px-4 py-4" htmlFor="face-consent"><Checkbox className="mt-1" checked={consent} id="face-consent" onCheckedChange={(value) => setConsent(value === true)} /><span className="min-w-0 text-sm leading-6">Saya menyetujui pembuatan template wajah terenkripsi untuk absensi dan dapat meminta profil dibatalkan.</span></label>}
+      {dialogMode === "enroll" && <div aria-atomic="true" aria-live="polite" className="flex min-h-16 min-w-0 items-start gap-3 rounded-xl border border-success/30 bg-success/10 p-4" role="status">{enrollmentProgress === 3 ? <CheckCircle2 aria-hidden="true" className="mt-0.5 size-5 shrink-0 text-success" /> : consent && cameraStatus === "ready" ? <Spinner className="mt-0.5 size-5 shrink-0 text-success" /> : <Camera aria-hidden="true" className="mt-0.5 size-5 shrink-0 text-success" />}<div className="min-w-0 flex-1"><div className="flex items-start justify-between gap-3"><p className="text-sm font-semibold leading-5">Pengambilan otomatis</p><Badge className="shrink-0" variant="outline">{enrollmentProgress}/3</Badge></div><p className="mt-1 text-sm leading-5 text-muted-foreground">{enrollmentMessage}</p></div></div>}
+      {dialogMode === "enroll" && <label className="grid h-auto grid-cols-[auto_minmax(0,1fr)] items-start gap-3 rounded-xl border px-4 py-4" htmlFor="face-consent"><Checkbox className="mt-1" checked={consent} id="face-consent" onCheckedChange={(value) => changeConsent(value === true)} /><span className="min-w-0 text-sm leading-6">Saya menyetujui pembuatan template wajah terenkripsi untuk absensi dan dapat meminta profil dibatalkan.</span></label>}
       {dialogMode === "verify" && challenge && <Alert className={exceptionAvailable ? "border-destructive/40 bg-destructive/10" : "border-success/30 bg-success/10"}><Camera aria-hidden="true" /><AlertTitle>{exceptionAvailable ? "Pengecualian tersedia" : challenge.actionLabel}</AlertTitle><AlertDescription>{exceptionAvailable ? "Tiga percobaan gagal. Jelaskan kendala agar manajer dapat meninjau." : "Lakukan gerakan lalu tekan Ambil dan verifikasi. Pastikan hanya satu wajah terlihat."}</AlertDescription></Alert>}
       {exceptionAvailable && <Textarea aria-label="Alasan permintaan pengecualian" maxLength={240} onChange={(event) => setExceptionReason(event.target.value)} placeholder="Contoh: kamera tablet buram meskipun lokasi sudah sesuai" rows={3} value={exceptionReason} />}
-      <DialogFooter><Button disabled={pending} onClick={closeDialog} type="button" variant="outline">Batal</Button>{dialogMode === "enroll" ? <Button disabled={pending || cameraStatus !== "ready" || !consent} onClick={captureEnrollmentSample} type="button">{pending ? <Spinner /> : <Camera aria-hidden="true" />}{pending ? "Memproses…" : samples.length === 3 ? "Coba simpan lagi" : `Ambil sampel ${samples.length + 1}/3`}</Button> : exceptionAvailable ? <Button disabled={pending || exceptionReason.trim().length < 8} onClick={requestException} type="button" variant="destructive">{pending ? <Spinner /> : <ShieldAlert aria-hidden="true" />}{pending ? "Mengirim…" : "Kirim pengecualian"}</Button> : <Button disabled={pending || cameraStatus !== "ready" || !challenge} onClick={verify} type="button">{pending ? <Spinner /> : <ScanFace aria-hidden="true" />}{pending ? "Memverifikasi…" : "Ambil dan verifikasi"}</Button>}</DialogFooter>
+      <DialogFooter><Button disabled={dialogMode === "verify" && pending} onClick={closeDialog} type="button" variant="outline">Batal</Button>{dialogMode === "verify" && (exceptionAvailable ? <Button disabled={pending || exceptionReason.trim().length < 8} onClick={requestException} type="button" variant="destructive">{pending ? <Spinner /> : <ShieldAlert aria-hidden="true" />}{pending ? "Mengirim…" : "Kirim pengecualian"}</Button> : <Button disabled={pending || cameraStatus !== "ready" || !challenge} onClick={verify} type="button">{pending ? <Spinner /> : <ScanFace aria-hidden="true" />}{pending ? "Memverifikasi…" : "Ambil dan verifikasi"}</Button>)}</DialogFooter>
       </DialogContent>
     </Dialog>
   </div>;
@@ -268,6 +330,16 @@ function challengePassed(action: AttendanceChallengeAction, gestures: string[]) 
   if (action === "BLINK") return gestures.some((gesture) => gesture.startsWith("blink "));
   if (action === "TURN_LEFT") return gestures.includes("facing left");
   return gestures.includes("facing right");
+}
+
+function enrollmentPoseMatches(step: number, gestures: string[]) {
+  if (step === 1) return gestures.includes("facing left");
+  if (step === 2) return gestures.includes("facing right");
+  return !gestures.includes("facing left") && !gestures.includes("facing right");
+}
+
+function wait(milliseconds: number) {
+  return new Promise<void>((resolve) => window.setTimeout(resolve, milliseconds));
 }
 
 function readLocation(): Promise<{ latitude: number; longitude: number; accuracyMeters: number }> {
