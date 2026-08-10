@@ -61,6 +61,11 @@ describe("attendance clock", () => {
     storage.mockRestore();
   });
 
+  it("formats recent attendance using each outlet timezone", () => {
+    render(<AttendanceClock openSession={null} outlets={[outlet]} profile={null} recentSessions={[{ id: "session-1", status: "CLOSED", checkInAt: "2026-08-10T12:30:00.000Z", checkOutAt: "2026-08-10T13:30:00.000Z", outlet: { code: "TMR", name: "Timur", timezone: "Asia/Jayapura" }, correction: null }]} user={{ name: "Kasir Satu", email: "kasir@example.com" }} />);
+    expect(screen.getByText(/21\.30 WIT.*22\.30 WIT/)).toBeInTheDocument();
+  });
+
   it("requests location and submits attendance automatically after the liveness gesture", async () => {
     const user = userEvent.setup();
     mocks.fetch.mockImplementation(async (input: RequestInfo | URL) => {

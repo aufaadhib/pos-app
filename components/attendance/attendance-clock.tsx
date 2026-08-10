@@ -35,7 +35,7 @@ export function AttendanceClock({ user, outlets, profile, openSession, recentSes
   user: { name: string; email: string };
   outlets: AttendanceOutlet[];
   profile: { enrolledAt: string; modelVersion: string } | null;
-  openSession: { id: string; checkInAt: string; outlet: { id: string; code: string; name: string } } | null;
+  openSession: { id: string; checkInAt: string; outlet: { id: string; code: string; name: string; timezone: string } } | null;
   recentSessions: RecentSession[];
 }) {
   const router = useRouter();
@@ -327,8 +327,8 @@ export function AttendanceClock({ user, outlets, profile, openSession, recentSes
 
     <aside className="min-w-0 rounded-2xl border bg-card p-4 sm:p-6">
       <div className="flex items-start justify-between gap-3"><div><h2 className="font-heading text-xl font-semibold">Status hari ini</h2><p className="mt-1 text-sm text-muted-foreground">Waktu berasal dari server.</p></div><Badge variant={openSession ? "default" : "secondary"}>{openSession ? "Sedang masuk" : "Belum masuk"}</Badge></div>
-      {openSession ? <div className="mt-5 rounded-xl border border-success/30 bg-success/10 p-4"><p className="font-semibold text-success">{openSession.outlet.code} · {openSession.outlet.name}</p><p className="mt-1 text-sm text-muted-foreground">Masuk {formatAttendanceTime(openSession.checkInAt)}</p></div> : <p className="mt-5 rounded-xl border border-dashed p-4 text-sm leading-6 text-muted-foreground">Belum ada sesi terbuka. Pilih outlet lalu lakukan absensi masuk.</p>}
-      <div className="mt-6"><h3 className="font-semibold">Riwayat terakhir</h3><div className="mt-3 grid gap-2">{recentSessions.length ? recentSessions.slice(0, 5).map((session) => <div className="rounded-lg border p-3 text-sm" key={session.id}><div className="flex items-center justify-between gap-2"><span className="font-semibold">{session.outlet.code}</span><Badge variant="outline">{session.status === "OPEN" ? "Terbuka" : "Selesai"}</Badge></div><p className="mt-1 text-muted-foreground">{formatAttendanceTime(session.checkInAt)} — {session.checkOutAt ? formatAttendanceTime(session.checkOutAt) : "Belum pulang"}</p>{session.correction && <p className="mt-1 text-xs text-primary">Dikoreksi: {session.correction.reason}</p>}</div>) : <p className="text-sm text-muted-foreground">Belum ada riwayat absensi.</p>}</div></div>
+      {openSession ? <div className="mt-5 rounded-xl border border-success/30 bg-success/10 p-4"><p className="font-semibold text-success">{openSession.outlet.code} · {openSession.outlet.name}</p><p className="mt-1 text-sm text-muted-foreground">Masuk {formatAttendanceTime(openSession.checkInAt, openSession.outlet.timezone)}</p></div> : <p className="mt-5 rounded-xl border border-dashed p-4 text-sm leading-6 text-muted-foreground">Belum ada sesi terbuka. Pilih outlet lalu lakukan absensi masuk.</p>}
+      <div className="mt-6"><h3 className="font-semibold">Riwayat terakhir</h3><div className="mt-3 grid gap-2">{recentSessions.length ? recentSessions.slice(0, 5).map((session) => <div className="rounded-lg border p-3 text-sm" key={session.id}><div className="flex items-center justify-between gap-2"><span className="font-semibold">{session.outlet.code}</span><Badge variant="outline">{session.status === "OPEN" ? "Terbuka" : "Selesai"}</Badge></div><p className="mt-1 text-muted-foreground">{formatAttendanceTime(session.checkInAt, session.outlet.timezone)} — {session.checkOutAt ? formatAttendanceTime(session.checkOutAt, session.outlet.timezone) : "Belum pulang"}</p>{session.correction && <p className="mt-1 text-xs text-primary">Dikoreksi: {session.correction.reason}</p>}</div>) : <p className="text-sm text-muted-foreground">Belum ada riwayat absensi.</p>}</div></div>
     </aside>
 
     <Dialog onOpenChange={(open) => { if (!open) closeDialog(); }} open={dialogMode !== null}><DialogContent className="gap-3 p-4 sm:w-[min(34rem,calc(100vw-3rem))] sm:gap-5 sm:p-6"><DialogHeader className="gap-1.5 sm:gap-2"><DialogTitle className="text-lg sm:text-xl">{dialogMode === "enroll" ? "Daftarkan wajah akun" : openSession ? "Verifikasi absensi pulang" : "Verifikasi absensi masuk"}</DialogTitle><DialogDescription className="text-xs leading-5 sm:text-sm sm:leading-6">{dialogMode === "enroll" ? "Setelah disetujui, tiga sampel diambil otomatis dan disimpan sebagai template terenkripsi." : "Izinkan kamera dan lokasi, lalu ikuti gerakan. Verifikasi diproses otomatis."}</DialogDescription></DialogHeader>
@@ -337,9 +337,8 @@ export function AttendanceClock({ user, outlets, profile, openSession, recentSes
           <video aria-label="Pratinjau kamera absensi" className="h-full w-full scale-x-[-1] object-cover" muted playsInline ref={videoRef} />
           {cameraStatus !== "ready" && <div aria-hidden="true" className="absolute inset-0 z-20 bg-black/65" />}
           <svg aria-hidden="true" className="pointer-events-none absolute inset-[7%] z-30 h-[86%] w-[86%] text-white/80 drop-shadow-[0_1px_2px_rgb(0_0_0/70%)]" data-testid="face-position-guide" fill="none" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" viewBox="0 0 240 320">
-            <ellipse cx="120" cy="121" rx="67" ry="88" />
-            <path d="M92 119c8-6 17-6 25 0M123 119c8-6 17-6 25 0M120 132v27l-9 7M101 183c12 9 26 9 38 0" opacity=".72" />
-            <path d="M86 198v21c0 18-14 23-31 34-18 12-28 34-31 57M154 198v21c0 18 14 23 31 34 18 12 28 34 31 57M24 310h192" />
+            <ellipse cx="120" cy="160" rx="82" ry="110" />
+            <path d="M82 153c10-7 21-7 31 0M127 153c10-7 21-7 31 0M120 168v31l-10 8M94 229c16 11 36 11 52 0" opacity=".72" />
           </svg>
           {cameraStatus !== "ready" && <div className="absolute inset-x-3 bottom-3 z-40 rounded-xl bg-black/70 px-3 py-2.5 text-center text-sm font-semibold text-white backdrop-blur-sm" role="status">{cameraStatus === "loading" ? <span className="flex items-center justify-center gap-2"><Spinner className="size-5" />Memuat kamera dan model wajah…</span> : cameraStatus === "error" ? <span>Kamera atau model wajah tidak tersedia. Periksa izin kamera dan koneksi.</span> : null}</div>}
         </div>
@@ -419,8 +418,8 @@ async function signOutSharedDevice() {
   window.location.replace("/sign-in");
 }
 
-function formatAttendanceTime(value: string) {
-  return new Intl.DateTimeFormat("id-ID", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" }).format(new Date(value));
+function formatAttendanceTime(value: string, timezone: string) {
+  return new Intl.DateTimeFormat("id-ID", { timeZone: timezone, day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit", timeZoneName: "short" }).format(new Date(value));
 }
 
 function getManualSharedDeviceSnapshot() {

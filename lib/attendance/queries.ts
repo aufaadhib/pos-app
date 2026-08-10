@@ -15,12 +15,12 @@ export async function getAttendanceHome(userId: string, role: AttendanceActor["r
       orderBy: { name: "asc" },
       select: { id: true, code: true, name: true, attendanceEnabled: true, attendanceLatitude: true, attendanceLongitude: true, attendanceRadiusMeters: true },
     }),
-    prisma.attendanceSession.findUnique({ where: { openUserKey: userId }, include: { outlet: { select: { id: true, code: true, name: true } } } }),
+    prisma.attendanceSession.findUnique({ where: { openUserKey: userId }, include: { outlet: { select: { id: true, code: true, name: true, timezone: true } } } }),
     prisma.attendanceSession.findMany({
       where: { userId },
       orderBy: { checkInAt: "desc" },
       take: 10,
-      include: { outlet: { select: { code: true, name: true, timezone: true } }, corrections: { orderBy: { createdAt: "desc" }, take: 1 } },
+      include: { outlet: { select: { code: true, name: true, timezone: true } }, checkInAttempt: { select: { id: true, evidencePath: true, evidenceExpiresAt: true, evidenceDeletedAt: true } }, checkOutAttempt: { select: { id: true, evidencePath: true, evidenceExpiresAt: true, evidenceDeletedAt: true } }, corrections: { orderBy: { createdAt: "desc" }, take: 1 } },
     }),
   ]);
   return {
@@ -39,7 +39,7 @@ export async function getAttendanceManagement(outletId: string, actor: Attendanc
     prisma.attendanceExceptionRequest.findMany({
       where: { status: AttendanceExceptionStatus.PENDING, verification: { outletId } },
       orderBy: { requestedAt: "asc" },
-      include: { user: { select: { id: true, name: true, email: true } }, verification: { select: { kind: true } }, attempt: { select: { id: true, attemptedAt: true, failureReason: true, evidenceDeletedAt: true } } },
+      include: { user: { select: { id: true, name: true, email: true } }, verification: { select: { kind: true } }, attempt: { select: { id: true, attemptedAt: true, failureReason: true, evidencePath: true, evidenceExpiresAt: true, evidenceDeletedAt: true } } },
     }),
     prisma.attendanceSession.count({ where }),
     prisma.userOutletAssignment.findMany({
@@ -55,10 +55,10 @@ export async function getAttendanceManagement(outletId: string, actor: Attendanc
     orderBy: { checkInAt: "desc" },
     skip: (currentPage - 1) * attendancePageSize,
     take: attendancePageSize,
-    include: { user: { select: { id: true, name: true, email: true } }, outlet: { select: { code: true, name: true, timezone: true } }, corrections: { orderBy: { createdAt: "desc" }, take: 1 } },
+    include: { user: { select: { id: true, name: true, email: true } }, outlet: { select: { code: true, name: true, timezone: true } }, checkInAttempt: { select: { id: true, evidencePath: true, evidenceExpiresAt: true, evidenceDeletedAt: true } }, checkOutAttempt: { select: { id: true, evidencePath: true, evidenceExpiresAt: true, evidenceDeletedAt: true } }, corrections: { orderBy: { createdAt: "desc" }, take: 1 } },
   });
   return {
-    pending: pending.map((request) => ({ ...request, requestedAt: request.requestedAt.toISOString(), attempt: { ...request.attempt, attemptedAt: request.attempt.attemptedAt.toISOString(), evidenceDeletedAt: request.attempt.evidenceDeletedAt?.toISOString() ?? null } })),
+    pending: pending.map((request) => ({ ...request, requestedAt: request.requestedAt.toISOString(), attempt: { id: request.attempt.id, attemptedAt: request.attempt.attemptedAt.toISOString(), failureReason: request.attempt.failureReason, evidenceAvailable: isAttendanceEvidenceAvailable(request.attempt) } })),
     staffProfiles: staffProfiles.map(({ user }) => ({ id: user.id, name: user.name, email: user.email, banned: user.banned, profile: user.faceProfiles[0] ? { ...user.faceProfiles[0], enrolledAt: user.faceProfiles[0].enrolledAt.toISOString() } : null })),
     sessions: sessions.map(serializeAttendanceSession),
     page: currentPage,
@@ -84,6 +84,7 @@ export async function getAttendanceEvidencePath(attemptId: string, actor: Attend
     where: {
       id: attemptId,
       evidencePath: { not: null },
+      evidenceExpiresAt: { gt: new Date() },
       evidenceDeletedAt: null,
       OR: [
         { userId: actor.id },
@@ -122,6 +123,8 @@ function serializeAttendanceSession(session: {
   checkOutAt: Date | null;
   user?: { id?: string; name: string; email: string };
   outlet: { code: string; name: string; timezone: string };
+  checkInAttempt: AttendanceEvidenceAttempt;
+  checkOutAttempt: AttendanceEvidenceAttempt | null;
   corrections: Array<{ id: string; correctedCheckInAt: Date | null; correctedCheckOutAt: Date | null; reason: string; actorName: string; createdAt: Date }>;
 }) {
   const correction = session.corrections[0];
@@ -137,6 +140,20 @@ function serializeAttendanceSession(session: {
     originalCheckOutAt: session.checkOutAt?.toISOString() ?? null,
     checkInAt: (correction?.correctedCheckInAt ?? session.checkInAt).toISOString(),
     checkOutAt: (correction?.correctedCheckOutAt ?? session.checkOutAt)?.toISOString() ?? null,
+    checkInEvidence: serializeAttendanceEvidence(session.checkInAttempt),
+    checkOutEvidence: serializeAttendanceEvidence(session.checkOutAttempt),
     correction: correction ? { ...correction, correctedCheckInAt: correction.correctedCheckInAt?.toISOString() ?? null, correctedCheckOutAt: correction.correctedCheckOutAt?.toISOString() ?? null, createdAt: correction.createdAt.toISOString() } : null,
   };
+}
+
+type AttendanceEvidenceAttempt = { id: string; evidencePath: string | null; evidenceExpiresAt: Date | null; evidenceDeletedAt: Date | null };
+
+/** Returns whether a private attendance photo is still present and within retention. */
+function isAttendanceEvidenceAvailable(attempt: Omit<AttendanceEvidenceAttempt, "id">) {
+  return Boolean(attempt.evidencePath && !attempt.evidenceDeletedAt && attempt.evidenceExpiresAt && attempt.evidenceExpiresAt.getTime() > Date.now());
+}
+
+/** Serializes evidence metadata without exposing its private Blob pathname. */
+function serializeAttendanceEvidence(attempt: AttendanceEvidenceAttempt | null) {
+  return attempt ? { attemptId: attempt.id, available: isAttendanceEvidenceAvailable(attempt) } : null;
 }
