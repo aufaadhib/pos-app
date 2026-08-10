@@ -100,7 +100,7 @@ export async function revokeFaceProfile(userId: string, actor: AttendanceActor) 
   });
 }
 
-/** Starts or rotates a short-lived single-use verification challenge for an assigned outlet. */
+/** Starts or rotates a short-lived single-use verification challenge for an available outlet. */
 export async function createAttendanceChallenge(input: AttendanceChallengeInput, actor: AttendanceActor) {
   const nonce = createAttendanceNonce();
   const nonceHash = hashAttendanceNonce(nonce);
@@ -108,7 +108,7 @@ export async function createAttendanceChallenge(input: AttendanceChallengeInput,
   const now = new Date();
   const expiresAt = new Date(now.getTime() + attendanceVerificationMinutes * 60_000);
   const verification = await prisma.$transaction(async (transaction) => {
-    await assertClockScope(transaction, input.outletId, actor.id);
+    await assertClockScope(transaction, input.outletId, actor);
     const openSession = await transaction.attendanceSession.findUnique({ where: { openUserKey: actor.id }, select: { id: true, outletId: true } });
     if (input.kind === AttendanceKind.CHECK_IN && openSession) throw new AttendanceError("CONFLICT", "Anda masih memiliki absensi masuk yang belum ditutup.");
     if (input.kind === AttendanceKind.CHECK_OUT && !openSession) throw new AttendanceError("CONFLICT", "Belum ada absensi masuk yang dapat ditutup.");
@@ -359,9 +359,9 @@ async function applyAttendanceEvent(transaction: Prisma.TransactionClient, kind:
   return transaction.attendanceSession.update({ where: { id: open.id }, data: { status: AttendanceSessionStatus.CLOSED, openUserKey: null, checkOutAt: at, checkOutAttemptId: attemptId } });
 }
 
-async function assertClockScope(transaction: Prisma.TransactionClient, outletId: string, userId: string) {
-  const outlet = await transaction.outlet.findFirst({ where: { id: outletId, status: OutletStatus.ACTIVE, assignments: { some: { userId } } }, select: { id: true, attendanceEnabled: true } });
-  if (!outlet) throw new AttendanceError("FORBIDDEN", "Anda tidak ditugaskan pada outlet ini.");
+async function assertClockScope(transaction: Prisma.TransactionClient, outletId: string, actor: AttendanceActor) {
+  const outlet = await transaction.outlet.findFirst({ where: { id: outletId, status: OutletStatus.ACTIVE, ...(actor.role === "owner" ? {} : { assignments: { some: { userId: actor.id } } }) }, select: { id: true, attendanceEnabled: true } });
+  if (!outlet) throw new AttendanceError("FORBIDDEN", "Outlet tidak tersedia untuk akun Anda.");
   if (!outlet.attendanceEnabled) throw new AttendanceError("NOT_CONFIGURED", "Absensi belum diaktifkan untuk outlet ini.");
 }
 

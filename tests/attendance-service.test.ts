@@ -3,6 +3,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 const mocks = vi.hoisted(() => ({
   attemptFindUnique: vi.fn(),
   attemptCreate: vi.fn(),
+  attendanceSessionFindUnique: vi.fn(),
   auditCreate: vi.fn(),
   exceptionFindUnique: vi.fn(),
   exceptionUpdate: vi.fn(),
@@ -12,6 +13,7 @@ const mocks = vi.hoisted(() => ({
   uploadEvidence: vi.fn(),
   deleteEvidence: vi.fn(),
   verificationFindFirst: vi.fn(),
+  verificationCreate: vi.fn(),
   verificationUpdate: vi.fn(),
 }));
 
@@ -19,7 +21,7 @@ vi.mock("server-only", () => ({}));
 vi.mock("@/lib/attendance/evidence", () => ({ uploadAttendanceEvidence: mocks.uploadEvidence, deleteAttendanceEvidence: mocks.deleteEvidence }));
 vi.mock("@/lib/prisma", () => ({ prisma: { attendanceAttempt: { findUnique: mocks.attemptFindUnique }, $transaction: mocks.transaction } }));
 
-import { AttendanceError, enrollFaceProfile, reviewAttendanceException, updateAttendanceSettings, verifyAttendance } from "@/lib/attendance/service";
+import { AttendanceError, createAttendanceChallenge, enrollFaceProfile, reviewAttendanceException, updateAttendanceSettings, verifyAttendance } from "@/lib/attendance/service";
 import { hashAttendanceNonce } from "@/lib/attendance/crypto";
 
 const actor = { id: "manager-1", name: "Manajer", email: "manager@example.com", role: "manager" as const };
@@ -27,7 +29,8 @@ const transactionClient = {
   attendanceAttempt: { create: mocks.attemptCreate },
   attendanceAuditLog: { create: mocks.auditCreate },
   attendanceExceptionRequest: { findUnique: mocks.exceptionFindUnique, update: mocks.exceptionUpdate },
-  attendanceVerification: { findFirst: mocks.verificationFindFirst, update: mocks.verificationUpdate },
+  attendanceSession: { findUnique: mocks.attendanceSessionFindUnique },
+  attendanceVerification: { create: mocks.verificationCreate, findFirst: mocks.verificationFindFirst, update: mocks.verificationUpdate },
   outlet: { findFirst: mocks.outletFindFirst, update: mocks.outletUpdate },
 };
 
@@ -37,6 +40,28 @@ describe("attendance service", () => {
     mocks.transaction.mockImplementation(async (callback) => callback(transactionClient));
     mocks.uploadEvidence.mockResolvedValue("attendance/user/evidence.jpg");
     mocks.attemptFindUnique.mockResolvedValue(null);
+    mocks.attendanceSessionFindUnique.mockResolvedValue(null);
+    mocks.verificationFindFirst.mockResolvedValue(null);
+  });
+
+  it("allows an owner to start attendance at any active outlet without assignment", async () => {
+    const owner = { id: "owner-1", name: "Pemilik", email: "owner@example.com", role: "owner" as const };
+    mocks.outletFindFirst.mockResolvedValue({ id: "outlet-1", attendanceEnabled: true });
+    mocks.verificationCreate.mockResolvedValue({ id: "verification-1", challengeAction: "TURN_LEFT", expiresAt: new Date(Date.now() + 60_000), attemptCount: 0 });
+
+    await createAttendanceChallenge({ outletId: "outlet-1", kind: "CHECK_IN" }, owner);
+
+    expect(mocks.outletFindFirst).toHaveBeenCalledWith(expect.objectContaining({ where: { id: "outlet-1", status: "ACTIVE" } }));
+    expect(mocks.verificationCreate).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ outletId: "outlet-1", userId: owner.id }) }));
+  });
+
+  it("continues to require an outlet assignment for managers", async () => {
+    mocks.outletFindFirst.mockResolvedValue(null);
+
+    await expect(createAttendanceChallenge({ outletId: "outlet-2", kind: "CHECK_IN" }, actor)).rejects.toMatchObject({ code: "FORBIDDEN" });
+
+    expect(mocks.outletFindFirst).toHaveBeenCalledWith(expect.objectContaining({ where: expect.objectContaining({ assignments: { some: { userId: actor.id } } }) }));
+    expect(mocks.verificationCreate).not.toHaveBeenCalled();
   });
 
   it("updates only an assigned outlet and writes settings audit atomically", async () => {

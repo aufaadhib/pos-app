@@ -6,12 +6,12 @@ import { prisma } from "@/lib/prisma";
 
 const attendancePageSize = 20;
 
-/** Loads the signed-in employee's profile, assigned outlets, open state, and recent records. */
-export async function getAttendanceHome(userId: string) {
+/** Loads the signed-in employee's profile, available outlets, open state, and recent records. */
+export async function getAttendanceHome(userId: string, role: AttendanceActor["role"]) {
   const [profile, outlets, openSession, recentSessions] = await Promise.all([
     prisma.faceProfile.findUnique({ where: { activeUserKey: userId }, select: { id: true, enrolledAt: true, modelVersion: true } }),
     prisma.outlet.findMany({
-      where: { status: OutletStatus.ACTIVE, assignments: { some: { userId } } },
+      where: { status: OutletStatus.ACTIVE, ...(role === "owner" ? {} : { assignments: { some: { userId } } }) },
       orderBy: { name: "asc" },
       select: { id: true, code: true, name: true, attendanceEnabled: true, attendanceLatitude: true, attendanceLongitude: true, attendanceRadiusMeters: true },
     }),
