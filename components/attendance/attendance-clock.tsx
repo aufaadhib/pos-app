@@ -119,7 +119,8 @@ export function AttendanceClock({ user, outlets, profile, openSession, recentSes
     startTransition(async () => {
       try {
         if (!consent) throw new Error("Setujui penggunaan template wajah terlebih dahulu.");
-        let nextSamples = samples;
+        let nextSamples = samples.slice(0, 3);
+        if (nextSamples.length !== samples.length) setSamples(nextSamples);
         if (nextSamples.length < 3) {
           const detection = await detectFace(humanRef.current, videoRef.current);
           nextSamples = [...nextSamples, detection.embedding].slice(0, 3);
