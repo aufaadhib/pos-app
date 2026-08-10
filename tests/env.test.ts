@@ -3,6 +3,8 @@ import { describe, expect, it } from "vitest";
 import {
   parseOwnerEnvironment,
   parseAttendanceEnvironment,
+  parseAttendanceBlobEnvironment,
+  parseAttendanceEmbeddingEnvironment,
   parseServerEnvironment,
 } from "@/lib/env-schema";
 
@@ -43,5 +45,11 @@ describe("environment validation", () => {
       ATTENDANCE_BLOB_READ_WRITE_TOKEN: "blob-token",
       ATTENDANCE_EMBEDDING_KEY: Buffer.alloc(16).toString("base64"),
     })).toThrow();
+    expect(parseAttendanceEmbeddingEnvironment({
+      ATTENDANCE_EMBEDDING_KEY: Buffer.alloc(32, 9).toString("base64"),
+    }).ATTENDANCE_EMBEDDING_KEY).toBeTruthy();
+    expect(parseAttendanceBlobEnvironment({
+      ATTENDANCE_BLOB_READ_WRITE_TOKEN: "private-blob-token",
+    }).ATTENDANCE_BLOB_READ_WRITE_TOKEN).toBe("private-blob-token");
   });
 });

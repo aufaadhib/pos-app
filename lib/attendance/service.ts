@@ -51,7 +51,12 @@ export async function enrollFaceProfile(input: AttendanceEnrollmentInput, actor:
   } catch (error) {
     throw new AttendanceError("INVALID", error instanceof Error ? error.message : "Sampel wajah tidak valid.");
   }
-  const encrypted = encryptEmbedding(template);
+  let encrypted: ReturnType<typeof encryptEmbedding>;
+  try {
+    encrypted = encryptEmbedding(template);
+  } catch {
+    throw new AttendanceError("NOT_CONFIGURED", "Kunci enkripsi absensi belum valid. Periksa ATTENDANCE_EMBEDDING_KEY lalu coba kembali.");
+  }
   return prisma.$transaction(async (transaction) => {
     const active = await transaction.faceProfile.findUnique({ where: { activeUserKey: actor.id } });
     if (active) {

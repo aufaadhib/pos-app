@@ -19,7 +19,7 @@ vi.mock("server-only", () => ({}));
 vi.mock("@/lib/attendance/evidence", () => ({ uploadAttendanceEvidence: mocks.uploadEvidence, deleteAttendanceEvidence: mocks.deleteEvidence }));
 vi.mock("@/lib/prisma", () => ({ prisma: { attendanceAttempt: { findUnique: mocks.attemptFindUnique }, $transaction: mocks.transaction } }));
 
-import { AttendanceError, reviewAttendanceException, updateAttendanceSettings, verifyAttendance } from "@/lib/attendance/service";
+import { AttendanceError, enrollFaceProfile, reviewAttendanceException, updateAttendanceSettings, verifyAttendance } from "@/lib/attendance/service";
 import { hashAttendanceNonce } from "@/lib/attendance/crypto";
 
 const actor = { id: "manager-1", name: "Manajer", email: "manager@example.com", role: "manager" as const };
@@ -45,6 +45,15 @@ describe("attendance service", () => {
     expect(mocks.outletFindFirst).toHaveBeenCalledWith(expect.objectContaining({ where: expect.objectContaining({ assignments: { some: { userId: actor.id } } }) }));
     expect(mocks.outletUpdate).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ attendanceRadiusMeters: 150 }) }));
     expect(mocks.auditCreate).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ action: "SETTINGS_UPDATE" }) }));
+  });
+
+  it("returns a clear configuration error before enrollment when the AES key is missing", async () => {
+    const previousKey = process.env.ATTENDANCE_EMBEDDING_KEY;
+    delete process.env.ATTENDANCE_EMBEDDING_KEY;
+    await expect(enrollFaceProfile({ samples: [embedding, embedding, embedding], modelVersion: "human-3.3.6", consent: true }, actor)).rejects.toMatchObject({ code: "NOT_CONFIGURED" });
+    if (previousKey === undefined) delete process.env.ATTENDANCE_EMBEDDING_KEY;
+    else process.env.ATTENDANCE_EMBEDDING_KEY = previousKey;
+    expect(mocks.transaction).not.toHaveBeenCalled();
   });
 
   it("rejects manager self-approval before creating an attendance session", async () => {

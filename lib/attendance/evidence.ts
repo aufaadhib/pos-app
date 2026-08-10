@@ -2,7 +2,7 @@ import "server-only";
 
 import { del, get, put } from "@vercel/blob";
 
-import { parseAttendanceEnvironment } from "@/lib/env-schema";
+import { parseAttendanceBlobEnvironment } from "@/lib/env-schema";
 
 const maxEvidenceBytes = 300 * 1024;
 
@@ -43,5 +43,5 @@ export async function deleteAttendanceEvidence(pathname: string) {
 }
 
 function attendanceBlobToken() {
-  return parseAttendanceEnvironment(process.env).ATTENDANCE_BLOB_READ_WRITE_TOKEN;
+  return parseAttendanceBlobEnvironment(process.env).ATTENDANCE_BLOB_READ_WRITE_TOKEN;
 }

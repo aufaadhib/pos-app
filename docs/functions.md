@@ -174,7 +174,7 @@ Dokumen ini mencatat function dan component function yang ditambahkan pada miles
 
 | Function | Input | Output | Tujuan dan side effect |
 | --- | --- | --- | --- |
-| `parseAttendanceEnvironment()` | Object environment | Token Blob dan key AES tervalidasi | Memvalidasi credential absensi secara lazy; key wajib base64 32 byte dan tidak menjadi syarat startup fitur lain. |
+| `parseAttendanceEnvironment()`, `parseAttendanceEmbeddingEnvironment()`, `parseAttendanceBlobEnvironment()` | Object environment | Credential absensi tervalidasi | Memvalidasi credential secara lazy dan terpisah; enrollment hanya memerlukan key AES base64 32 byte, sedangkan bukti foto hanya memerlukan token Blob. |
 | `normalizeEmbedding()`, `averageEmbeddings()`, `faceSimilarity()` | Sampel/probe embedding | Template normal atau similarity | Menolak nilai non-finite, merata-ratakan tepat tiga sampel, serta menghitung cosine similarity tanpa menyimpan probe. |
 | `encryptEmbedding()`, `decryptEmbedding()` | Embedding dan key opsional | Ciphertext/IV atau embedding | Mengenkripsi template memakai AES-256-GCM beserta authentication tag dan menolak payload/key yang berubah. |
 | `createAttendanceNonce()`, `hashAttendanceNonce()` | Tidak ada atau nonce | Nonce acak atau hash SHA-256 | Membentuk challenge sekali pakai; database hanya menyimpan hash. |

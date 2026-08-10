@@ -119,9 +119,12 @@ export function AttendanceClock({ user, outlets, profile, openSession, recentSes
     startTransition(async () => {
       try {
         if (!consent) throw new Error("Setujui penggunaan template wajah terlebih dahulu.");
-        const detection = await detectFace(humanRef.current, videoRef.current);
-        const nextSamples = [...samples, detection.embedding];
-        setSamples(nextSamples);
+        let nextSamples = samples;
+        if (nextSamples.length < 3) {
+          const detection = await detectFace(humanRef.current, videoRef.current);
+          nextSamples = [...nextSamples, detection.embedding].slice(0, 3);
+          setSamples(nextSamples);
+        }
         if (nextSamples.length < 3) {
           toast.success(`Sampel ${nextSamples.length} dari 3 tersimpan. Ubah sedikit sudut wajah.`);
           return;
@@ -221,7 +224,7 @@ export function AttendanceClock({ user, outlets, profile, openSession, recentSes
       {dialogMode === "enroll" && <label className="flex min-h-12 items-start gap-3 rounded-xl border p-3" htmlFor="face-consent"><Checkbox checked={consent} id="face-consent" onCheckedChange={(value) => setConsent(value === true)} /><span className="text-sm leading-5">Saya menyetujui pembuatan template wajah terenkripsi untuk absensi dan dapat meminta profil dibatalkan.</span></label>}
       {dialogMode === "verify" && challenge && <Alert className={exceptionAvailable ? "border-destructive/40 bg-destructive/10" : "border-success/30 bg-success/10"}><Camera aria-hidden="true" /><AlertTitle>{exceptionAvailable ? "Pengecualian tersedia" : challenge.actionLabel}</AlertTitle><AlertDescription>{exceptionAvailable ? "Tiga percobaan gagal. Jelaskan kendala agar manajer dapat meninjau." : "Lakukan gerakan lalu tekan Ambil dan verifikasi. Pastikan hanya satu wajah terlihat."}</AlertDescription></Alert>}
       {exceptionAvailable && <Textarea aria-label="Alasan permintaan pengecualian" maxLength={240} onChange={(event) => setExceptionReason(event.target.value)} placeholder="Contoh: kamera tablet buram meskipun lokasi sudah sesuai" rows={3} value={exceptionReason} />}
-      <DialogFooter><Button disabled={pending} onClick={closeDialog} type="button" variant="outline">Batal</Button>{dialogMode === "enroll" ? <Button disabled={pending || cameraStatus !== "ready" || !consent} onClick={captureEnrollmentSample} type="button">{pending ? <Spinner /> : <Camera aria-hidden="true" />}{pending ? "Memproses…" : `Ambil sampel ${Math.min(samples.length + 1, 3)}/3`}</Button> : exceptionAvailable ? <Button disabled={pending || exceptionReason.trim().length < 8} onClick={requestException} type="button" variant="destructive">{pending ? <Spinner /> : <ShieldAlert aria-hidden="true" />}{pending ? "Mengirim…" : "Kirim pengecualian"}</Button> : <Button disabled={pending || cameraStatus !== "ready" || !challenge} onClick={verify} type="button">{pending ? <Spinner /> : <ScanFace aria-hidden="true" />}{pending ? "Memverifikasi…" : "Ambil dan verifikasi"}</Button>}</DialogFooter>
+      <DialogFooter><Button disabled={pending} onClick={closeDialog} type="button" variant="outline">Batal</Button>{dialogMode === "enroll" ? <Button disabled={pending || cameraStatus !== "ready" || !consent} onClick={captureEnrollmentSample} type="button">{pending ? <Spinner /> : <Camera aria-hidden="true" />}{pending ? "Memproses…" : samples.length === 3 ? "Coba simpan lagi" : `Ambil sampel ${samples.length + 1}/3`}</Button> : exceptionAvailable ? <Button disabled={pending || exceptionReason.trim().length < 8} onClick={requestException} type="button" variant="destructive">{pending ? <Spinner /> : <ShieldAlert aria-hidden="true" />}{pending ? "Mengirim…" : "Kirim pengecualian"}</Button> : <Button disabled={pending || cameraStatus !== "ready" || !challenge} onClick={verify} type="button">{pending ? <Spinner /> : <ScanFace aria-hidden="true" />}{pending ? "Memverifikasi…" : "Ambil dan verifikasi"}</Button>}</DialogFooter>
       </DialogContent>
     </Dialog>
   </div>;

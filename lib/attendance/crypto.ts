@@ -2,7 +2,7 @@ import "server-only";
 
 import { createCipheriv, createDecipheriv, createHash, randomBytes } from "node:crypto";
 
-import { parseAttendanceEnvironment } from "@/lib/env-schema";
+import { parseAttendanceEmbeddingEnvironment } from "@/lib/env-schema";
 
 const ivLength = 12;
 const authTagLength = 16;
@@ -49,5 +49,5 @@ function getEmbeddingKey(encodedKey?: string) {
     if (key.length !== 32) throw new Error("Kunci template wajah harus 32 byte.");
     return key;
   }
-  return Buffer.from(parseAttendanceEnvironment(process.env).ATTENDANCE_EMBEDDING_KEY, "base64");
+  return Buffer.from(parseAttendanceEmbeddingEnvironment(process.env).ATTENDANCE_EMBEDDING_KEY, "base64");
 }

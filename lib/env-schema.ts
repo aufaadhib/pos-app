@@ -14,8 +14,7 @@ export const ownerEnvironmentSchema = serverEnvironmentSchema.extend({
   INITIAL_OWNER_PASSWORD: z.string().min(12),
 });
 
-export const attendanceEnvironmentSchema = z.object({
-  ATTENDANCE_BLOB_READ_WRITE_TOKEN: z.string().trim().min(1),
+export const attendanceEmbeddingEnvironmentSchema = z.object({
   ATTENDANCE_EMBEDDING_KEY: z.string().trim().refine((value) => {
     try {
       return Buffer.from(value, "base64").length === 32;
@@ -23,6 +22,14 @@ export const attendanceEnvironmentSchema = z.object({
       return false;
     }
   }, "ATTENDANCE_EMBEDDING_KEY harus berupa base64 dari 32 byte."),
+});
+
+export const attendanceBlobEnvironmentSchema = z.object({
+  ATTENDANCE_BLOB_READ_WRITE_TOKEN: z.string().trim().min(1),
+});
+
+export const attendanceEnvironmentSchema = attendanceEmbeddingEnvironmentSchema.extend({
+  ATTENDANCE_BLOB_READ_WRITE_TOKEN: z.string().trim().min(1),
 });
 
 export type ServerEnvironment = z.infer<typeof serverEnvironmentSchema>;
@@ -46,4 +53,18 @@ export function parseAttendanceEnvironment(
   environment: Record<string, string | undefined>,
 ): AttendanceEnvironment {
   return attendanceEnvironmentSchema.parse(environment);
+}
+
+/** Validates only the biometric encryption credential required by enrollment and matching. */
+export function parseAttendanceEmbeddingEnvironment(
+  environment: Record<string, string | undefined>,
+) {
+  return attendanceEmbeddingEnvironmentSchema.parse(environment);
+}
+
+/** Validates only the private Blob credential required by attendance evidence. */
+export function parseAttendanceBlobEnvironment(
+  environment: Record<string, string | undefined>,
+) {
+  return attendanceBlobEnvironmentSchema.parse(environment);
 }
