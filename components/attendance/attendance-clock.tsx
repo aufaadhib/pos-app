@@ -22,6 +22,7 @@ import { authClient } from "@/lib/auth/client";
 type AttendanceOutlet = { id: string; code: string; name: string; attendanceEnabled: boolean; attendanceLatitude: number | null; attendanceLongitude: number | null; attendanceRadiusMeters: number };
 type RecentSession = { id: string; status: "OPEN" | "CLOSED"; checkInAt: string; checkOutAt: string | null; outlet: { code: string; name: string; timezone: string }; correction: { reason: string } | null };
 type HumanInstance = { load: () => Promise<unknown>; detect: (input: HTMLVideoElement) => Promise<{ face: Array<{ embedding?: number[]; real?: number; live?: number }>; gesture: Array<{ gesture: string }> }> };
+type AttendanceLocation = { latitude: number; longitude: number; accuracyMeters: number };
 
 const enrollmentSteps = [
   "Hadapkan wajah lurus ke kamera dan tahan sebentar.",
@@ -42,12 +43,15 @@ export function AttendanceClock({ user, outlets, profile, openSession, recentSes
   const streamRef = useRef<MediaStream | null>(null);
   const humanRef = useRef<HumanInstance | null>(null);
   const enrollmentRunRef = useRef(0);
+  const verificationRunRef = useRef(0);
+  const locationPermissionRef = useRef<Promise<AttendanceLocation> | null>(null);
   const [selectedOutletId, setSelectedOutletId] = useState(openSession?.outlet.id ?? outlets[0]?.id ?? "");
   const [dialogMode, setDialogMode] = useState<"enroll" | "verify" | null>(null);
   const [cameraStatus, setCameraStatus] = useState<"idle" | "loading" | "ready" | "error">("idle");
   const [consent, setConsent] = useState(false);
   const [enrollmentProgress, setEnrollmentProgress] = useState(0);
   const [enrollmentMessage, setEnrollmentMessage] = useState("Centang persetujuan untuk memulai pengambilan otomatis.");
+  const [verificationMessage, setVerificationMessage] = useState("Menyiapkan kamera, lokasi, dan challenge…");
   const [challenge, setChallenge] = useState<{ verificationId: string; nonce: string; action: AttendanceChallengeAction; actionLabel: string } | null>(null);
   const [exceptionReason, setExceptionReason] = useState("");
   const [exceptionAvailable, setExceptionAvailable] = useState(false);
@@ -56,6 +60,14 @@ export function AttendanceClock({ user, outlets, profile, openSession, recentSes
   const sharedDevice = useSyncExternalStore(subscribeSharedDevice, getSharedDevicePreference, getManualSharedDeviceSnapshot);
   const selectedOutlet = outlets.find((outlet) => outlet.id === selectedOutletId);
   const attendanceKind = openSession ? "CHECK_OUT" : "CHECK_IN";
+
+  const refreshChallenge = useCallback(async () => {
+    if (!selectedOutlet) throw new Error("Pilih outlet absensi terlebih dahulu.");
+    const response = await fetch("/api/attendance/challenge", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ outletId: selectedOutlet.id, kind: attendanceKind }) });
+    const data = await response.json();
+    if (!response.ok) throw new Error(data.message);
+    setChallenge(data);
+  }, [attendanceKind, selectedOutlet]);
 
   useEffect(() => () => {
     streamRef.current?.getTracks().forEach((track) => track.stop());
@@ -79,15 +91,17 @@ export function AttendanceClock({ user, outlets, profile, openSession, recentSes
   async function openVerification() {
     if (!selectedOutlet?.attendanceEnabled) return toast.error("Absensi belum diaktifkan pada outlet ini.");
     if (!profile) return toast.error("Daftarkan wajah akun ini terlebih dahulu.");
+    verificationRunRef.current += 1;
     setExceptionAvailable(false);
     setExceptionReason("");
+    setVerificationMessage("Izinkan lokasi dan kamera. Verifikasi akan berjalan otomatis.");
     setDialogMode("verify");
     setCameraStatus("loading");
+    const locationPermission = readLocation();
+    locationPermissionRef.current = locationPermission;
+    void locationPermission.catch(() => undefined);
     try {
-      const response = await fetch("/api/attendance/challenge", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ outletId: selectedOutlet.id, kind: attendanceKind }) });
-      const data = await response.json();
-      if (!response.ok) throw new Error(data.message);
-      setChallenge(data);
+      await refreshChallenge();
       await startCamera();
     } catch (error) {
       setCameraStatus("error");
@@ -118,6 +132,8 @@ export function AttendanceClock({ user, outlets, profile, openSession, recentSes
 
   const closeDialog = useCallback(() => {
     enrollmentRunRef.current += 1;
+    verificationRunRef.current += 1;
+    locationPermissionRef.current = null;
     streamRef.current?.getTracks().forEach((track) => track.stop());
     streamRef.current = null;
     if (videoRef.current) videoRef.current.srcObject = null;
@@ -203,42 +219,76 @@ export function AttendanceClock({ user, outlets, profile, openSession, recentSes
     }
   }
 
-  function verify() {
-    startTransition(async () => {
-      try {
-        if (!challenge || !selectedOutlet) throw new Error("Muat challenge baru terlebih dahulu.");
-        const detection = await detectFace(humanRef.current, videoRef.current);
-        const livenessPassed = challengePassed(challenge.action, detection.gestures) && detection.real >= 0.5 && detection.live >= 0.5;
-        const [location, evidence] = await Promise.all([readLocation(), captureEvidence(videoRef.current)]);
-        const payload = { verificationId: challenge.verificationId, nonce: challenge.nonce, idempotencyKey: crypto.randomUUID(), embedding: detection.embedding, livenessPassed, location };
-        const formData = new FormData();
-        formData.set("payload", JSON.stringify(payload));
-        formData.set("evidence", evidence, "attendance.jpg");
-        const response = await fetch("/api/attendance/verify", { method: "POST", body: formData });
-        const data = await response.json();
-        if (!response.ok) throw new Error(data.message);
-        if (!data.success) {
-          setExceptionAvailable(Boolean(data.exceptionAvailable));
-          toast.error(`${data.message} Percobaan ${data.attemptCount} dari 3.`);
-          if (!data.exceptionAvailable) await refreshChallenge();
+  useEffect(() => {
+    if (dialogMode !== "verify" || cameraStatus !== "ready" || !challenge || exceptionAvailable) return;
+    const runId = ++verificationRunRef.current;
+    const cancelled = () => verificationRunRef.current !== runId;
+    const currentChallenge = challenge;
+
+    async function verifyAutomatically() {
+      setVerificationMessage(`${currentChallenge.actionLabel}. Sistem akan mengambil hasil secara otomatis.`);
+      while (!cancelled()) {
+        await wait(400);
+        if (cancelled()) return;
+        let detection: Awaited<ReturnType<typeof detectFace>>;
+        try {
+          detection = await detectFace(humanRef.current, videoRef.current);
+        } catch (error) {
+          setVerificationMessage(error instanceof Error ? error.message : "Wajah belum terbaca. Tetap berada di dalam sketsa.");
+          continue;
+        }
+        if (detection.real < 0.5 || detection.live < 0.5) {
+          setVerificationMessage("Pastikan wajah asli terlihat jelas dan pencahayaan cukup.");
+          continue;
+        }
+        if (!challengePassed(currentChallenge.action, detection.gestures)) {
+          setVerificationMessage(`${currentChallenge.actionLabel}. Tahan wajah di dalam sketsa.`);
+          continue;
+        }
+
+        setVerificationMessage("Gerakan terdeteksi. Memeriksa lokasi terbaru…");
+        try {
+          await locationPermissionRef.current;
+          const [location, evidence] = await Promise.all([readLocation(), captureEvidence(videoRef.current)]);
+          if (cancelled()) return;
+          setVerificationMessage("Lokasi siap. Mencocokkan wajah…");
+          const payload = { verificationId: currentChallenge.verificationId, nonce: currentChallenge.nonce, idempotencyKey: crypto.randomUUID(), embedding: detection.embedding, livenessPassed: true, location };
+          const formData = new FormData();
+          formData.set("payload", JSON.stringify(payload));
+          formData.set("evidence", evidence, "attendance.jpg");
+          const response = await fetch("/api/attendance/verify", { method: "POST", body: formData });
+          const data = await response.json();
+          if (!response.ok) throw new Error(data.message);
+          if (cancelled()) return;
+          if (!data.success) {
+            setExceptionAvailable(Boolean(data.exceptionAvailable));
+            toast.error(`${data.message} Percobaan ${data.attemptCount} dari 3.`);
+            if (!data.exceptionAvailable) {
+              setVerificationMessage("Menyiapkan challenge berikutnya…");
+              await refreshChallenge();
+            }
+            return;
+          }
+          toast.success(attendanceKind === "CHECK_IN" ? "Absensi masuk berhasil." : "Absensi pulang berhasil.");
+          closeDialog();
+          if (sharedDevice) await signOutSharedDevice();
+          else router.refresh();
+          return;
+        } catch (error) {
+          if (cancelled()) return;
+          const message = error instanceof Error ? error.message : "Absensi belum dapat diproses.";
+          setVerificationMessage(`${message} Tutup lalu coba kembali.`);
+          toast.error(message);
           return;
         }
-        toast.success(attendanceKind === "CHECK_IN" ? "Absensi masuk berhasil." : "Absensi pulang berhasil.");
-        closeDialog();
-        if (sharedDevice) await signOutSharedDevice();
-        else router.refresh();
-      } catch (error) {
-        toast.error(error instanceof Error ? error.message : "Absensi belum dapat diproses.");
       }
-    });
-  }
+    }
 
-  async function refreshChallenge() {
-    if (!selectedOutlet) return;
-    const response = await fetch("/api/attendance/challenge", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ outletId: selectedOutlet.id, kind: attendanceKind }) });
-    const data = await response.json();
-    if (response.ok) setChallenge(data);
-  }
+    void verifyAutomatically();
+    return () => {
+      if (verificationRunRef.current === runId) verificationRunRef.current += 1;
+    };
+  }, [attendanceKind, cameraStatus, challenge, closeDialog, dialogMode, exceptionAvailable, refreshChallenge, router, sharedDevice]);
 
   function requestException() {
     if (!challenge) return;
@@ -281,7 +331,7 @@ export function AttendanceClock({ user, outlets, profile, openSession, recentSes
       <div className="mt-6"><h3 className="font-semibold">Riwayat terakhir</h3><div className="mt-3 grid gap-2">{recentSessions.length ? recentSessions.slice(0, 5).map((session) => <div className="rounded-lg border p-3 text-sm" key={session.id}><div className="flex items-center justify-between gap-2"><span className="font-semibold">{session.outlet.code}</span><Badge variant="outline">{session.status === "OPEN" ? "Terbuka" : "Selesai"}</Badge></div><p className="mt-1 text-muted-foreground">{formatAttendanceTime(session.checkInAt)} — {session.checkOutAt ? formatAttendanceTime(session.checkOutAt) : "Belum pulang"}</p>{session.correction && <p className="mt-1 text-xs text-primary">Dikoreksi: {session.correction.reason}</p>}</div>) : <p className="text-sm text-muted-foreground">Belum ada riwayat absensi.</p>}</div></div>
     </aside>
 
-    <Dialog onOpenChange={(open) => { if (!open) closeDialog(); }} open={dialogMode !== null}><DialogContent className="gap-3 p-4 sm:w-[min(34rem,calc(100vw-3rem))] sm:gap-5 sm:p-6"><DialogHeader className="gap-1.5 sm:gap-2"><DialogTitle className="text-lg sm:text-xl">{dialogMode === "enroll" ? "Daftarkan wajah akun" : openSession ? "Verifikasi absensi pulang" : "Verifikasi absensi masuk"}</DialogTitle><DialogDescription className="text-xs leading-5 sm:text-sm sm:leading-6">{dialogMode === "enroll" ? "Setelah disetujui, tiga sampel diambil otomatis dan disimpan sebagai template terenkripsi." : challenge?.actionLabel ?? "Menyiapkan challenge liveness…"}</DialogDescription></DialogHeader>
+    <Dialog onOpenChange={(open) => { if (!open) closeDialog(); }} open={dialogMode !== null}><DialogContent className="gap-3 p-4 sm:w-[min(34rem,calc(100vw-3rem))] sm:gap-5 sm:p-6"><DialogHeader className="gap-1.5 sm:gap-2"><DialogTitle className="text-lg sm:text-xl">{dialogMode === "enroll" ? "Daftarkan wajah akun" : openSession ? "Verifikasi absensi pulang" : "Verifikasi absensi masuk"}</DialogTitle><DialogDescription className="text-xs leading-5 sm:text-sm sm:leading-6">{dialogMode === "enroll" ? "Setelah disetujui, tiga sampel diambil otomatis dan disimpan sebagai template terenkripsi." : "Izinkan kamera dan lokasi, lalu ikuti gerakan. Verifikasi diproses otomatis."}</DialogDescription></DialogHeader>
       <figure className="mx-auto grid w-full max-w-[min(12rem,27svh)] gap-2 sm:max-w-[min(19rem,45svh)] sm:gap-3">
         <div className="relative aspect-[3/4] w-full overflow-hidden rounded-2xl bg-black ring-1 ring-white/10">
           <video aria-label="Pratinjau kamera absensi" className="h-full w-full scale-x-[-1] object-cover" muted playsInline ref={videoRef} />
@@ -297,9 +347,9 @@ export function AttendanceClock({ user, outlets, profile, openSession, recentSes
       </figure>
       {dialogMode === "enroll" && <div aria-atomic="true" aria-live="polite" className="flex min-w-0 items-start gap-3 rounded-xl border border-success/30 bg-success/10 p-3 sm:min-h-16 sm:p-4" role="status">{enrollmentProgress === 3 ? <CheckCircle2 aria-hidden="true" className="mt-0.5 size-5 shrink-0 text-success" /> : consent && cameraStatus === "ready" ? <Spinner className="mt-0.5 size-5 shrink-0 text-success" /> : <Camera aria-hidden="true" className="mt-0.5 size-5 shrink-0 text-success" />}<div className="min-w-0 flex-1"><div className="flex items-start justify-between gap-3"><p className="text-sm font-semibold leading-5">Pengambilan otomatis</p><Badge className="shrink-0" variant="outline">{enrollmentProgress}/3</Badge></div><p className="mt-1 text-xs leading-5 text-muted-foreground sm:text-sm">{enrollmentMessage}</p></div></div>}
       {dialogMode === "enroll" && <label className="grid h-auto grid-cols-[auto_minmax(0,1fr)] items-start gap-2.5 rounded-xl border px-3 py-3 sm:gap-3 sm:px-4 sm:py-4" htmlFor="face-consent"><Checkbox className="mt-1" checked={consent} id="face-consent" onCheckedChange={(value) => changeConsent(value === true)} /><span className="min-w-0 text-xs leading-5 sm:text-sm sm:leading-6">Saya menyetujui pembuatan template wajah terenkripsi untuk absensi dan dapat meminta profil dibatalkan.</span></label>}
-      {dialogMode === "verify" && challenge && <Alert className={exceptionAvailable ? "border-destructive/40 bg-destructive/10" : "border-success/30 bg-success/10"}><Camera aria-hidden="true" /><AlertTitle>{exceptionAvailable ? "Pengecualian tersedia" : challenge.actionLabel}</AlertTitle><AlertDescription>{exceptionAvailable ? "Tiga percobaan gagal. Jelaskan kendala agar manajer dapat meninjau." : "Lakukan gerakan lalu tekan Ambil dan verifikasi. Pastikan hanya satu wajah terlihat."}</AlertDescription></Alert>}
+      {dialogMode === "verify" && challenge && <Alert aria-atomic="true" aria-live={exceptionAvailable ? "assertive" : "polite"} className={exceptionAvailable ? "border-destructive/40 bg-destructive/10" : "border-success/30 bg-success/10"} role={exceptionAvailable ? "alert" : "status"}>{exceptionAvailable ? <ShieldAlert aria-hidden="true" /> : <Spinner aria-hidden="true" />}<AlertTitle>{exceptionAvailable ? "Pengecualian tersedia" : "Verifikasi otomatis"}</AlertTitle><AlertDescription>{exceptionAvailable ? "Tiga percobaan gagal. Jelaskan kendala agar manajer dapat meninjau." : verificationMessage}</AlertDescription></Alert>}
       {exceptionAvailable && <Textarea aria-label="Alasan permintaan pengecualian" maxLength={240} onChange={(event) => setExceptionReason(event.target.value)} placeholder="Contoh: kamera tablet buram meskipun lokasi sudah sesuai" rows={3} value={exceptionReason} />}
-      <DialogFooter className="pt-3 sm:pt-5"><Button disabled={dialogMode === "verify" && pending} onClick={closeDialog} type="button" variant="outline">Batal</Button>{dialogMode === "verify" && (exceptionAvailable ? <Button disabled={pending || exceptionReason.trim().length < 8} onClick={requestException} type="button" variant="destructive">{pending ? <Spinner /> : <ShieldAlert aria-hidden="true" />}{pending ? "Mengirim…" : "Kirim pengecualian"}</Button> : <Button disabled={pending || cameraStatus !== "ready" || !challenge} onClick={verify} type="button">{pending ? <Spinner /> : <ScanFace aria-hidden="true" />}{pending ? "Memverifikasi…" : "Ambil dan verifikasi"}</Button>)}</DialogFooter>
+      <DialogFooter className="pt-3 sm:pt-5"><Button disabled={dialogMode === "verify" && pending} onClick={closeDialog} type="button" variant="outline">Batal</Button>{dialogMode === "verify" && exceptionAvailable && <Button disabled={pending || exceptionReason.trim().length < 8} onClick={requestException} type="button" variant="destructive">{pending ? <Spinner /> : <ShieldAlert aria-hidden="true" />}{pending ? "Mengirim…" : "Kirim pengecualian"}</Button>}</DialogFooter>
       </DialogContent>
     </Dialog>
   </div>;
