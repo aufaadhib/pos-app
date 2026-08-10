@@ -221,17 +221,19 @@ export function AttendanceClock({ user, outlets, profile, openSession, recentSes
     </aside>
 
     <Dialog onOpenChange={(open) => { if (!open) closeDialog(); }} open={dialogMode !== null}><DialogContent className="sm:w-[min(34rem,calc(100vw-3rem))]"><DialogHeader><DialogTitle>{dialogMode === "enroll" ? "Daftarkan wajah akun" : openSession ? "Verifikasi absensi pulang" : "Verifikasi absensi masuk"}</DialogTitle><DialogDescription>{dialogMode === "enroll" ? "Ambil tiga sampel wajah terang dan tajam. Template disimpan terenkripsi." : challenge?.actionLabel ?? "Menyiapkan challenge liveness…"}</DialogDescription></DialogHeader>
-      <div className="relative mx-auto aspect-[3/4] w-[min(100%,21rem,39svh)] overflow-hidden rounded-2xl bg-black ring-1 ring-white/10">
-        <video aria-label="Pratinjau kamera absensi" className="h-full w-full scale-x-[-1] object-cover" muted playsInline ref={videoRef} />
-        {cameraStatus !== "ready" && <div aria-hidden="true" className="absolute inset-0 z-20 bg-black/65" />}
-        <svg aria-hidden="true" className="pointer-events-none absolute inset-[7%] z-30 h-[86%] w-[86%] text-white/80 drop-shadow-[0_1px_2px_rgb(0_0_0/70%)]" data-testid="face-position-guide" fill="none" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" viewBox="0 0 240 320">
-          <ellipse cx="120" cy="121" rx="67" ry="88" />
-          <path d="M92 119c8-6 17-6 25 0M123 119c8-6 17-6 25 0M120 132v27l-9 7M101 183c12 9 26 9 38 0" opacity=".72" />
-          <path d="M86 198v21c0 18-14 23-31 34-18 12-28 34-31 57M154 198v21c0 18 14 23 31 34 18 12 28 34 31 57M24 310h192" />
-        </svg>
-        {cameraStatus !== "ready" && <div className="absolute inset-x-3 bottom-3 z-40 rounded-xl bg-black/70 px-3 py-2.5 text-center text-sm font-semibold text-white backdrop-blur-sm" role="status">{cameraStatus === "loading" ? <span className="flex items-center justify-center gap-2"><Spinner className="size-5" />Memuat kamera dan model wajah…</span> : cameraStatus === "error" ? <span>Kamera atau model wajah tidak tersedia. Periksa izin kamera dan koneksi.</span> : null}</div>}
-      </div>
-      <p className="text-center text-sm font-medium text-muted-foreground">Tegakkan kepala, arahkan mata ke kamera, lalu sejajarkan wajah dengan sketsa.</p>
+      <figure className="mx-auto grid w-full max-w-[19rem] gap-3">
+        <div className="relative aspect-[3/4] w-full overflow-hidden rounded-2xl bg-black ring-1 ring-white/10">
+          <video aria-label="Pratinjau kamera absensi" className="h-full w-full scale-x-[-1] object-cover" muted playsInline ref={videoRef} />
+          {cameraStatus !== "ready" && <div aria-hidden="true" className="absolute inset-0 z-20 bg-black/65" />}
+          <svg aria-hidden="true" className="pointer-events-none absolute inset-[7%] z-30 h-[86%] w-[86%] text-white/80 drop-shadow-[0_1px_2px_rgb(0_0_0/70%)]" data-testid="face-position-guide" fill="none" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" viewBox="0 0 240 320">
+            <ellipse cx="120" cy="121" rx="67" ry="88" />
+            <path d="M92 119c8-6 17-6 25 0M123 119c8-6 17-6 25 0M120 132v27l-9 7M101 183c12 9 26 9 38 0" opacity=".72" />
+            <path d="M86 198v21c0 18-14 23-31 34-18 12-28 34-31 57M154 198v21c0 18 14 23 31 34 18 12 28 34 31 57M24 310h192" />
+          </svg>
+          {cameraStatus !== "ready" && <div className="absolute inset-x-3 bottom-3 z-40 rounded-xl bg-black/70 px-3 py-2.5 text-center text-sm font-semibold text-white backdrop-blur-sm" role="status">{cameraStatus === "loading" ? <span className="flex items-center justify-center gap-2"><Spinner className="size-5" />Memuat kamera dan model wajah…</span> : cameraStatus === "error" ? <span>Kamera atau model wajah tidak tersedia. Periksa izin kamera dan koneksi.</span> : null}</div>}
+        </div>
+        <figcaption className="text-center text-sm font-medium leading-5 text-muted-foreground">Tegakkan kepala, arahkan mata ke kamera, lalu sejajarkan wajah dengan sketsa.</figcaption>
+      </figure>
       {dialogMode === "enroll" && <label className="flex min-h-12 items-start gap-3 rounded-xl border p-3" htmlFor="face-consent"><Checkbox checked={consent} id="face-consent" onCheckedChange={(value) => setConsent(value === true)} /><span className="text-sm leading-5">Saya menyetujui pembuatan template wajah terenkripsi untuk absensi dan dapat meminta profil dibatalkan.</span></label>}
       {dialogMode === "verify" && challenge && <Alert className={exceptionAvailable ? "border-destructive/40 bg-destructive/10" : "border-success/30 bg-success/10"}><Camera aria-hidden="true" /><AlertTitle>{exceptionAvailable ? "Pengecualian tersedia" : challenge.actionLabel}</AlertTitle><AlertDescription>{exceptionAvailable ? "Tiga percobaan gagal. Jelaskan kendala agar manajer dapat meninjau." : "Lakukan gerakan lalu tekan Ambil dan verifikasi. Pastikan hanya satu wajah terlihat."}</AlertDescription></Alert>}
       {exceptionAvailable && <Textarea aria-label="Alasan permintaan pengecualian" maxLength={240} onChange={(event) => setExceptionReason(event.target.value)} placeholder="Contoh: kamera tablet buram meskipun lokasi sudah sesuai" rows={3} value={exceptionReason} />}
