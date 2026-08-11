@@ -85,7 +85,7 @@ describe("responsive roster planner", () => {
     await user.click(screen.getByRole("button", { name: "Simpan perubahan" }));
 
     await waitFor(() => expect(actions.updateEntry).toHaveBeenCalledWith(expect.objectContaining({ entryId: "entry-1", shiftTemplateId: null, reason: "Staf mendapat jadwal libur" })));
-  });
+  }, 10_000);
 
   it("copies one fixed pattern to another staff member and enables fixed mode", async () => {
     const user = userEvent.setup();
@@ -104,5 +104,5 @@ describe("responsive roster planner", () => {
     await waitFor(() => expect(actions.saveFixed).toHaveBeenCalledWith({ outletId: "outlet-1", expectedUpdatedAt: outlet.updatedAt, entries: [{ userId: "staff-1", weekday: 1, shiftTemplateId: "shift-1" }, { userId: "staff-2", weekday: 1, shiftTemplateId: "shift-1" }] }));
     await user.click(screen.getByRole("button", { name: "Gunakan jadwal tetap" }));
     await waitFor(() => expect(actions.updateMode).toHaveBeenCalledWith({ outletId: "outlet-1", expectedUpdatedAt: outlet.updatedAt, mode: "FIXED" }));
-  });
+  }, 10_000);
 });

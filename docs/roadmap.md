@@ -49,7 +49,7 @@ Hanya satu milestone utama yang sebaiknya berstatus `In Progress` agar perubahan
 | 7 | Printer struk dan Kitchen Display System | Deferred | Open order | Browser printing pelanggan selesai; perangkat dapur dan integrasi printer menunggu pembelian serta pengujian perangkat |
 | 8 | Integrasi platform eksternal | Planned | Order, settlement, dan laporan stabil | Input manual dapat dikurangi melalui impor atau koneksi resmi |
 | 9 | Absensi karyawan berbasis wajah dan lokasi | Completed | Authentication, staf, outlet, RBAC, dan audit | Absensi production tersedia; kalibrasi Android tetap menjadi gate operasional sebelum payroll |
-| 10 | Role staf, jabatan, dan roster absensi | In Progress | Absensi, outlet, staf, RBAC, dan audit | Dua mode jadwal sudah lulus quality gate source; migration jadwal tetap production masih manual |
+| 10 | Role staf, jabatan, dan roster absensi | Completed | Absensi, outlet, staf, RBAC, dan audit | Dua mode jadwal, override, materialisasi otomatis, migration production, dan quality gate sudah selesai |
 
 ## Milestone 1 — Shift kasir dan tutup kas
 
@@ -346,7 +346,7 @@ Mencatat waktu masuk dan pulang staf dengan bukti wajah, lokasi outlet, waktu se
 
 ## Milestone 10 — Role staf, jabatan, dan roster absensi
 
-Status: `In Progress`. Roster draf/terbit sebelumnya sudah selesai; pengembangan dua mode per outlet (roster mingguan dan jadwal tetap berulang) sedang diverifikasi sebelum migration production.
+Status: `Completed`. Role staf terbatas, jabatan kerja, roster mingguan, jadwal tetap berulang per outlet, override tanggal, materialisasi otomatis, migration production, dan quality gate sudah tersedia.
 
 ### Tujuan
 
@@ -430,6 +430,7 @@ Memisahkan jabatan pekerjaan dari hak akses aplikasi serta menghubungkan jadwal 
 | 11 Agustus 2026 | Milestone 9 selesai sebagai fitur software production | Migration, credential, private Blob, cron retensi, RBAC, verifikasi 1:1, geofence, audit, laporan, dan UI sudah terverifikasi; pilot Android dipertahankan sebagai gate operasional sebelum payroll |
 | 11 Agustus 2026 | Milestone 10 dibuka kembali untuk dua mode jadwal | Roster mingguan dan jadwal tetap per outlet, pola massal, override tanggal, materialisasi cron/fallback, serta 309 test, lint, typecheck, dan build telah lulus; migration production menunggu eksekusi manual |
 | 11 Agustus 2026 | Lupa absen pulang tidak membuat waktu otomatis | Sesi lama ditutup tanpa `checkOutAt` saat check-in berikutnya, durasi tidak dihitung, status tetap terlihat, dan koreksi manager mempertahankan histori asli |
+| 12 Agustus 2026 | Milestone 10 ditutup setelah verifikasi dua mode jadwal | Seluruh 21 migration production sudah up to date; roster mingguan, jadwal tetap, override, materialisasi cron/fallback, 309 test, lint, typecheck, dan production build telah diverifikasi |
 
 ## Cara memperbarui roadmap
 
