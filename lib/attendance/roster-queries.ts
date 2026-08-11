@@ -9,10 +9,12 @@ import { prisma } from "@/lib/prisma";
 export async function getRosterWorkspace(outletId: string, actor: AttendanceActor, requestedWeek: string) {
   const weekStart = mondayOf(requestedWeek);
   const outlet = await scopedOutlet(outletId, actor);
-  const [staff, templates, week] = await Promise.all([
+  const [staff, templates, week, fixedSchedules, overrides] = await Promise.all([
     prisma.userOutletAssignment.findMany({ where: { outletId, user: { banned: false, role: { in: ["manager", "cashier", "staff"] }, jobPositionId: { not: null } } }, orderBy: { user: { name: "asc" } }, select: { user: { select: { id: true, name: true, email: true, role: true, jobPosition: { select: { id: true, name: true } } } } } }),
     prisma.attendanceShiftTemplate.findMany({ where: { outletId, status: "ACTIVE" }, orderBy: [{ startMinute: "asc" }, { name: "asc" }], select: { id: true, name: true, startMinute: true, endMinute: true, updatedAt: true } }),
     prisma.attendanceRosterWeek.findUnique({ where: { outletId_weekStart: { outletId, weekStart: date(weekStart) } }, include: { entries: { orderBy: [{ workDate: "asc" }, { user: { name: "asc" } }], select: { id: true, userId: true, workDate: true, shiftTemplateId: true, shiftName: true, scheduledStartAt: true, scheduledEndAt: true, updatedAt: true } } } }),
+    prisma.attendanceFixedSchedule.findMany({ where: { outletId }, orderBy: [{ user: { name: "asc" } }, { weekday: "asc" }], select: { userId: true, weekday: true, shiftTemplateId: true } }),
+    prisma.attendanceScheduleOverride.findMany({ where: { outletId, workDate: { gte: date(weekStart), lte: date(addIsoDays(weekStart, 6)) } }, select: { userId: true, workDate: true } }),
   ]);
   return {
     outlet,
@@ -20,7 +22,9 @@ export async function getRosterWorkspace(outletId: string, actor: AttendanceActo
     weekEnd: addIsoDays(weekStart, 6),
     staff: staff.map(({ user }) => user),
     templates: templates.map((template) => ({ ...template, startTime: minuteLabel(template.startMinute), endTime: minuteLabel(template.endMinute), updatedAt: template.updatedAt.toISOString() })),
-    week: week ? { id: week.id, status: week.status, publishedAt: week.publishedAt?.toISOString() ?? null, updatedAt: week.updatedAt.toISOString(), entries: week.entries.map((entry) => ({ ...entry, workDate: entry.workDate.toISOString().slice(0, 10), scheduledStartAt: entry.scheduledStartAt.toISOString(), scheduledEndAt: entry.scheduledEndAt.toISOString(), updatedAt: entry.updatedAt.toISOString() })) } : null,
+    fixedSchedules,
+    overrides: overrides.map((entry) => ({ userId: entry.userId, workDate: entry.workDate.toISOString().slice(0, 10) })),
+    week: week ? { id: week.id, status: week.status, source: week.source, publishedAt: week.publishedAt?.toISOString() ?? null, updatedAt: week.updatedAt.toISOString(), entries: week.entries.map((entry) => ({ ...entry, workDate: entry.workDate.toISOString().slice(0, 10), scheduledStartAt: entry.scheduledStartAt.toISOString(), scheduledEndAt: entry.scheduledEndAt.toISOString(), updatedAt: entry.updatedAt.toISOString() })) } : null,
   };
 }
 
@@ -49,9 +53,9 @@ export async function getAttendanceRosterSummary(outletId: string, actor: Attend
 
 async function scopedOutlet(outletId: string, actor: AttendanceActor) {
   if (actor.role !== "owner" && actor.role !== "manager") throw new Error("FORBIDDEN");
-  const outlet = await prisma.outlet.findFirst({ where: { id: outletId, status: OutletStatus.ACTIVE, ...(actor.role === "owner" ? {} : { assignments: { some: { userId: actor.id } } }) }, select: { id: true, code: true, name: true, timezone: true, attendanceLateGraceMinutes: true, attendanceEarlyLeaveGraceMinutes: true } });
+  const outlet = await prisma.outlet.findFirst({ where: { id: outletId, status: OutletStatus.ACTIVE, ...(actor.role === "owner" ? {} : { assignments: { some: { userId: actor.id } } }) }, select: { id: true, code: true, name: true, timezone: true, attendanceLateGraceMinutes: true, attendanceEarlyLeaveGraceMinutes: true, attendanceScheduleMode: true, attendanceScheduleEffectiveFrom: true, updatedAt: true } });
   if (!outlet) throw new Error("FORBIDDEN");
-  return outlet;
+  return { ...outlet, attendanceScheduleEffectiveFrom: outlet.attendanceScheduleEffectiveFrom?.toISOString().slice(0, 10) ?? null, updatedAt: outlet.updatedAt.toISOString() };
 }
 
 function serializeRosterEntry(entry: { id: string; workDate: Date; timezone: string; shiftName: string; positionName: string; scheduledStartAt: Date; scheduledEndAt: Date; lateGraceMinutes: number; earlyLeaveGraceMinutes: number; outlet: { id?: string; code: string; name: string }; session: { status: "OPEN" | "CLOSED"; checkInAt: Date; checkOutAt: Date | null; corrections: Array<{ correctedCheckInAt: Date | null; correctedCheckOutAt: Date | null }> } | null }, now: Date) {

@@ -5,8 +5,8 @@ import type { ZodType } from "zod";
 import { StaffPositionStatus } from "@/generated/prisma/client";
 import { isAppRole } from "@/lib/auth/permissions";
 import { requirePermission } from "@/lib/auth/session";
-import { addPublishedRosterEntry, changeShiftTemplateStatus, copyRosterWeek, createShiftTemplate, publishRosterWeek, RosterError, saveRosterDraft, updatePublishedRosterEntry, updateShiftTemplate } from "@/lib/attendance/roster-service";
-import { addPublishedRosterEntrySchema, copyRosterWeekSchema, rosterWeekTargetSchema, saveRosterDraftSchema, shiftTemplateSchema, shiftTemplateTargetSchema, updatePublishedRosterEntrySchema, updateShiftTemplateSchema } from "@/lib/attendance/roster-validation";
+import { addPublishedRosterEntry, changeShiftTemplateStatus, copyRosterWeek, createShiftTemplate, publishRosterWeek, resetFixedScheduleOverride, RosterError, saveFixedSchedules, saveRosterDraft, updatePublishedRosterEntry, updateScheduleMode, updateShiftTemplate } from "@/lib/attendance/roster-service";
+import { addPublishedRosterEntrySchema, copyRosterWeekSchema, resetFixedScheduleOverrideSchema, rosterWeekTargetSchema, saveFixedSchedulesSchema, saveRosterDraftSchema, shiftTemplateSchema, shiftTemplateTargetSchema, updatePublishedRosterEntrySchema, updateScheduleModeSchema, updateShiftTemplateSchema } from "@/lib/attendance/roster-validation";
 
 export type RosterActionState = { status: "success" | "error"; message: string };
 
@@ -18,6 +18,9 @@ export async function publishRosterWeekAction(raw: unknown) { return run(rosterW
 export async function copyRosterWeekAction(raw: unknown) { return run(copyRosterWeekSchema, raw, copyRosterWeek, "Roster minggu sebelumnya disalin sebagai draf."); }
 export async function updatePublishedRosterEntryAction(raw: unknown) { return run(updatePublishedRosterEntrySchema, raw, updatePublishedRosterEntry, "Jadwal terbit diperbarui."); }
 export async function addPublishedRosterEntryAction(raw: unknown) { return run(addPublishedRosterEntrySchema, raw, addPublishedRosterEntry, "Shift ditambahkan ke roster terbit."); }
+export async function saveFixedSchedulesAction(raw: unknown) { return run(saveFixedSchedulesSchema, raw, saveFixedSchedules, "Pola jadwal tetap disimpan."); }
+export async function updateScheduleModeAction(raw: unknown) { return run(updateScheduleModeSchema, raw, updateScheduleMode, "Mode jadwal diperbarui."); }
+export async function resetFixedScheduleOverrideAction(raw: unknown) { return run(resetFixedScheduleOverrideSchema, raw, resetFixedScheduleOverride, "Jadwal kembali mengikuti pola tetap."); }
 
 async function run<Input>(schema: ZodType<Input>, raw: unknown, mutation: (input: Input, actor: { id: string; name: string; email: string; role: "owner" | "manager" }) => Promise<unknown>, success: string): Promise<RosterActionState> {
   const session = await requirePermission({ attendance: ["schedule"] });

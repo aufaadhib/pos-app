@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import { addIsoDays, attendanceDisplay, hasMissedCheckoutDeadlinePassed, isWithinScheduledWindow, mondayOf, scheduledRange } from "@/lib/attendance/roster";
-import { addPublishedRosterEntrySchema, saveRosterDraftSchema, updatePublishedRosterEntrySchema } from "@/lib/attendance/roster-validation";
+import { addPublishedRosterEntrySchema, saveFixedSchedulesSchema, saveRosterDraftSchema, updatePublishedRosterEntrySchema, updateScheduleModeSchema } from "@/lib/attendance/roster-validation";
 
 describe("attendance roster domain", () => {
   it("uses a stable Monday-to-Sunday week without browser timezone drift", () => {
@@ -71,5 +71,12 @@ describe("attendance roster domain", () => {
   it("requires a meaningful reason for published additions and Libur revisions", () => {
     expect(addPublishedRosterEntrySchema.safeParse({ rosterWeekId: "week-1", outletId: "outlet-1", userId: "staff-1", workDate: "2099-08-10", shiftTemplateId: "shift-1", expectedWeekUpdatedAt: "2026-08-11T01:00:00.000Z", reason: "izin" }).success).toBe(false);
     expect(updatePublishedRosterEntrySchema.safeParse({ entryId: "entry-1", shiftTemplateId: null, expectedUpdatedAt: "2026-08-11T01:00:00.000Z", reason: "Staf mendapat jadwal libur" }).success).toBe(true);
+  });
+
+  it("validates fixed modes, weekdays, and unique staff-day patterns", () => {
+    expect(updateScheduleModeSchema.safeParse({ outletId: "outlet-1", expectedUpdatedAt: "2026-08-11T01:00:00.000Z", mode: "FIXED" }).success).toBe(true);
+    expect(updateScheduleModeSchema.safeParse({ outletId: "outlet-1", expectedUpdatedAt: "2026-08-11T01:00:00.000Z", mode: "ROTATING" }).success).toBe(false);
+    expect(saveFixedSchedulesSchema.safeParse({ outletId: "outlet-1", expectedUpdatedAt: "2026-08-11T01:00:00.000Z", entries: [{ userId: "staff-1", weekday: 1, shiftTemplateId: "shift-1" }, { userId: "staff-1", weekday: 1, shiftTemplateId: "shift-2" }] }).success).toBe(false);
+    expect(saveFixedSchedulesSchema.safeParse({ outletId: "outlet-1", expectedUpdatedAt: "2026-08-11T01:00:00.000Z", entries: [{ userId: "staff-1", weekday: 8, shiftTemplateId: "shift-1" }] }).success).toBe(false);
   });
 });

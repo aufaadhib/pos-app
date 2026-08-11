@@ -20,7 +20,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { Spinner } from "@/components/ui/spinner";
 import { Textarea } from "@/components/ui/textarea";
-import { ReceiptRenderer } from "@/components/receipt/receipt-renderer";
+import { ReceiptPaperSheet } from "@/components/receipt/receipt-paper-sheet";
 import { getAutoPrintPreference } from "@/lib/printers/device-preference";
 import type { PosMenu, PosMenuOption, PosMenuProduct } from "@/lib/pos/types";
 import type { OpenOrder } from "@/lib/orders/types";
@@ -519,7 +519,7 @@ function ReceiptPreview({ menu, receipt, onClose }: { menu: PosMenu; receipt: Re
   }
 
   return <>
-    <ReceiptRenderer data={receipt} outlet={menu.outlet} />
+    <div className="overflow-hidden rounded-xl bg-muted/35 p-3 shadow-inner sm:p-5"><ReceiptPaperSheet data={receipt} outlet={menu.outlet} /></div>
     <div className="mt-5 grid grid-cols-2 gap-2 print:hidden"><Button onClick={onClose} type="button" variant="outline">Pesanan baru</Button><Button onClick={printReceipt} type="button"><Printer aria-hidden="true" />Cetak struk</Button></div>
   </>;
 }

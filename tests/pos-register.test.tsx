@@ -179,6 +179,8 @@ describe("POS register layout", () => {
 
     const receipt = await screen.findByRole("article", { name: "Struk transaksi GLT-20260808-0001" });
     expect(receipt).toHaveClass("thermal-receipt");
+    expect(receipt).toHaveClass("max-w-none", "bg-transparent");
+    expect(screen.getByTestId("receipt-preview-sheet")).toHaveClass("max-w-[24rem]", "px-[5%]", "bg-white");
     expect(receipt).toHaveTextContent("Kopi Susu");
     expect(receipt).toHaveTextContent("Meja A-07");
     await user.click(screen.getByRole("button", { name: "Cetak struk" }));

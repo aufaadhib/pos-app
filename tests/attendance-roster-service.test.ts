@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { AttendanceRosterStatus, Prisma, StaffPositionStatus } from "@/generated/prisma/client";
 
@@ -8,8 +8,16 @@ const mocks = vi.hoisted(() => ({
   entryDelete: vi.fn(),
   entryFindUnique: vi.fn(),
   entryUpdate: vi.fn(),
+  fixedCreateMany: vi.fn(),
+  fixedDeleteMany: vi.fn(),
+  fixedFindMany: vi.fn(),
+  overrideFindMany: vi.fn(),
   outletFindFirst: vi.fn(),
+  outletUpdate: vi.fn(),
+  assignmentFindMany: vi.fn(),
   rosterCreate: vi.fn(),
+  rosterDeleteMany: vi.fn(),
+  rosterFindMany: vi.fn(),
   rosterFindUnique: vi.fn(),
   rosterFindFirst: vi.fn(),
   rosterUpdate: vi.fn(),
@@ -24,17 +32,20 @@ const mocks = vi.hoisted(() => ({
 vi.mock("server-only", () => ({}));
 vi.mock("@/lib/prisma", () => ({ prisma: { $transaction: mocks.transaction } }));
 
-import { addPublishedRosterEntry, changeShiftTemplateStatus, createShiftTemplate, publishRosterWeek, saveRosterDraft, updatePublishedRosterEntry, updateShiftTemplate } from "@/lib/attendance/roster-service";
+import { addPublishedRosterEntry, changeShiftTemplateStatus, createShiftTemplate, publishRosterWeek, saveFixedSchedules, saveRosterDraft, updatePublishedRosterEntry, updateScheduleMode, updateShiftTemplate } from "@/lib/attendance/roster-service";
 
 const actor = { id: "manager-1", name: "Manajer", email: "manager@example.com", role: "manager" as const };
-const outlet = { id: "outlet-1", timezone: "Asia/Jakarta", attendanceLateGraceMinutes: 15, attendanceEarlyLeaveGraceMinutes: 15 };
+const outlet = { id: "outlet-1", timezone: "Asia/Jakarta", attendanceLateGraceMinutes: 15, attendanceEarlyLeaveGraceMinutes: 15, attendanceScheduleMode: "WEEKLY" as const, attendanceScheduleEffectiveFrom: null, updatedAt: new Date("2026-08-11T01:00:00.000Z") };
 const updatedAt = new Date("2026-08-11T01:00:00.000Z");
 const transactionClient = {
   attendanceAuditLog: { create: mocks.auditCreate },
   attendanceRosterEntry: { create: mocks.entryCreate, delete: mocks.entryDelete, findUnique: mocks.entryFindUnique, update: mocks.entryUpdate },
-  attendanceRosterWeek: { create: mocks.rosterCreate, findFirst: mocks.rosterFindFirst, findUnique: mocks.rosterFindUnique, update: mocks.rosterUpdate },
+  attendanceFixedSchedule: { createMany: mocks.fixedCreateMany, deleteMany: mocks.fixedDeleteMany, findMany: mocks.fixedFindMany },
+  attendanceScheduleOverride: { findMany: mocks.overrideFindMany },
+  attendanceRosterWeek: { create: mocks.rosterCreate, deleteMany: mocks.rosterDeleteMany, findFirst: mocks.rosterFindFirst, findMany: mocks.rosterFindMany, findUnique: mocks.rosterFindUnique, update: mocks.rosterUpdate },
   attendanceShiftTemplate: { create: mocks.templateCreate, findFirst: mocks.templateFindFirst, findMany: mocks.templateFindMany, update: mocks.templateUpdate },
-  outlet: { findFirst: mocks.outletFindFirst },
+  outlet: { findFirst: mocks.outletFindFirst, update: mocks.outletUpdate },
+  userOutletAssignment: { findMany: mocks.assignmentFindMany },
   user: { findMany: mocks.userFindMany },
 };
 
@@ -44,7 +55,11 @@ describe("attendance roster service", () => {
     mocks.transaction.mockImplementation(async (callback) => callback(transactionClient));
     mocks.outletFindFirst.mockResolvedValue(outlet);
     mocks.auditCreate.mockResolvedValue({ id: "audit-1" });
+    mocks.fixedFindMany.mockResolvedValue([]);
+    mocks.overrideFindMany.mockResolvedValue([]);
   });
+
+  afterEach(() => vi.useRealTimers());
 
   it("scopes manager templates to an assigned active outlet and audits creation", async () => {
     mocks.templateCreate.mockResolvedValue({ id: "shift-1", name: "Pagi", startMinute: 480, endMinute: 960, status: StaffPositionStatus.ACTIVE });
@@ -153,5 +168,47 @@ describe("attendance roster service", () => {
     mocks.transaction.mockRejectedValue(new Prisma.PrismaClientKnownRequestError("duplicate", { code: "P2002", clientVersion: "test" }));
 
     await expect(saveRosterDraft({ outletId: outlet.id, weekStart: "2026-08-10", expectedUpdatedAt: null, entries: [] }, actor)).rejects.toMatchObject({ code: "DUPLICATE" });
+  });
+
+  it("replaces an outlet fixed pattern and records its audit atomically", async () => {
+    mocks.userFindMany.mockResolvedValue([{ id: "staff-1" }]);
+    mocks.templateFindMany.mockResolvedValue([{ id: "shift-1" }]);
+    mocks.fixedFindMany.mockResolvedValueOnce([]).mockResolvedValueOnce([]);
+    mocks.outletUpdate.mockResolvedValue({ ...outlet, updatedAt: new Date("2026-08-11T02:00:00.000Z") });
+
+    await saveFixedSchedules({ outletId: outlet.id, expectedUpdatedAt: outlet.updatedAt.toISOString(), entries: [{ userId: "staff-1", weekday: 1, shiftTemplateId: "shift-1" }] }, actor);
+
+    expect(mocks.fixedDeleteMany).toHaveBeenCalledWith({ where: { outletId: outlet.id } });
+    expect(mocks.fixedCreateMany).toHaveBeenCalledWith({ data: [{ outletId: outlet.id, userId: "staff-1", weekday: 1, shiftTemplateId: "shift-1" }] });
+    expect(mocks.auditCreate).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ action: "FIXED_SCHEDULE_UPDATE" }) }));
+  });
+
+  it("activates fixed mode on the next free Monday and materializes two published weeks", async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-08-11T03:00:00.000Z"));
+    const fixedOutlet = { ...outlet, attendanceScheduleMode: "FIXED" as const, attendanceScheduleEffectiveFrom: new Date("2026-08-17T00:00:00.000Z") };
+    mocks.outletFindFirst.mockResolvedValueOnce(outlet).mockResolvedValue(fixedOutlet);
+    mocks.assignmentFindMany.mockResolvedValue([{ userId: "staff-1" }]);
+    mocks.fixedFindMany.mockResolvedValueOnce([{ userId: "staff-1" }]).mockResolvedValue([{ userId: "staff-1", weekday: 1, shiftTemplateId: "shift-1" }]);
+    mocks.rosterFindFirst.mockResolvedValue(null);
+    mocks.rosterFindUnique.mockResolvedValue(null);
+    mocks.userFindMany.mockResolvedValue([{ id: "staff-1", jobPositionId: "position-1", jobPosition: { name: "Pelayan", status: StaffPositionStatus.ACTIVE } }]);
+    mocks.templateFindMany.mockResolvedValue([{ id: "shift-1", name: "Pagi", startMinute: 480, endMinute: 960 }]);
+    mocks.outletUpdate.mockResolvedValue(fixedOutlet);
+    mocks.rosterCreate.mockImplementation(async ({ data }) => ({ id: `week-${data.weekStart.toISOString()}`, ...data }));
+
+    await updateScheduleMode({ outletId: outlet.id, expectedUpdatedAt: outlet.updatedAt.toISOString(), mode: "FIXED" }, actor);
+
+    expect(mocks.outletUpdate).toHaveBeenCalledWith({ where: { id: outlet.id }, data: { attendanceScheduleMode: "FIXED", attendanceScheduleEffectiveFrom: new Date("2026-08-17T00:00:00.000Z") } });
+    expect(mocks.rosterCreate).toHaveBeenCalledTimes(2);
+    expect(mocks.rosterCreate).toHaveBeenCalledWith({ data: expect.objectContaining({ source: "FIXED", status: "PUBLISHED", weekStart: new Date("2026-08-17T00:00:00.000Z") }) });
+  });
+
+  it("blocks fixed mode while an active staff member has no recurring shift", async () => {
+    mocks.assignmentFindMany.mockResolvedValue([{ userId: "staff-1" }, { userId: "staff-2" }]);
+    mocks.fixedFindMany.mockResolvedValue([{ userId: "staff-1" }]);
+
+    await expect(updateScheduleMode({ outletId: outlet.id, expectedUpdatedAt: outlet.updatedAt.toISOString(), mode: "FIXED" }, actor)).rejects.toMatchObject({ code: "INVALID" });
+    expect(mocks.outletUpdate).not.toHaveBeenCalled();
   });
 });

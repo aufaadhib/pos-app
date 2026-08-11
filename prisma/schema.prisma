@@ -38,6 +38,8 @@ model User {
   attendanceCorrections    AttendanceCorrection[]              @relation("AttendanceCorrectionActor")
   jobPosition              StaffPosition?                      @relation(fields: [jobPositionId], references: [id], onDelete: Restrict)
   attendanceRosterEntries  AttendanceRosterEntry[]
+  attendanceFixedSchedules AttendanceFixedSchedule[]
+  attendanceScheduleOverrides AttendanceScheduleOverride[]
 
   @@index([jobPositionId])
   @@map("user")
@@ -410,6 +412,9 @@ enum AttendanceAuditAction {
   SHIFT_TEMPLATE_ARCHIVE
   ROSTER_PUBLISH
   ROSTER_UPDATE
+  SCHEDULE_MODE_UPDATE
+  FIXED_SCHEDULE_UPDATE
+  FIXED_ROSTER_MATERIALIZE
 }
 
 enum StaffPositionStatus {
@@ -420,6 +425,16 @@ enum StaffPositionStatus {
 enum AttendanceRosterStatus {
   DRAFT
   PUBLISHED
+}
+
+enum AttendanceScheduleMode {
+  WEEKLY
+  FIXED
+}
+
+enum AttendanceRosterSource {
+  MANUAL
+  FIXED
 }
 
 enum AttendanceScheduleMatch {
@@ -450,6 +465,8 @@ model Outlet {
   attendanceRadiusMeters           Int                           @default(100)
   attendanceLateGraceMinutes       Int                           @default(15)
   attendanceEarlyLeaveGraceMinutes Int                           @default(15)
+  attendanceScheduleMode           AttendanceScheduleMode        @default(WEEKLY)
+  attendanceScheduleEffectiveFrom  DateTime?                     @db.Date
   status                           OutletStatus                  @default(ACTIVE)
   archivedAt                       DateTime?
   createdAt                        DateTime                      @default(now())
@@ -470,6 +487,8 @@ model Outlet {
   attendanceShiftTemplates         AttendanceShiftTemplate[]
   attendanceRosterWeeks            AttendanceRosterWeek[]
   attendanceRosterEntries          AttendanceRosterEntry[]
+  attendanceFixedSchedules         AttendanceFixedSchedule[]
+  attendanceScheduleOverrides      AttendanceScheduleOverride[]
 
   @@index([status, name])
   @@map("outlet")
@@ -633,6 +652,8 @@ model AttendanceShiftTemplate {
   updatedAt      DateTime                @updatedAt
   outlet         Outlet                  @relation(fields: [outletId], references: [id], onDelete: Restrict)
   rosterEntries  AttendanceRosterEntry[]
+  fixedSchedules AttendanceFixedSchedule[]
+  scheduleOverrides AttendanceScheduleOverride[]
 
   @@unique([outletId, normalizedName])
   @@index([outletId, status, name])
@@ -644,6 +665,7 @@ model AttendanceRosterWeek {
   outletId          String
   weekStart         DateTime                @db.Date
   status            AttendanceRosterStatus  @default(DRAFT)
+  source            AttendanceRosterSource  @default(MANUAL)
   publishedAt       DateTime?
   publishedByUserId String?
   publishedByName   String?
@@ -688,6 +710,41 @@ model AttendanceRosterEntry {
   @@index([outletId, workDate])
   @@index([rosterWeekId, workDate])
   @@map("attendance_roster_entry")
+}
+
+model AttendanceFixedSchedule {
+  id              String                  @id @default(cuid())
+  outletId        String
+  userId          String
+  weekday         Int
+  shiftTemplateId String
+  createdAt       DateTime                @default(now())
+  updatedAt       DateTime                @updatedAt
+  outlet          Outlet                  @relation(fields: [outletId], references: [id], onDelete: Cascade)
+  user            User                    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  shiftTemplate   AttendanceShiftTemplate @relation(fields: [shiftTemplateId], references: [id], onDelete: Restrict)
+
+  @@unique([outletId, userId, weekday])
+  @@index([userId, weekday])
+  @@map("attendance_fixed_schedule")
+}
+
+model AttendanceScheduleOverride {
+  id              String                   @id @default(cuid())
+  outletId        String
+  userId          String
+  workDate        DateTime                 @db.Date
+  shiftTemplateId String?
+  reason          String                   @db.VarChar(240)
+  createdAt       DateTime                 @default(now())
+  updatedAt       DateTime                 @updatedAt
+  outlet          Outlet                   @relation(fields: [outletId], references: [id], onDelete: Cascade)
+  user            User                     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  shiftTemplate   AttendanceShiftTemplate? @relation(fields: [shiftTemplateId], references: [id], onDelete: Restrict)
+
+  @@unique([userId, workDate])
+  @@index([outletId, workDate])
+  @@map("attendance_schedule_override")
 }
 
 model AttendanceExceptionRequest {

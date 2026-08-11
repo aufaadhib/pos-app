@@ -5,7 +5,8 @@ import { CheckCircle2, CircleOff, Info, Printer, Save } from "lucide-react";
 import { toast } from "react-toastify";
 
 import { updatePrinterSettingsAction } from "@/app/settings/printer-actions";
-import { ReceiptRenderer, type ReceiptRendererData } from "@/components/receipt/receipt-renderer";
+import { ReceiptPaperSheet } from "@/components/receipt/receipt-paper-sheet";
+import type { ReceiptRendererData } from "@/components/receipt/receipt-renderer";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -150,13 +151,7 @@ export function PrinterSettingsForm({ outlet }: {
         <Button className="min-h-11" onClick={printSample} type="button" variant="outline"><Printer aria-hidden="true" />Cetak contoh</Button>
       </div>
       <div className="overflow-hidden rounded-xl bg-background p-3 shadow-inner sm:p-5">
-        <div
-          className={cn("receipt-preview-sheet mx-auto w-full overflow-hidden bg-white py-5 shadow-sm ring-1 ring-black/8", paperSize === "MM58" ? "max-w-[18rem] px-[5.17%]" : "max-w-[24rem] px-[5%]")}
-          data-paper-size={paperSize}
-          data-testid="receipt-preview-sheet"
-        >
-          <ReceiptRenderer className="max-w-none bg-transparent" data={sampleReceipt} outlet={{ ...outlet, timezone: "Asia/Jakarta", receiptPaperSize: paperSize, receiptFooter: footer }} />
-        </div>
+        <ReceiptPaperSheet data={sampleReceipt} outlet={{ ...outlet, timezone: "Asia/Jakarta", receiptPaperSize: paperSize, receiptFooter: footer }} />
       </div>
     </aside>
   </div>;
