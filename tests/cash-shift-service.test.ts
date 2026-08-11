@@ -11,6 +11,9 @@ const mocks = vi.hoisted(() => ({
   cashShiftFindFirst: vi.fn(),
   cashShiftFindUnique: vi.fn(),
   cashShiftUpdateMany: vi.fn(),
+  correctionCreate: vi.fn(),
+  correctionFindFirst: vi.fn(),
+  correctionFindUnique: vi.fn(),
   outletFindFirst: vi.fn(),
   paymentAggregate: vi.fn(),
   refundAggregate: vi.fn(),
@@ -22,6 +25,7 @@ vi.mock("@/lib/prisma", () => ({
   prisma: {
     cashShift: { findUnique: mocks.cashShiftFindUnique },
     cashMovement: { findUnique: mocks.cashMovementFindUnique },
+    cashShiftReconciliationCorrection: { findUnique: mocks.correctionFindUnique },
     $transaction: mocks.transaction,
   },
 }));
@@ -30,6 +34,7 @@ import {
   addCashMovement,
   CashShiftError,
   closeCashShift,
+  correctCashShiftReconciliation,
   forceCloseCashShift,
   openCashShift,
 } from "@/lib/shifts/service";
@@ -39,6 +44,7 @@ const transactionClient = {
   outlet: { findFirst: mocks.outletFindFirst },
   cashShift: { create: mocks.cashShiftCreate, findFirst: mocks.cashShiftFindFirst, updateMany: mocks.cashShiftUpdateMany },
   cashMovement: { create: mocks.cashMovementCreate, groupBy: mocks.cashMovementGroupBy },
+  cashShiftReconciliationCorrection: { create: mocks.correctionCreate, findFirst: mocks.correctionFindFirst },
   salePayment: { aggregate: mocks.paymentAggregate },
   saleRefund: { aggregate: mocks.refundAggregate },
   cashShiftAuditLog: { create: mocks.auditCreate },
@@ -49,6 +55,9 @@ describe("cash shift service", () => {
     vi.clearAllMocks();
     mocks.cashShiftFindUnique.mockResolvedValue(null);
     mocks.cashMovementFindUnique.mockResolvedValue(null);
+    mocks.correctionFindUnique.mockResolvedValue(null);
+    mocks.correctionFindFirst.mockResolvedValue(null);
+    mocks.correctionCreate.mockResolvedValue({ id: "correction-1" });
     mocks.outletFindFirst.mockResolvedValue({ id: "outlet-1", timezone: "Asia/Jakarta" });
     mocks.cashShiftCreate.mockResolvedValue({ id: "shift-1" });
     mocks.cashMovementCreate.mockResolvedValue({ id: "movement-1" });
@@ -109,6 +118,43 @@ describe("cash shift service", () => {
 
   it("rejects force-close from a cashier", async () => {
     await expect(forceCloseCashShift({ shiftId: "shift-1", outletId: "outlet-1", actualCash: "0", closeToken: "d5df2f12-bf3e-4a1e-9b12-1dd4c931cd36", reason: "Kasir lupa menutup shift" }, actor)).rejects.toBeInstanceOf(CashShiftError);
+    expect(mocks.transaction).not.toHaveBeenCalled();
+  });
+
+  it("appends an effective reconciliation correction without updating the original close snapshot", async () => {
+    const manager = { id: "manager-1", name: "Manajer", email: "manager@example.com", role: "manager" as const };
+    mocks.cashShiftFindFirst.mockResolvedValue({ id: "shift-1", outletId: "outlet-1", expectedCash: new Prisma.Decimal(375000), actualCash: new Prisma.Decimal(350000), cashDifference: new Prisma.Decimal(-25000) });
+
+    const result = await correctCashShiftReconciliation({ shiftId: "shift-1", outletId: "outlet-1", correctionToken: "15df2f12-bf3e-4a1e-9b12-1dd4c931cd36", correctedActualCash: "380000", reason: "Uang pecahan terselip saat dihitung" }, manager);
+
+    expect(result).toMatchObject({ status: "success", actualCash: "380000.00", cashDifference: "5000.00" });
+    expect(mocks.correctionCreate).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ revision: 1, actorUserId: manager.id }) }));
+    expect(mocks.cashShiftUpdateMany).not.toHaveBeenCalled();
+    expect(mocks.auditCreate).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ action: "RECONCILIATION_CORRECT" }) }));
+  });
+
+  it("continues the immutable correction chain from the latest revision", async () => {
+    const owner = { id: "owner-1", name: "Pemilik", email: "owner@example.com", role: "owner" as const };
+    mocks.cashShiftFindFirst.mockResolvedValue({ id: "shift-1", outletId: "outlet-1", expectedCash: new Prisma.Decimal(375000), actualCash: new Prisma.Decimal(350000), cashDifference: new Prisma.Decimal(-25000) });
+    mocks.correctionFindFirst.mockResolvedValue({ revision: 1, correctedActualCash: new Prisma.Decimal(380000), correctedDifference: new Prisma.Decimal(5000) });
+
+    await correctCashShiftReconciliation({ shiftId: "shift-1", outletId: "outlet-1", correctionToken: "25df2f12-bf3e-4a1e-9b12-1dd4c931cd36", correctedActualCash: "375000", reason: "Hitung ulang bersama supervisor" }, owner);
+
+    expect(mocks.correctionCreate).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ revision: 2, previousActualCash: expect.objectContaining({}), previousDifference: expect.objectContaining({}) }) }));
+  });
+
+  it("rejects cashier reconciliation corrections before opening a transaction", async () => {
+    await expect(correctCashShiftReconciliation({ shiftId: "shift-1", outletId: "outlet-1", correctionToken: "35df2f12-bf3e-4a1e-9b12-1dd4c931cd36", correctedActualCash: "375000", reason: "Hitung ulang bersama supervisor" }, actor)).rejects.toBeInstanceOf(CashShiftError);
+    expect(mocks.transaction).not.toHaveBeenCalled();
+  });
+
+  it("returns an idempotent correction without writing a second revision", async () => {
+    const manager = { id: "manager-1", name: "Manajer", email: "manager@example.com", role: "manager" as const };
+    mocks.correctionFindUnique.mockResolvedValue({ shiftId: "shift-1", actorUserId: manager.id, expectedCash: new Prisma.Decimal(375000), correctedActualCash: new Prisma.Decimal(375000), correctedDifference: new Prisma.Decimal(0) });
+
+    const result = await correctCashShiftReconciliation({ shiftId: "shift-1", outletId: "outlet-1", correctionToken: "45df2f12-bf3e-4a1e-9b12-1dd4c931cd36", correctedActualCash: "375000", reason: "Hitung ulang bersama supervisor" }, manager);
+
+    expect(result).toMatchObject({ status: "success", actualCash: "375000.00", cashDifference: "0.00" });
     expect(mocks.transaction).not.toHaveBeenCalled();
   });
 });

@@ -5,8 +5,8 @@ import type { ZodType } from "zod";
 import { StaffPositionStatus } from "@/generated/prisma/client";
 import { isAppRole } from "@/lib/auth/permissions";
 import { requirePermission } from "@/lib/auth/session";
-import { changeShiftTemplateStatus, copyRosterWeek, createShiftTemplate, publishRosterWeek, RosterError, saveRosterDraft, updatePublishedRosterEntry, updateShiftTemplate } from "@/lib/attendance/roster-service";
-import { copyRosterWeekSchema, rosterWeekTargetSchema, saveRosterDraftSchema, shiftTemplateSchema, shiftTemplateTargetSchema, updatePublishedRosterEntrySchema, updateShiftTemplateSchema } from "@/lib/attendance/roster-validation";
+import { addPublishedRosterEntry, changeShiftTemplateStatus, copyRosterWeek, createShiftTemplate, publishRosterWeek, RosterError, saveRosterDraft, updatePublishedRosterEntry, updateShiftTemplate } from "@/lib/attendance/roster-service";
+import { addPublishedRosterEntrySchema, copyRosterWeekSchema, rosterWeekTargetSchema, saveRosterDraftSchema, shiftTemplateSchema, shiftTemplateTargetSchema, updatePublishedRosterEntrySchema, updateShiftTemplateSchema } from "@/lib/attendance/roster-validation";
 
 export type RosterActionState = { status: "success" | "error"; message: string };
 
@@ -17,6 +17,7 @@ export async function saveRosterDraftAction(raw: unknown) { return run(saveRoste
 export async function publishRosterWeekAction(raw: unknown) { return run(rosterWeekTargetSchema, raw, publishRosterWeek, "Roster mingguan diterbitkan."); }
 export async function copyRosterWeekAction(raw: unknown) { return run(copyRosterWeekSchema, raw, copyRosterWeek, "Roster minggu sebelumnya disalin sebagai draf."); }
 export async function updatePublishedRosterEntryAction(raw: unknown) { return run(updatePublishedRosterEntrySchema, raw, updatePublishedRosterEntry, "Jadwal terbit diperbarui."); }
+export async function addPublishedRosterEntryAction(raw: unknown) { return run(addPublishedRosterEntrySchema, raw, addPublishedRosterEntry, "Shift ditambahkan ke roster terbit."); }
 
 async function run<Input>(schema: ZodType<Input>, raw: unknown, mutation: (input: Input, actor: { id: string; name: string; email: string; role: "owner" | "manager" }) => Promise<unknown>, success: string): Promise<RosterActionState> {
   const session = await requirePermission({ attendance: ["schedule"] });

@@ -49,7 +49,7 @@ Hanya satu milestone utama yang sebaiknya berstatus `In Progress` agar perubahan
 | 7 | Printer struk dan Kitchen Display System | Deferred | Open order | Browser printing pelanggan selesai; perangkat dapur dan integrasi printer menunggu pembelian serta pengujian perangkat |
 | 8 | Integrasi platform eksternal | Planned | Order, settlement, dan laporan stabil | Input manual dapat dikurangi melalui impor atau koneksi resmi |
 | 9 | Absensi karyawan berbasis wajah dan lokasi | Deferred | Authentication, staf, outlet, RBAC, dan audit | Implementasi web selesai; aktivasi operasional menunggu migration deployment dan pilot perangkat Android nyata |
-| 10 | Role staf, jabatan, dan roster absensi | In Progress | Absensi, outlet, staf, RBAC, dan audit | Jadwal kerja per outlet dapat diterbitkan, dicocokkan saat absensi, dan dilaporkan tanpa membuka akses POS |
+| 10 | Role staf, jabatan, dan roster absensi | Completed | Absensi, outlet, staf, RBAC, dan audit | Jadwal kerja per outlet dapat diterbitkan, dicocokkan saat absensi, dan dilaporkan tanpa membuka akses POS |
 
 ## Milestone 1 — Shift kasir dan tutup kas
 
@@ -67,6 +67,7 @@ Mengelompokkan transaksi dan pergerakan uang berdasarkan shift aktif sehingga sa
 - Kasir memasukkan jumlah uang fisik aktual; sistem menyimpan selisih tanpa mengubah hasil hitung.
 - Owner dan manager dapat melihat riwayat serta rincian shift dalam cakupan outletnya.
 - Pembukaan, pergerakan kas, dan penutupan dicatat dalam audit trail.
+- Owner/manager dapat mengoreksi salah hitung kas aktual pada shift tertutup tanpa mengubah snapshot penutupan asli.
 
 ### Belum termasuk
 
@@ -80,6 +81,7 @@ Mengelompokkan transaksi dan pergerakan uang berdasarkan shift aktif sehingga sa
 - Tidak ada checkout baru yang dapat tersimpan tanpa shift aktif setelah kewajiban shift diaktifkan.
 - Dua permintaan pembukaan atau penutupan bersamaan tidak menghasilkan shift ganda.
 - Perhitungan kas menggunakan `Decimal` dan diuji untuk penjualan serta kas masuk/keluar.
+- Koreksi rekonsiliasi bersifat append-only, idempoten, scoped outlet, dan laporan membedakan nilai asli dari nilai efektif.
 - Kasir tidak dapat melihat shift outlet lain; manager hanya dapat melihat outlet penugasannya.
 - Tampilan buka, operasional, dan tutup shift dapat digunakan di mobile, tablet, dan desktop.
 
@@ -91,6 +93,7 @@ Mengelompokkan transaksi dan pergerakan uang berdasarkan shift aktif sehingga sa
 - Satu user hanya boleh memiliki satu shift terbuka secara global.
 - Pergantian outlet dan perubahan administratif yang memutus cakupan shift diblokir sampai shift ditutup.
 - Input Rupiah operasional memakai pemisah ribuan titik sambil mengirim digit mentah ke server.
+- Koreksi pascapenutupan hanya mengubah nilai efektif kas aktual/selisih melalui revision chain; expected cash, transaksi, movement, refund, dan snapshot penutupan asli tetap immutable.
 
 ## Milestone 2 — Void dan refund
 
@@ -335,7 +338,7 @@ Mencatat waktu masuk dan pulang staf dengan bukti wajah, lokasi outlet, waktu se
 
 ## Milestone 10 — Role staf, jabatan, dan roster absensi
 
-Status: `In Progress`. Implementasi dan migration tersedia; status baru menjadi `Completed` setelah seluruh quality check lulus dan migration diterapkan pada environment tujuan. Pilot kamera/GPS tetap mengikuti status operasional Milestone 9.
+Status: `Completed`. Migration production, pengelolaan template, roster draf/terbit, revisi tambah/ganti/Libur, permission, test, lint, typecheck, dan production build telah lulus. Pilot kamera/GPS tetap mengikuti status operasional Milestone 9.
 
 ### Tujuan
 
@@ -348,7 +351,7 @@ Memisahkan jabatan pekerjaan dari hak akses aplikasi serta menghubungkan jadwal 
 - Kasir tetap ditugaskan tepat ke satu outlet. Manager dan staf biasa dapat ditugaskan ke beberapa outlet.
 - Template shift dimiliki outlet, menyimpan jam mulai/selesai, dan mendukung shift lintas tengah malam.
 - Roster memakai minggu Senin–Minggu, satu shift per staf per tanggal secara global, draf atomik, salin minggu lalu, publish, optimistic concurrency, snapshot zona waktu/jabatan/toleransi, dan audit.
-- Roster terbit tidak kembali menjadi draf. Shift masa depan dapat diganti dengan alasan wajib; jadwal yang sudah mulai atau berlalu dikunci.
+- Roster terbit tidak kembali menjadi draf. Shift masa depan dapat diganti, ditambahkan pada hari Libur, atau diubah menjadi Libur dengan alasan wajib; jadwal yang sudah mulai atau berlalu dikunci.
 - Staf melihat roster terbit minggu berjalan dan minggu berikutnya. Check-in terjadwal dibuka dua jam sebelum shift; check-in lain membutuhkan konfirmasi **Di luar jadwal** dan tetap tercatat untuk ditinjau.
 - Toleransi terlambat dan pulang cepat diatur per outlet 0–120 menit dengan default 15 menit. Ringkasan manager dan CSV menampilkan jabatan, jadwal, status, menit terlambat/pulang cepat, serta total jam.
 
@@ -356,7 +359,7 @@ Memisahkan jabatan pekerjaan dari hak akses aplikasi serta menghubungkan jadwal 
 
 - Migration `add_staff_roles_and_rosters` menambahkan `StaffPosition`, `AttendanceShiftTemplate`, `AttendanceRosterWeek`, `AttendanceRosterEntry`, schedule match pada verification/session, jabatan pada user, serta toleransi outlet.
 - `/settings/staff-positions` hanya untuk owner. `/attendance/roster` hanya untuk owner/manager pada outlet aktif. `/attendance` tetap menjadi halaman semua role untuk absensi akun sendiri.
-- Constraint database `userId + workDate` mencegah satu staf dijadwalkan di dua outlet pada tanggal yang sama; semua mutation roster berjalan dalam transaction dan menulis audit before/after yang relevan.
+- Constraint database `userId + workDate` mencegah satu staf dijadwalkan di dua outlet pada tanggal yang sama; semua mutation roster berjalan dalam transaction dan menulis audit before/after yang relevan. Daftar template aktif pada halaman roster mendukung buat, ubah, dan arsip tanpa mengubah snapshot jadwal terbit.
 - Layout papan desktop berubah menjadi kartu per hari pada tablet/mobile dan loading skeleton mengikuti bentuk masing-masing viewport tanpa overflow horizontal.
 
 ### Belum termasuk
@@ -412,6 +415,8 @@ Memisahkan jabatan pekerjaan dari hak akses aplikasi serta menghubungkan jadwal 
 | 11 Agustus 2026 | Daftar ulang wajah kasir/staff memerlukan satu persetujuan owner atau manager | Template lama tetap aktif selama review; sampel baru terenkripsi dan dihapus dari request setelah disetujui atau ditolak |
 | 11 Agustus 2026 | Role akses `staff` dipisahkan dari jabatan kerja | Pelayan, barista, dan pekerjaan lain perlu absensi serta outlet tanpa otomatis memperoleh akses POS atau pengelolaan |
 | 11 Agustus 2026 | Roster memakai satu shift per staf per tanggal secara global | Staf multi-outlet tidak boleh memiliki jadwal bertabrakan; snapshot menjaga histori tetap benar setelah template, jabatan, zona waktu, atau toleransi berubah |
+| 11 Agustus 2026 | Koreksi rekonsiliasi shift memakai revision append-only | Salah hitung kas aktual harus dapat diperbaiki tanpa menimpa nilai penutupan asli atau menyamarkan kekurangan kas historis |
+| 11 Agustus 2026 | Milestone 10 selesai dan migration production diterapkan | Role staff, jabatan, template, roster global, tambah/ganti/Libur terbit, audit, UI responsif, 288 test, lint, typecheck, dan build telah lulus |
 
 ## Cara memperbarui roadmap
 

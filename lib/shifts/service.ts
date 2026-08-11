@@ -13,6 +13,7 @@ import { prisma } from "@/lib/prisma";
 import { isTransactionWriteConflict } from "@/lib/prisma-errors";
 import type {
   CashMovementInput,
+  CashShiftReconciliationCorrectionInput,
   CloseCashShiftInput,
   ForceCloseCashShiftInput,
   OpenCashShiftInput,
@@ -129,6 +130,70 @@ export async function closeCashShift(input: CloseCashShiftInput, actor: ShiftAct
 export async function forceCloseCashShift(input: ForceCloseCashShiftInput, actor: ShiftActor): Promise<ShiftActionState> {
   if (actor.role !== "owner" && actor.role !== "manager") throw new CashShiftError("FORBIDDEN", "Akun ini tidak dapat menutup shift staf lain.");
   return completeCashShift(input, actor, CashShiftCloseMode.FORCED, input.reason);
+}
+
+/** Appends an owner/manager correction to one closed shift without replacing its original close snapshot. */
+export async function correctCashShiftReconciliation(input: CashShiftReconciliationCorrectionInput, actor: ShiftActor): Promise<ShiftActionState> {
+  if (actor.role !== "owner" && actor.role !== "manager") throw new CashShiftError("FORBIDDEN", "Akun ini tidak dapat mengoreksi rekonsiliasi shift.");
+  const saved = await findCorrectionTokenResult(input.correctionToken, input.shiftId, actor.id);
+  if (saved) return saved;
+
+  try {
+    return await runSerializable(async (transaction) => {
+      const shift = await transaction.cashShift.findFirst({
+        where: { id: input.shiftId, outletId: input.outletId, status: CashShiftStatus.CLOSED },
+        select: { id: true, outletId: true, expectedCash: true, actualCash: true, cashDifference: true },
+      });
+      if (!shift?.expectedCash || !shift.actualCash || !shift.cashDifference) throw new CashShiftError("NOT_FOUND", "Shift tertutup tidak ditemukan atau belum memiliki rekonsiliasi.");
+      await findAccessibleOutlet(transaction, shift.outletId, actor);
+      const latest = await transaction.cashShiftReconciliationCorrection.findFirst({
+        where: { shiftId: shift.id },
+        orderBy: { revision: "desc" },
+        select: { revision: true, correctedActualCash: true, correctedDifference: true },
+      });
+      const previousActualCash = latest?.correctedActualCash ?? shift.actualCash;
+      const previousDifference = latest?.correctedDifference ?? shift.cashDifference;
+      const correctedActualCash = new Prisma.Decimal(input.correctedActualCash);
+      if (correctedActualCash.equals(previousActualCash)) throw new CashShiftError("CONFLICT", "Kas aktual koreksi sama dengan nilai yang sedang berlaku.");
+      const correctedDifference = correctedActualCash.sub(shift.expectedCash);
+      const revision = (latest?.revision ?? 0) + 1;
+      const correction = await transaction.cashShiftReconciliationCorrection.create({
+        data: {
+          shiftId: shift.id,
+          correctionToken: input.correctionToken,
+          revision,
+          expectedCash: shift.expectedCash,
+          previousActualCash,
+          correctedActualCash,
+          previousDifference,
+          correctedDifference,
+          reason: input.reason,
+          actorUserId: actor.id,
+          actorName: actor.name,
+          actorEmail: actor.email,
+        },
+        select: { id: true },
+      });
+      await writeShiftAudit(transaction, shift.id, CashShiftAuditAction.RECONCILIATION_CORRECT, actor, {
+        correctionId: correction.id,
+        revision,
+        expectedCash: shift.expectedCash.toFixed(2),
+        previousActualCash: previousActualCash.toFixed(2),
+        correctedActualCash: correctedActualCash.toFixed(2),
+        previousDifference: previousDifference.toFixed(2),
+        correctedDifference: correctedDifference.toFixed(2),
+        reason: input.reason,
+      });
+      return { status: "success", message: "Rekonsiliasi shift berhasil dikoreksi.", shiftId: shift.id, expectedCash: shift.expectedCash.toFixed(2), actualCash: correctedActualCash.toFixed(2), cashDifference: correctedDifference.toFixed(2) };
+    });
+  } catch (error) {
+    if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002") {
+      const repeated = await findCorrectionTokenResult(input.correctionToken, input.shiftId, actor.id);
+      if (repeated) return repeated;
+      throw new CashShiftError("CONFLICT", "Rekonsiliasi telah dikoreksi pengguna lain. Muat ulang lalu coba kembali.");
+    }
+    throw error;
+  }
 }
 
 /** Finds the actor's matching open shift inside an existing checkout transaction. */
@@ -330,4 +395,15 @@ async function findCloseTokenResult(token: string, shiftId: string, actorUserId:
     actualCash: shift.actualCash!.toFixed(2),
     cashDifference: shift.cashDifference!.toFixed(2),
   };
+}
+
+/** Resolves a repeated reconciliation correction owned by the same actor and shift. */
+async function findCorrectionTokenResult(token: string, shiftId: string, actorUserId: string): Promise<ShiftActionState | null> {
+  const correction = await prisma.cashShiftReconciliationCorrection.findUnique({
+    where: { correctionToken: token },
+    select: { shiftId: true, actorUserId: true, expectedCash: true, correctedActualCash: true, correctedDifference: true },
+  });
+  if (!correction) return null;
+  if (correction.shiftId !== shiftId || correction.actorUserId !== actorUserId) throw new CashShiftError("FORBIDDEN", "Token koreksi rekonsiliasi sudah digunakan.");
+  return { status: "success", message: "Rekonsiliasi shift berhasil dikoreksi.", shiftId, expectedCash: correction.expectedCash.toFixed(2), actualCash: correction.correctedActualCash.toFixed(2), cashDifference: correction.correctedDifference.toFixed(2) };
 }

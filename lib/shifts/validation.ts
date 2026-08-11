@@ -37,6 +37,14 @@ export const closeCashShiftSchema = z.object({
 
 export const forceCloseCashShiftSchema = closeCashShiftSchema.extend({ reason: reasonSchema });
 
+export const cashShiftReconciliationCorrectionSchema = z.object({
+  shiftId: idSchema,
+  outletId: idSchema,
+  correctionToken: tokenSchema,
+  correctedActualCash: moneySchema,
+  reason: z.string().trim().min(8, "Alasan koreksi minimal 8 karakter.").max(240),
+});
+
 export const cashShiftSearchSchema = z.object({
   page: z.coerce.number().int().min(1).catch(1),
   status: z.enum(["all", "OPEN", "CLOSED"]).catch("all"),
@@ -50,3 +58,4 @@ export type OpenCashShiftInput = z.infer<typeof openCashShiftSchema>;
 export type CashMovementInput = z.infer<typeof cashMovementSchema>;
 export type CloseCashShiftInput = z.infer<typeof closeCashShiftSchema>;
 export type ForceCloseCashShiftInput = z.infer<typeof forceCloseCashShiftSchema>;
+export type CashShiftReconciliationCorrectionInput = z.infer<typeof cashShiftReconciliationCorrectionSchema>;

@@ -95,6 +95,11 @@ export type ShiftReportRow = {
   expectedCash: string;
   actualCash: string | null;
   difference: string | null;
+  originalActualCash: string | null;
+  originalDifference: string | null;
+  correctionReason: string | null;
+  correctedByName: string | null;
+  correctedAt: string | null;
 };
 
 export type ShiftReport = {

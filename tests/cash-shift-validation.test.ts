@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { cashMovementSchema, closeCashShiftSchema, openCashShiftSchema } from "@/lib/shifts/validation";
+import { cashMovementSchema, cashShiftReconciliationCorrectionSchema, closeCashShiftSchema, openCashShiftSchema } from "@/lib/shifts/validation";
 
 const ids = {
   shiftId: "shift-1",
@@ -22,5 +22,11 @@ describe("cash shift validation", () => {
 
   it("rejects zero movement amounts and short reasons", () => {
     expect(cashMovementSchema.safeParse({ ...ids, direction: "OUT", category: "OTHER", amount: "0", reason: "Tes" }).success).toBe(false);
+  });
+
+  it("accepts a nonnegative corrected count and requires an audit reason", () => {
+    expect(cashShiftReconciliationCorrectionSchema.safeParse({ shiftId: ids.shiftId, outletId: ids.outletId, correctionToken: ids.operationToken, correctedActualCash: "0", reason: "Uang dihitung ulang" }).success).toBe(true);
+    expect(cashShiftReconciliationCorrectionSchema.safeParse({ shiftId: ids.shiftId, outletId: ids.outletId, correctionToken: ids.operationToken, correctedActualCash: "-1", reason: "Uang dihitung ulang" }).success).toBe(false);
+    expect(cashShiftReconciliationCorrectionSchema.safeParse({ shiftId: ids.shiftId, outletId: ids.outletId, correctionToken: ids.operationToken, correctedActualCash: "1000", reason: "Salah" }).success).toBe(false);
   });
 });

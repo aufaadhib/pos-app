@@ -45,8 +45,8 @@ function datasetRows(dataset: ReportDataset): unknown[][] {
       ...dataset.data.map((row) => [row.method, row.transactionCount, row.refundCount, row.grossAmount, row.refundAmount, row.netAmount]),
     ];
     case "shifts": return [
-      ["Tanggal bisnis", "Outlet", "Petugas", "Dibuka", "Ditutup", "Status", "Saldo awal", "Penjualan tunai", "Refund tunai", "Kas masuk", "Kas keluar", "Expected", "Aktual", "Selisih"],
-      ...dataset.data.rows.map((row) => [row.businessDate, row.outletName, row.openedByName, row.openedAt, row.closedAt, row.status, row.openingCash, row.cashSales, row.cashRefunds, row.cashIn, row.cashOut, row.expectedCash, row.actualCash, row.difference]),
+      ["Tanggal bisnis", "Outlet", "Petugas", "Dibuka", "Ditutup", "Status", "Saldo awal", "Penjualan tunai", "Refund tunai", "Kas masuk", "Kas keluar", "Expected", "Aktual asli", "Selisih asli", "Aktual efektif", "Selisih efektif", "Alasan koreksi", "Dikoreksi oleh", "Waktu koreksi"],
+      ...dataset.data.rows.map((row) => [row.businessDate, row.outletName, row.openedByName, row.openedAt, row.closedAt, row.status, row.openingCash, row.cashSales, row.cashRefunds, row.cashIn, row.cashOut, row.expectedCash, row.originalActualCash, row.originalDifference, row.actualCash, row.difference, row.correctionReason, row.correctedByName, row.correctedAt]),
     ];
     case "corrections": return [
       ["Waktu", "Outlet", "Struk", "Jenis", "Subtotal", "Layanan", "Pajak", "Total", "Alasan", "Petugas"],

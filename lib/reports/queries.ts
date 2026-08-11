@@ -229,14 +229,19 @@ export async function getShiftReport(filter: ReportFilter, limit = screenRowLimi
     id: string; businessDate: string; outletName: string; timezone: string; openedByName: string; openedAt: Date;
     closedAt: Date | null; status: "OPEN" | "CLOSED"; openingCash: DecimalValue; cashSales: DecimalValue;
     cashRefunds: DecimalValue; cashIn: DecimalValue; cashOut: DecimalValue; expectedCash: DecimalValue;
-    actualCash: DecimalValue; difference: DecimalValue; totalRows: CountValue;
+    actualCash: DecimalValue; difference: DecimalValue; originalActualCash: DecimalValue; originalDifference: DecimalValue;
+    correctionReason: string | null; correctedByName: string | null; correctedAt: Date | null; totalRows: CountValue;
   }>>(Prisma.sql`
     SELECT cs.id, TO_CHAR(cs."businessDate", 'YYYY-MM-DD') AS "businessDate", o.name AS "outletName", o.timezone,
       cs."openedByName", cs."openedAt", cs."closedAt", cs.status::text AS status, cs."openingCash",
       COALESCE(payments.amount, 0) AS "cashSales", COALESCE(refunds.amount, 0) AS "cashRefunds",
       COALESCE(movements."cashIn", 0) AS "cashIn", COALESCE(movements."cashOut", 0) AS "cashOut",
       COALESCE(cs."expectedCash", cs."openingCash" + COALESCE(payments.amount, 0) + COALESCE(movements."cashIn", 0) - COALESCE(movements."cashOut", 0) - COALESCE(refunds.amount, 0)) AS "expectedCash",
-      cs."actualCash", cs."cashDifference" AS difference, COUNT(*) OVER()::bigint AS "totalRows"
+      COALESCE(latest_correction."correctedActualCash", cs."actualCash") AS "actualCash",
+      COALESCE(latest_correction."correctedDifference", cs."cashDifference") AS difference,
+      cs."actualCash" AS "originalActualCash", cs."cashDifference" AS "originalDifference",
+      latest_correction.reason AS "correctionReason", latest_correction."actorName" AS "correctedByName",
+      latest_correction."createdAt" AS "correctedAt", COUNT(*) OVER()::bigint AS "totalRows"
     FROM "cash_shift" cs
     JOIN "outlet" o ON o.id = cs."outletId"
     LEFT JOIN LATERAL (
@@ -252,6 +257,14 @@ export async function getShiftReport(filter: ReportFilter, limit = screenRowLimi
         COALESCE(SUM(cm.amount) FILTER (WHERE cm.direction = 'OUT'), 0) AS "cashOut"
       FROM "cash_movement" cm WHERE cm."shiftId" = cs.id
     ) movements ON TRUE
+    LEFT JOIN LATERAL (
+      SELECT correction."correctedActualCash", correction."correctedDifference", correction.reason,
+        correction."actorName", correction."createdAt"
+      FROM "cash_shift_reconciliation_correction" correction
+      WHERE correction."shiftId" = cs.id
+      ORDER BY correction.revision DESC
+      LIMIT 1
+    ) latest_correction ON TRUE
     WHERE cs."outletId" IN (${outletIds})
       AND cs."businessDate" BETWEEN ${filter.from}::date AND ${filter.to}::date
     ORDER BY cs."businessDate" DESC, cs."openedAt" DESC
@@ -278,6 +291,11 @@ export async function getShiftReport(filter: ReportFilter, limit = screenRowLimi
       expectedCash: money(row.expectedCash),
       actualCash: nullableMoney(row.actualCash),
       difference: nullableMoney(row.difference),
+      originalActualCash: nullableMoney(row.originalActualCash),
+      originalDifference: nullableMoney(row.originalDifference),
+      correctionReason: row.correctionReason,
+      correctedByName: row.correctedByName,
+      correctedAt: row.correctedAt?.toISOString() ?? null,
     })),
   };
 }

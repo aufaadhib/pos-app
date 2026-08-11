@@ -25,4 +25,13 @@ describe("report validation and CSV", () => {
     expect(csv).toContain("'=Sate ayam");
     expect(getReportCsvRowCount(dataset)).toBe(1);
   });
+
+  it("exports original and effective shift reconciliation values", () => {
+    const dataset: ReportDataset = { view: "shifts", data: { totalRows: 1, truncated: false, rows: [{ id: "shift-1", businessDate: "2026-08-11", outletName: "Pusat", timezone: "Asia/Jakarta", openedByName: "Kasir", openedAt: "2026-08-11T01:00:00.000Z", closedAt: "2026-08-11T09:00:00.000Z", status: "CLOSED", openingCash: "100000.00", cashSales: "275000.00", cashRefunds: "0.00", cashIn: "0.00", cashOut: "0.00", expectedCash: "375000.00", originalActualCash: "350000.00", originalDifference: "-25000.00", actualCash: "375000.00", difference: "0.00", correctionReason: "Uang dihitung ulang", correctedByName: "Manajer", correctedAt: "2026-08-11T10:00:00.000Z" }] } };
+
+    const csv = createReportCsv(dataset, { view: "shifts", from: "2026-08-11", to: "2026-08-11", outletId: "outlet-1" });
+
+    expect(csv).toContain("Aktual asli,Selisih asli,Aktual efektif,Selisih efektif");
+    expect(csv).toContain("Uang dihitung ulang,Manajer");
+  });
 });

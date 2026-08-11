@@ -8,34 +8,35 @@ datasource db {
 }
 
 model User {
-  id                       String                       @id
+  id                       String                              @id
   name                     String
-  email                    String                       @unique
-  emailVerified            Boolean                      @default(false)
+  email                    String                              @unique
+  emailVerified            Boolean                             @default(false)
   image                    String?
   role                     String?
-  banned                   Boolean?                     @default(false)
+  banned                   Boolean?                            @default(false)
   banReason                String?
   banExpires               DateTime?
-  mustChangePassword       Boolean                      @default(false)
-  createdAt                DateTime                     @default(now())
-  updatedAt                DateTime                     @updatedAt
+  mustChangePassword       Boolean                             @default(false)
+  createdAt                DateTime                            @default(now())
+  updatedAt                DateTime                            @updatedAt
   jobPositionId            String?
   sessions                 Session[]
   accounts                 Account[]
   outletAssignments        UserOutletAssignment[]
-  openedCashShifts         CashShift[]                  @relation("CashShiftOpenedBy")
-  closedCashShifts         CashShift[]                  @relation("CashShiftClosedBy")
-  cashMovements            CashMovement[]               @relation("CashMovementActor")
-  cashShiftAuditLogs       CashShiftAuditLog[]          @relation("CashShiftAuditActor")
+  openedCashShifts         CashShift[]                         @relation("CashShiftOpenedBy")
+  closedCashShifts         CashShift[]                         @relation("CashShiftClosedBy")
+  cashMovements            CashMovement[]                      @relation("CashMovementActor")
+  cashShiftCorrections     CashShiftReconciliationCorrection[] @relation("CashShiftCorrectionActor")
+  cashShiftAuditLogs       CashShiftAuditLog[]                 @relation("CashShiftAuditActor")
   faceProfiles             FaceProfile[]
   faceReenrollmentRequests FaceReenrollmentRequest[]
   attendanceVerifications  AttendanceVerification[]
   attendanceAttempts       AttendanceAttempt[]
   attendanceSessions       AttendanceSession[]
   attendanceExceptions     AttendanceExceptionRequest[]
-  attendanceCorrections    AttendanceCorrection[]       @relation("AttendanceCorrectionActor")
-  jobPosition              StaffPosition?               @relation(fields: [jobPositionId], references: [id], onDelete: Restrict)
+  attendanceCorrections    AttendanceCorrection[]              @relation("AttendanceCorrectionActor")
+  jobPosition              StaffPosition?                      @relation(fields: [jobPositionId], references: [id], onDelete: Restrict)
   attendanceRosterEntries  AttendanceRosterEntry[]
 
   @@index([jobPositionId])
@@ -859,6 +860,7 @@ enum CashShiftAuditAction {
   CASH_OUT
   CLOSE
   FORCE_CLOSE
+  RECONCILIATION_CORRECT
 }
 
 model OutletDeliveryChannel {
@@ -954,41 +956,66 @@ model Sale {
 }
 
 model CashShift {
-  id             String              @id @default(cuid())
-  outletId       String
-  businessDate   DateTime            @db.Date
-  status         CashShiftStatus     @default(OPEN)
-  openUserKey    String?             @unique
-  openToken      String              @unique
-  openingCash    Decimal             @db.Decimal(14, 2)
-  openedByUserId String
-  openedByName   String
-  openedByEmail  String
-  openedAt       DateTime            @default(now())
-  closeMode      CashShiftCloseMode?
-  closeToken     String?             @unique
-  closedByUserId String?
-  closedByName   String?
-  closedByEmail  String?
-  expectedCash   Decimal?            @db.Decimal(14, 2)
-  actualCash     Decimal?            @db.Decimal(14, 2)
-  cashDifference Decimal?            @db.Decimal(14, 2)
-  closeReason    String?             @db.VarChar(240)
-  closedAt       DateTime?
-  createdAt      DateTime            @default(now())
-  updatedAt      DateTime            @updatedAt
-  outlet         Outlet              @relation(fields: [outletId], references: [id], onDelete: Restrict)
-  openedBy       User                @relation("CashShiftOpenedBy", fields: [openedByUserId], references: [id], onDelete: Restrict)
-  closedBy       User?               @relation("CashShiftClosedBy", fields: [closedByUserId], references: [id], onDelete: Restrict)
-  sales          Sale[]
-  movements      CashMovement[]
-  auditLogs      CashShiftAuditLog[]
-  refunds        SaleRefund[]
-  openedOrders   Order[]             @relation("OrderOpenedShift")
+  id                        String                              @id @default(cuid())
+  outletId                  String
+  businessDate              DateTime                            @db.Date
+  status                    CashShiftStatus                     @default(OPEN)
+  openUserKey               String?                             @unique
+  openToken                 String                              @unique
+  openingCash               Decimal                             @db.Decimal(14, 2)
+  openedByUserId            String
+  openedByName              String
+  openedByEmail             String
+  openedAt                  DateTime                            @default(now())
+  closeMode                 CashShiftCloseMode?
+  closeToken                String?                             @unique
+  closedByUserId            String?
+  closedByName              String?
+  closedByEmail             String?
+  expectedCash              Decimal?                            @db.Decimal(14, 2)
+  actualCash                Decimal?                            @db.Decimal(14, 2)
+  cashDifference            Decimal?                            @db.Decimal(14, 2)
+  closeReason               String?                             @db.VarChar(240)
+  closedAt                  DateTime?
+  createdAt                 DateTime                            @default(now())
+  updatedAt                 DateTime                            @updatedAt
+  outlet                    Outlet                              @relation(fields: [outletId], references: [id], onDelete: Restrict)
+  openedBy                  User                                @relation("CashShiftOpenedBy", fields: [openedByUserId], references: [id], onDelete: Restrict)
+  closedBy                  User?                               @relation("CashShiftClosedBy", fields: [closedByUserId], references: [id], onDelete: Restrict)
+  sales                     Sale[]
+  movements                 CashMovement[]
+  auditLogs                 CashShiftAuditLog[]
+  reconciliationCorrections CashShiftReconciliationCorrection[]
+  refunds                   SaleRefund[]
+  openedOrders              Order[]                             @relation("OrderOpenedShift")
 
   @@index([outletId, status, openedAt])
   @@index([openedByUserId, openedAt])
   @@map("cash_shift")
+}
+
+model CashShiftReconciliationCorrection {
+  id                  String    @id @default(cuid())
+  shiftId             String
+  correctionToken     String    @unique
+  revision            Int
+  expectedCash        Decimal   @db.Decimal(14, 2)
+  previousActualCash  Decimal   @db.Decimal(14, 2)
+  correctedActualCash Decimal   @db.Decimal(14, 2)
+  previousDifference  Decimal   @db.Decimal(14, 2)
+  correctedDifference Decimal   @db.Decimal(14, 2)
+  reason              String    @db.VarChar(240)
+  actorUserId         String
+  actorName           String
+  actorEmail          String
+  createdAt           DateTime  @default(now())
+  shift               CashShift @relation(fields: [shiftId], references: [id], onDelete: Restrict)
+  actor               User      @relation("CashShiftCorrectionActor", fields: [actorUserId], references: [id], onDelete: Restrict)
+
+  @@unique([shiftId, revision])
+  @@index([shiftId, createdAt])
+  @@index([actorUserId, createdAt])
+  @@map("cash_shift_reconciliation_correction")
 }
 
 model Order {

@@ -202,12 +202,13 @@ Dokumen ini mencatat function dan component function yang ditambahkan pada miles
 | Attendance pages/loading | Session, active outlet, search params | Route dynamic/skeleton | Melindungi route absensi, pengelolaan, pengaturan, dan roster dengan permission serta menjaga bentuk final pada mobile, tablet, dan desktop. |
 | `mondayOf()`, `addIsoDays()`, `scheduledRange()`, `isWithinScheduledWindow()` | Tanggal/jam/zona waktu | Tanggal atau rentang UTC | Membentuk minggu Senin–Minggu, shift normal/lintas tengah malam, dan jendela check-in dua jam tanpa bergantung pada timezone browser. |
 | `attendanceDisplay()` | Jadwal, toleransi, waktu efektif, dan waktu kini | Status serta menit/jam | Menghasilkan status terjadwal, belum masuk, tepat waktu, terlambat, pulang cepat, checkout terlewat, tidak hadir, atau di luar jadwal. |
-| Schema roster | Template/draf/publish/salin/revisi | Input tervalidasi | Membatasi jam, tanggal minggu, satu shift per staf/tanggal, versi optimistic, dan alasan perubahan jadwal terbit. |
+| Schema roster | Template/draf/publish/salin/revisi/tambah | Input tervalidasi | Membatasi jam, tanggal minggu, satu shift per staf/tanggal, versi optimistic, dan alasan perubahan jadwal terbit. |
 | `createShiftTemplate()`, `updateShiftTemplate()`, `changeShiftTemplateStatus()` | Template outlet dan actor | Template terbaru | Mengelola template shift scoped outlet dalam transaction dan mempertahankan snapshot roster yang sudah diterbitkan. |
 | `saveRosterDraft()`, `copyRosterWeek()`, `publishRosterWeek()` | Minggu/entries/versi dan actor | Roster week | Memvalidasi staf, jabatan, assignment, template, serta konflik global lalu menyimpan snapshot dan audit secara atomik. |
-| `updatePublishedRosterEntry()` | Entry, shift pengganti, alasan, versi | Entry terbaru | Mengganti hanya shift masa depan pada roster terbit dan menyimpan before/after beserta alasan dalam audit. |
+| `updatePublishedRosterEntry()` | Entry, shift pengganti atau Libur, alasan, versi | Entry terbaru atau `null` | Mengganti atau menghapus hanya shift masa depan pada roster terbit dan menyimpan before/after beserta alasan dalam audit. |
+| `addPublishedRosterEntry()` | Minggu, outlet, staf, tanggal, template, versi, alasan | Entry baru | Mengubah sel Libur masa depan menjadi shift setelah memvalidasi versi minggu, scope outlet, assignment, jabatan, template, konflik global, dan audit dalam transaction serializable. |
 | `getRosterWorkspace()`, `getPublishedRosterForUser()`, `getAttendanceRosterSummary()` | Outlet/user/week/actor | DTO roster | Membaca editor outlet, dua minggu jadwal pribadi, dan ringkasan status hari ini secara fresh dan permission-scoped. |
-| `RosterPlanner()` | Outlet, staf, template, minggu | Papan/kartu roster | Menyediakan draf, salin, publish, revisi terbit, papan desktop, dan kartu hari tablet/mobile tanpa overflow horizontal. |
+| `RosterPlanner()` | Outlet, staf, template, minggu | Papan/kartu roster | Menyediakan pengelolaan template aktif, draf, salin, publish, tambah/ganti/Libur pada jadwal terbit, papan desktop, dan kartu hari tablet/mobile tanpa overflow horizontal. |
 
 ## Void dan refund transaksi
 
@@ -232,14 +233,15 @@ Dokumen ini mencatat function dan component function yang ditambahkan pada miles
 | `requireOpenCashShift()` | Prisma transaction, user, outlet | Shift aktif | Menjadi guard checkout atomik dan menolak transaksi tanpa shift atau pada outlet yang berbeda. |
 | `addCashMovement()` | Shift, arah, kategori, nominal, alasan, token, actor | `ShiftActionState` | Menambahkan movement immutable hanya pada shift terbuka milik actor dan menulis audit. |
 | `closeCashShift()`, `forceCloseCashShift()` | Shift, kas aktual, token, actor, alasan paksa | Hasil rekonsiliasi | Menjalankan blind close, menyimpan expected/actual/difference, melepaskan kunci shift user, dan mengaudit penutupan. |
+| `correctCashShiftReconciliation()` | Shift tertutup, kas aktual benar, alasan, token, actor owner/manager | Nilai efektif terbaru | Menambahkan revision append-only, menghitung ulang selisih terhadap expected asli, menjaga idempotensi/scope, dan menulis audit tanpa mengubah snapshot penutupan. |
 | `calculateExpectedCash()` | Transaction, shift, saldo awal | Total tunai `Decimal` | Menghitung saldo awal + penjualan tunai + kas masuk - kas keluar - refund tunai; pembayaran non-tunai tidak memengaruhi drawer. |
 | `isTransactionWriteConflict()` | Error Prisma/adapter | Boolean | Mengenali `P2034` dan `DriverAdapterError` Neon agar transaksi serializable dapat di-retry. |
 | `getCurrentCashShift()`, `hasCurrentCashShift()` | User ID | Shift aktif atau boolean | Membaca shift global user secara fresh untuk gate POS dan peringatan logout. |
-| `getCashShiftPage()` | Outlet, actor, halaman, status | Halaman shift | Membatasi data sesuai role/outlet, memisahkan shift terbuka dan riwayat, serta memakai pagination. |
-| `getCashShiftDetail()` | Shift, outlet, actor, halaman transaksi | Detail shift | Merangkum pembayaran, movement, audit, dan transaksi; total shift sendiri disembunyikan selama masih terbuka. |
+| `getCashShiftPage()` | Outlet, actor, halaman, status | Halaman shift | Membatasi data sesuai role/outlet, memisahkan shift terbuka dan riwayat, memakai pagination, serta menerapkan koreksi rekonsiliasi terbaru sebagai nilai efektif. |
+| `getCashShiftDetail()` | Shift, outlet, actor, halaman transaksi | Detail shift | Merangkum pembayaran, movement, audit, koreksi, dan transaksi; total shift sendiri disembunyikan selama masih terbuka. |
 | Action shift | State dan FormData | `ShiftActionState` | Memvalidasi session, permission, Zod, actor tepercaya, mutation idempoten, lalu merevalidasi layar terdampak. |
 | `OpenShiftCard()`, `WrongOutletShiftCard()`, `PosShiftBar()` | Outlet atau shift aktif | Gate/status POS | Mewajibkan pembukaan shift, memblokir outlet yang salah, dan menyediakan kontrol kas responsif. |
-| `CashMovementDialog()`, `CloseShiftDialog()`, `ForceCloseShiftDialog()` | Shift dan permission | Dialog mutation | Mengumpulkan movement, blind count, atau alasan force-close dengan token idempotensi baru. |
+| `CashMovementDialog()`, `CloseShiftDialog()`, `ForceCloseShiftDialog()`, `CashShiftCorrectionDialog()` | Shift dan permission | Dialog mutation | Mengumpulkan movement, blind count, force-close, atau koreksi aktual pascapenutupan dengan token idempotensi dan alasan wajib. |
 | `ShiftsPage()`, `CashShiftDetailPage()` | Session, outlet, route/search params | Halaman dynamic | Menyusun riwayat serta rincian shift yang fresh untuk mobile, tablet, dan desktop. |
 | `runShiftE2E()` | Flag database test | Exit process | Menjalankan alur live shift pada server/folder build terisolasi, mengambil screenshot responsif, dan membersihkan fixture. |
 

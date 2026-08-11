@@ -8,7 +8,8 @@ const managerPassword = process.env.E2E_MANAGER_PASSWORD;
 const cashierEmail = process.env.E2E_CASHIER_EMAIL;
 const cashierPassword = process.env.E2E_CASHIER_PASSWORD;
 const fixtureOutlet = process.env.E2E_ADMIN_OUTLET_NAME;
-const enabled = Boolean(process.env.E2E_ADMIN_MUTATIONS === "true" && runId && fixtureOutlet);
+const fixturePosition = process.env.E2E_ADMIN_POSITION_NAME;
+const enabled = Boolean(process.env.E2E_ADMIN_MUTATIONS === "true" && runId && fixtureOutlet && fixturePosition);
 
 async function signIn(page: Page, email: string, password: string) {
   await page.goto("/sign-in");
@@ -75,6 +76,8 @@ test.describe("live outlet and staff administration", () => {
     await page.getByRole("button", { name: "Staf baru" }).click();
     await page.getByLabel("Nama staf").fill(staffName);
     await page.getByLabel("Email login").fill(staffEmail);
+    await page.getByRole("combobox", { name: "Jabatan" }).click();
+    await page.getByRole("option", { name: fixturePosition!, exact: true }).click();
     await page.getByRole("checkbox", { name: new RegExp(fixtureOutlet!) }).check();
     await page.getByRole("button", { name: "Buat staf" }).click();
     await expect(page.getByRole("region", { name: "Kredensial sementara" })).toBeVisible({ timeout: 30_000 });

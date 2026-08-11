@@ -27,6 +27,11 @@ const shiftListSelect = {
   expectedCash: true,
   actualCash: true,
   cashDifference: true,
+  reconciliationCorrections: {
+    orderBy: { revision: "desc" },
+    take: 1,
+    select: { id: true, revision: true, previousActualCash: true, correctedActualCash: true, previousDifference: true, correctedDifference: true, reason: true, actorName: true, actorEmail: true, createdAt: true },
+  },
 } satisfies Prisma.CashShiftSelect;
 
 /** Returns the user's only open shift, including its outlet identity. */
@@ -209,6 +214,7 @@ async function canAccessOutlet(outletId: string, actor: ShiftActor) {
 
 /** Converts a Prisma shift projection into a client-safe list DTO. */
 function serializeShift(shift: Prisma.CashShiftGetPayload<{ select: typeof shiftListSelect }>): CashShiftListItem {
+  const correction = shift.reconciliationCorrections[0];
   return {
     id: shift.id,
     outletId: shift.outletId,
@@ -221,8 +227,22 @@ function serializeShift(shift: Prisma.CashShiftGetPayload<{ select: typeof shift
     closedByName: shift.closedByName,
     closedAt: shift.closedAt?.toISOString() ?? null,
     expectedCash: shift.expectedCash?.toFixed(2) ?? null,
-    actualCash: shift.actualCash?.toFixed(2) ?? null,
-    cashDifference: shift.cashDifference?.toFixed(2) ?? null,
+    actualCash: correction?.correctedActualCash.toFixed(2) ?? shift.actualCash?.toFixed(2) ?? null,
+    cashDifference: correction?.correctedDifference.toFixed(2) ?? shift.cashDifference?.toFixed(2) ?? null,
+    originalActualCash: shift.actualCash?.toFixed(2) ?? null,
+    originalCashDifference: shift.cashDifference?.toFixed(2) ?? null,
+    reconciliationCorrection: correction ? {
+      id: correction.id,
+      revision: correction.revision,
+      previousActualCash: correction.previousActualCash.toFixed(2),
+      correctedActualCash: correction.correctedActualCash.toFixed(2),
+      previousDifference: correction.previousDifference.toFixed(2),
+      correctedDifference: correction.correctedDifference.toFixed(2),
+      reason: correction.reason,
+      actorName: correction.actorName,
+      actorEmail: correction.actorEmail,
+      createdAt: correction.createdAt.toISOString(),
+    } : null,
   };
 }
 

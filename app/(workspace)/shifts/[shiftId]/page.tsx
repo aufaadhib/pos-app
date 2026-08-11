@@ -3,7 +3,7 @@ import Link from "next/link";
 import { ArrowDownToLine, ArrowLeft, ArrowUpFromLine, ChevronLeft, ChevronRight, EyeOff, ReceiptText } from "lucide-react";
 import { notFound } from "next/navigation";
 
-import { CashMovementDialog, CloseShiftDialog, ForceCloseShiftDialog } from "@/components/shifts/shift-controls";
+import { CashMovementDialog, CashShiftCorrectionDialog, CloseShiftDialog, ForceCloseShiftDialog } from "@/components/shifts/shift-controls";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { buttonVariants } from "@/components/ui/button";
@@ -41,11 +41,12 @@ export default async function ShiftDetailPage({ params, searchParams }: ShiftDet
     <Link className={cn(buttonVariants({ variant: "ghost" }), "mb-4")} href="/shifts"><ArrowLeft aria-hidden="true" />Kembali ke shift</Link>
     <section className="overflow-hidden rounded-2xl border bg-card shadow-sm sm:grid sm:grid-cols-[minmax(0,1fr)_auto]">
       <div className="border-l-4 border-primary p-5 sm:p-7"><div className="flex flex-wrap items-center gap-2"><Badge variant={shift.status === "OPEN" ? "default" : "outline"}>{shift.status === "OPEN" ? "Shift terbuka" : shift.closeMode === "FORCED" ? "Ditutup pengelola" : "Shift ditutup"}</Badge><span className="font-mono text-xs text-muted-foreground">{shift.businessDate}</span></div><h1 className="mt-3 font-heading text-2xl font-semibold">{shift.openedByName}</h1><p className="mt-1 text-sm text-muted-foreground">{shift.openedByEmail} · Dibuka {formatDateTime(shift.openedAt, shift.outletTimezone)}</p>{shift.closedAt && <p className="mt-1 text-sm text-muted-foreground">Ditutup {formatDateTime(shift.closedAt, shift.outletTimezone)} oleh {shift.closedByName}</p>}</div>
-      {shift.status === "OPEN" && <div className="flex flex-wrap items-center gap-2 border-t p-5 sm:max-w-sm sm:border-t-0 sm:border-l sm:p-7">{shift.isCurrentUser ? <><CashMovementDialog direction="IN" shift={shift} /><CashMovementDialog direction="OUT" shift={shift} /><CloseShiftDialog shift={shift} /></> : canForceClose ? <ForceCloseShiftDialog shift={shift} /> : null}</div>}
+      {(shift.status === "OPEN" || canForceClose) && <div className="flex flex-wrap items-center gap-2 border-t p-5 sm:max-w-sm sm:border-t-0 sm:border-l sm:p-7">{shift.status === "OPEN" ? shift.isCurrentUser ? <><CashMovementDialog direction="IN" shift={shift} /><CashMovementDialog direction="OUT" shift={shift} /><CloseShiftDialog shift={shift} /></> : canForceClose ? <ForceCloseShiftDialog shift={shift} /> : null : <CashShiftCorrectionDialog shift={shift} />}</div>}
     </section>
 
     {shift.paymentSummaries === null ? <Alert className="mt-5"><EyeOff aria-hidden="true" /><AlertTitle>Blind count aktif</AlertTitle><AlertDescription>Saldo seharusnya dan ringkasan pembayaran disembunyikan sampai Anda memasukkan kas fisik dan menutup shift.</AlertDescription></Alert> : <>
       <section aria-label="Ringkasan kas" className="mt-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-5"><MetricCard label="Saldo awal" value={formatRupiah(shift.openingCash)} /><MetricCard label="Penjualan tunai" value={formatRupiah(shift.cashSales ?? "0")} /><MetricCard label="Refund tunai" value={formatRupiah(shift.cashRefunds ?? "0")} /><MetricCard label="Kas masuk / keluar" value={`${formatRupiah(shift.cashIn ?? "0")} / ${formatRupiah(shift.cashOut ?? "0")}`} /><MetricCard label={shift.status === "CLOSED" ? "Aktual / selisih" : "Kas seharusnya"} value={shift.status === "CLOSED" ? `${formatRupiah(shift.actualCash ?? "0")} / ${formatRupiah(shift.cashDifference ?? "0")}` : "Berjalan"} /></section>
+      {shift.reconciliationCorrection && <Alert className="mt-5 border-primary/30 bg-primary/5"><AlertTitle>Rekonsiliasi dikoreksi · revisi {shift.reconciliationCorrection.revision}</AlertTitle><AlertDescription><span className="block">Nilai penutupan asli: {formatRupiah(shift.originalActualCash ?? "0")} · selisih {formatRupiah(shift.originalCashDifference ?? "0")}.</span><span className="mt-1 block">Nilai efektif: {formatRupiah(shift.actualCash ?? "0")} · selisih {formatRupiah(shift.cashDifference ?? "0")}.</span><span className="mt-1 block">{shift.reconciliationCorrection.reason} — {shift.reconciliationCorrection.actorName}, {formatDateTime(shift.reconciliationCorrection.createdAt, shift.outletTimezone)}.</span></AlertDescription></Alert>}
       <section aria-labelledby="payment-heading" className="mt-8"><h2 className="font-heading text-xl font-semibold" id="payment-heading">Pembayaran per metode</h2><div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">{shift.paymentSummaries.length ? shift.paymentSummaries.map((payment) => <Card className="py-4 shadow-none" key={payment.method}><CardContent className="flex items-center justify-between gap-4 px-4"><div><p className="text-sm font-medium">{paymentLabel(payment.method)}</p><p className="mt-1 text-xs text-muted-foreground">{payment.count} transaksi</p></div><span className="font-mono font-semibold">{formatRupiah(payment.amount)}</span></CardContent></Card>) : <p className="text-sm text-muted-foreground">Belum ada pembayaran pada shift ini.</p>}</div></section>
     </>}
 
@@ -70,7 +71,7 @@ function paymentLabel(method: string) { return ({ CASH: "Tunai", QRIS: "QRIS", D
 function categoryLabel(category: string) { return ({ ADDITIONAL_FLOAT: "Tambahan modal", CASH_DROP: "Setor kas", OPERATING_EXPENSE: "Biaya operasional", OTHER: "Lainnya" } as Record<string, string>)[category] ?? category; }
 
 /** Returns a concise Indonesian label for one immutable shift audit action. */
-function auditLabel(action: string) { return ({ OPEN: "Shift dibuka", CASH_IN: "Kas masuk dicatat", CASH_OUT: "Kas keluar dicatat", CLOSE: "Shift ditutup", FORCE_CLOSE: "Shift ditutup oleh pengelola" } as Record<string, string>)[action] ?? action; }
+function auditLabel(action: string) { return ({ OPEN: "Shift dibuka", CASH_IN: "Kas masuk dicatat", CASH_OUT: "Kas keluar dicatat", CLOSE: "Shift ditutup", FORCE_CLOSE: "Shift ditutup oleh pengelola", RECONCILIATION_CORRECT: "Rekonsiliasi dikoreksi" } as Record<string, string>)[action] ?? action; }
 
 /** Formats one decimal string as Indonesian Rupiah. */
 

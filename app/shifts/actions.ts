@@ -8,12 +8,14 @@ import {
   addCashMovement,
   CashShiftError,
   closeCashShift,
+  correctCashShiftReconciliation,
   forceCloseCashShift,
   openCashShift,
 } from "@/lib/shifts/service";
 import type { ShiftActionState, ShiftActor } from "@/lib/shifts/types";
 import {
   cashMovementSchema,
+  cashShiftReconciliationCorrectionSchema,
   closeCashShiftSchema,
   forceCloseCashShiftSchema,
   openCashShiftSchema,
@@ -51,11 +53,20 @@ export async function forceCloseCashShiftAction(_state: ShiftActionState, formDa
   return executeShiftMutation(() => forceCloseCashShift(parsed.data, actorFromSession(session.user)));
 }
 
+/** Validates and appends one owner/manager reconciliation correction to a closed shift. */
+export async function correctCashShiftReconciliationAction(_state: ShiftActionState, formData: FormData): Promise<ShiftActionState> {
+  const session = await requirePermission({ shift: ["forceClose"] });
+  const parsed = cashShiftReconciliationCorrectionSchema.safeParse(Object.fromEntries(formData));
+  if (!parsed.success) return invalidState(parsed.error.flatten().fieldErrors);
+  return executeShiftMutation(() => correctCashShiftReconciliation(parsed.data, actorFromSession(session.user)));
+}
+
 /** Executes one protected shift mutation and refreshes all affected dynamic screens. */
 async function executeShiftMutation(mutation: () => Promise<ShiftActionState>): Promise<ShiftActionState> {
   try {
     const result = await mutation();
     for (const path of ["/pos", "/shifts", "/transactions", "/workspace", "/select-outlet"]) revalidatePath(path);
+    if (result.shiftId) revalidatePath(`/shifts/${result.shiftId}`);
     return result;
   } catch (error) {
     if (error instanceof CashShiftError) {

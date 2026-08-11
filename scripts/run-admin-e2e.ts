@@ -5,7 +5,7 @@ import { spawnSync } from "node:child_process";
 
 import { createAuth } from "../lib/auth/factory";
 import type { AppRole } from "../lib/auth/permissions";
-import { normalizeOutletName } from "../lib/outlets/normalization";
+import { normalizeOperationalLabel, normalizeOutletName } from "../lib/outlets/normalization";
 import { prisma } from "../lib/prisma-core";
 
 type TestAccount = { role: AppRole; email: string; password: string; id?: string };
@@ -22,6 +22,7 @@ export async function runAdminE2E() {
     password,
   }));
   const outletName = `E2E Admin Utama ${runId}`;
+  const positionName = `E2E Jabatan ${runId}`;
 
   try {
     for (const account of accounts) {
@@ -30,6 +31,12 @@ export async function runAdminE2E() {
     const owner = accounts.find((account) => account.role === "owner")!;
     const manager = accounts.find((account) => account.role === "manager")!;
     const cashier = accounts.find((account) => account.role === "cashier")!;
+    await prisma.staffPosition.create({
+      data: {
+        name: positionName,
+        normalizedName: normalizeOperationalLabel(positionName).toLocaleLowerCase("id-ID"),
+      },
+    });
     const primaryOutlet = await prisma.outlet.create({
       data: {
         code: `EA${runId.slice(-6).toUpperCase()}`,
@@ -77,6 +84,7 @@ export async function runAdminE2E() {
         E2E_CASHIER_PASSWORD: password,
         E2E_ADMIN_RUN_ID: runId,
         E2E_ADMIN_OUTLET_NAME: outletName,
+        E2E_ADMIN_POSITION_NAME: positionName,
         E2E_ADMIN_MUTATIONS: "true",
         E2E_CAPTURE_ADMIN: "true",
       },
@@ -98,6 +106,7 @@ async function cleanupAdminFixtures(runId: string) {
   const outletIds = outlets.map((outlet) => outlet.id);
   await prisma.adminAuditLog.deleteMany({ where: { OR: [{ actorUserId: { in: userIds } }, { entityId: { in: [...userIds, ...outletIds] } }] } });
   await prisma.user.deleteMany({ where: { id: { in: userIds } } });
+  await prisma.staffPosition.deleteMany({ where: { name: { contains: runId } } });
   await prisma.session.updateMany({ where: { activeOutletId: { in: outletIds } }, data: { activeOutletId: null } });
   await prisma.outlet.deleteMany({ where: { id: { in: outletIds } } });
 }

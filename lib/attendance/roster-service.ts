@@ -3,7 +3,7 @@ import "server-only";
 import { AttendanceAuditAction, AttendanceRosterStatus, OutletStatus, Prisma, StaffPositionStatus } from "@/generated/prisma/client";
 import { scheduledRange } from "@/lib/attendance/roster";
 import type { AttendanceActor } from "@/lib/attendance/types";
-import type { CopyRosterWeekInput, RosterWeekTarget, SaveRosterDraftInput, ShiftTemplateInput, ShiftTemplateTarget, UpdatePublishedRosterEntryInput, UpdateShiftTemplateInput } from "@/lib/attendance/roster-validation";
+import type { AddPublishedRosterEntryInput, CopyRosterWeekInput, RosterWeekTarget, SaveRosterDraftInput, ShiftTemplateInput, ShiftTemplateTarget, UpdatePublishedRosterEntryInput, UpdateShiftTemplateInput } from "@/lib/attendance/roster-validation";
 import { normalizeOperationalLabel } from "@/lib/outlets/normalization";
 import { prisma } from "@/lib/prisma";
 
@@ -97,7 +97,7 @@ export async function copyRosterWeek(input: CopyRosterWeekInput, actor: Attendan
   }, Prisma.TransactionIsolationLevel.Serializable);
 }
 
-/** Revises one future published entry with a mandatory reason and an immutable before/after audit. */
+/** Revises or removes one future published entry with a mandatory reason and immutable audit snapshots. */
 export async function updatePublishedRosterEntry(input: UpdatePublishedRosterEntryInput, actor: AttendanceActor) {
   return runRosterMutation(async (transaction) => {
     const entry = await transaction.attendanceRosterEntry.findUnique({ where: { id: input.entryId }, include: { rosterWeek: { select: { status: true } } } });
@@ -105,12 +105,36 @@ export async function updatePublishedRosterEntry(input: UpdatePublishedRosterEnt
     await assertOutletScope(transaction, entry.outletId, actor);
     assertVersion(entry.updatedAt, input.expectedUpdatedAt, "Jadwal telah berubah.");
     if (entry.scheduledStartAt <= new Date()) throw new RosterError("CONFLICT", "Jadwal yang sudah mulai atau berlalu tidak dapat diubah.");
+    if (!input.shiftTemplateId) {
+      await transaction.attendanceRosterEntry.delete({ where: { id: entry.id } });
+      await audit(transaction, "ROSTER_ENTRY", entry.id, AttendanceAuditAction.ROSTER_UPDATE, actor, entrySnapshot(entry), { status: "DAY_OFF", reason: input.reason });
+      return null;
+    }
     const template = await findTemplate(transaction, input.shiftTemplateId, entry.outletId);
     if (template.status !== StaffPositionStatus.ACTIVE) throw new RosterError("CONFLICT", "Template shift sudah diarsipkan.");
     const range = scheduledRange(entry.workDate.toISOString().slice(0, 10), template.startMinute, template.endMinute, entry.timezone);
     const updated = await transaction.attendanceRosterEntry.update({ where: { id: entry.id }, data: { shiftTemplateId: template.id, shiftName: template.name, scheduledStartAt: range.scheduledStartAt, scheduledEndAt: range.scheduledEndAt } });
     await audit(transaction, "ROSTER_ENTRY", entry.id, AttendanceAuditAction.ROSTER_UPDATE, actor, entrySnapshot(entry), { ...entrySnapshot(updated), reason: input.reason });
     return updated;
+  }, Prisma.TransactionIsolationLevel.Serializable);
+}
+
+/** Adds a future shift to a published day-off cell after revalidating the week, staff, and outlet scope. */
+export async function addPublishedRosterEntry(input: AddPublishedRosterEntryInput, actor: AttendanceActor) {
+  return runRosterMutation(async (transaction) => {
+    const outlet = await assertOutletScope(transaction, input.outletId, actor);
+    const week = await transaction.attendanceRosterWeek.findFirst({ where: { id: input.rosterWeekId, outletId: input.outletId } });
+    if (!week || week.status !== AttendanceRosterStatus.PUBLISHED) throw new RosterError("NOT_FOUND", "Roster terbit tidak ditemukan.");
+    assertVersion(week.updatedAt, input.expectedWeekUpdatedAt, "Roster telah berubah.");
+    const workDate = date(input.workDate);
+    const weekEnd = new Date(week.weekStart); weekEnd.setUTCDate(weekEnd.getUTCDate() + 6);
+    if (workDate < week.weekStart || workDate > weekEnd) throw new RosterError("INVALID", "Tanggal berada di luar minggu roster.");
+    const [snapshot] = await buildEntrySnapshots(transaction, [{ userId: input.userId, workDate: input.workDate, shiftTemplateId: input.shiftTemplateId }], outlet);
+    if (snapshot.scheduledStartAt <= new Date()) throw new RosterError("CONFLICT", "Shift yang sudah mulai atau berlalu tidak dapat ditambahkan.");
+    const entry = await transaction.attendanceRosterEntry.create({ data: { rosterWeekId: week.id, ...snapshot } });
+    await transaction.attendanceRosterWeek.update({ where: { id: week.id }, data: { updatedAt: new Date() } });
+    await audit(transaction, "ROSTER_ENTRY", entry.id, AttendanceAuditAction.ROSTER_UPDATE, actor, { status: "DAY_OFF", userId: input.userId, workDate: input.workDate }, { ...entrySnapshot(entry), reason: input.reason });
+    return entry;
   }, Prisma.TransactionIsolationLevel.Serializable);
 }
 

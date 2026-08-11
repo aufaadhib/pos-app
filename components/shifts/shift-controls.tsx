@@ -2,11 +2,12 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import { ArrowDownToLine, ArrowUpFromLine, Clock3, LockKeyhole, Play, Square } from "lucide-react";
+import { ArrowDownToLine, ArrowUpFromLine, Clock3, FilePenLine, LockKeyhole, Play, Square } from "lucide-react";
 
 import {
   addCashMovementAction,
   closeCashShiftAction,
+  correctCashShiftReconciliationAction,
   forceCloseCashShiftAction,
   openCashShiftAction,
 } from "@/app/shifts/actions";
@@ -146,9 +147,26 @@ export function ForceCloseShiftDialog({ shift }: { shift: CashShiftListItem }) {
   </Dialog>;
 }
 
+/** Appends a manager correction while keeping the original closed-shift values visible. */
+export function CashShiftCorrectionDialog({ shift }: { shift: CashShiftListItem }) {
+  const form = useAutoCloseDialogAction(correctCashShiftReconciliationAction, initialShiftActionState);
+  const [token, setToken] = useState("");
+  return <Dialog onOpenChange={(open) => { form.setOpen(open); if (open) setToken(crypto.randomUUID()); }} open={form.open}>
+    <DialogTrigger render={<Button className="min-h-11" size="sm" variant="outline" />}><FilePenLine aria-hidden="true" />{shift.reconciliationCorrection ? "Koreksi lagi" : "Koreksi rekonsiliasi"}</DialogTrigger>
+    <DialogContent><DialogHeader><DialogTitle>Koreksi rekonsiliasi shift</DialogTitle><DialogDescription>Gunakan hanya jika hasil hitung fisik saat penutupan salah. Nilai asli tidak diubah dan seluruh koreksi masuk jejak audit.</DialogDescription></DialogHeader>
+      <div className="grid grid-cols-2 gap-3 rounded-xl border bg-muted/35 p-3 text-sm"><span><span className="block text-xs text-muted-foreground">Kas seharusnya</span><strong className="font-mono">{formatRupiah(shift.expectedCash ?? "0")}</strong></span><span><span className="block text-xs text-muted-foreground">Aktual berlaku</span><strong className="font-mono">{formatRupiah(shift.actualCash ?? "0")}</strong></span></div>
+      <form action={form.action} className="grid gap-5"><input name="shiftId" type="hidden" value={shift.id} /><input name="outletId" type="hidden" value={shift.outletId} /><input name="correctionToken" type="hidden" value={token} />
+        <MoneyField autoFocus defaultValue={shift.actualCash?.replace(/\.\d+$/, "") ?? "0"} errors={form.state.fieldErrors?.correctedActualCash} id={`${shift.id}-corrected-actual`} label="Kas fisik aktual yang benar (Rp)" name="correctedActualCash" />
+        <Field data-invalid={Boolean(form.state.fieldErrors?.reason)}><FieldLabel htmlFor={`${shift.id}-correction-reason`}>Alasan koreksi</FieldLabel><Textarea aria-invalid={Boolean(form.state.fieldErrors?.reason)} id={`${shift.id}-correction-reason`} maxLength={240} minLength={8} name="reason" placeholder="Contoh: Uang pecahan terselip saat hitung awal" required /><FieldDescription>Jelaskan kesalahan hitungnya, bukan sekadar “salah”.</FieldDescription><FieldError errors={toFieldErrors(form.state.fieldErrors?.reason)} /></Field>
+        <ActionFeedback state={form.state} /><DialogFooter><Button disabled={form.pending || !token} type="submit">{form.pending && <Spinner />}{form.pending ? "Menyimpan…" : "Simpan koreksi"}</Button></DialogFooter>
+      </form>
+    </DialogContent>
+  </Dialog>;
+}
+
 /** Renders one accessible Rupiah input with inline field errors. */
-function MoneyField({ errors, id, label, name, autoFocus = false }: { errors?: string[]; id: string; label: string; name: string; autoFocus?: boolean }) {
-  return <Field data-invalid={Boolean(errors)}><FieldLabel htmlFor={id}>{label}</FieldLabel><CurrencyInput aria-invalid={Boolean(errors)} autoFocus={autoFocus} id={id} name={name} placeholder="0" required /><FieldError errors={toFieldErrors(errors)} /></Field>;
+function MoneyField({ errors, id, label, name, autoFocus = false, defaultValue }: { errors?: string[]; id: string; label: string; name: string; autoFocus?: boolean; defaultValue?: string }) {
+  return <Field data-invalid={Boolean(errors)}><FieldLabel htmlFor={id}>{label}</FieldLabel><CurrencyInput aria-invalid={Boolean(errors)} autoFocus={autoFocus} defaultValue={defaultValue} id={id} name={name} placeholder="0" required /><FieldError errors={toFieldErrors(errors)} /></Field>;
 }
 
 /** Displays non-success action feedback without relying on color alone. */

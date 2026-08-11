@@ -115,7 +115,7 @@ Migration `add_employee_attendance` menambahkan profil wajah terenkripsi, challe
 - `/attendance` mendukung pendaftaran tiga sampel, check-in/check-out, liveness ringan, GPS maksimal 100 m, geofence 50–500 m, roster dua minggu, dan riwayat pribadi. Pendaftaran pertama langsung aktif; daftar ulang kasir/staf mempertahankan profil lama sampai salah satu owner/manager menyetujui sampel baru. Mode tablet bersama hanya menyimpan preferensi logout otomatis di browser dengan key `glutong:attendance:shared-device`.
 - `/settings/attendance` menyediakan peta OpenStreetMap interaktif: pusat dan handle radius dapat digeser, lokasi perangkat dapat dipakai, dan koordinat/radius manual tetap tersinkron dua arah.
 - Setelah tiga kegagalan dalam verification session 15 menit, staf dapat meminta pengecualian. `/attendance/manage` membatasi manager ke outlet penugasannya, menolak self-approval, menyediakan review daftar ulang kasir/staf, ringkasan jadwal hari ini, koreksi waktu append-only, pembatalan profil, serta ekspor CSV maksimal 10.000 baris.
-- `/attendance/roster` menyediakan template shift per outlet, papan Senin–Minggu, draf, salin minggu lalu, publish, dan perubahan shift masa depan dengan alasan audit. Satu staf hanya boleh memiliki satu shift per tanggal secara global; shift lintas tengah malam tetap memakai zona waktu outlet.
+- `/attendance/roster` menyediakan pengelolaan template shift per outlet, papan Senin–Minggu, draf, salin minggu lalu, dan publish. Setelah terbit, owner/manager tetap dapat mengganti shift, menambahkan shift pada hari Libur, atau mengubah shift menjadi Libur selama jadwal belum mulai dan alasan audit diisi. Satu staf hanya boleh memiliki satu shift per tanggal secara global; shift lintas tengah malam tetap memakai zona waktu outlet.
 - Check-in terjadwal dapat dimulai dua jam sebelum shift. Absensi yang tidak cocok roster tetap boleh dilanjutkan setelah konfirmasi dan ditandai **Di luar jadwal**. Toleransi terlambat dan pulang cepat diatur per outlet dengan default 15 menit.
 - Waktu server menjadi sumber kebenaran dan tanggal bisnis mengikuti zona outlet. Satu staf hanya dapat memiliki satu sesi terbuka; check-out wajib pada outlet check-in.
 - Foto attempt disimpan pada Vercel Blob private terpisah dan cron menghapusnya setelah 30 hari. Embedding probe tidak disimpan; template aktif dan sampel daftar ulang pending dienkripsi AES-256-GCM. Payload pending dihapus setelah keputusan, sedangkan template lama baru dihapus ketika penggantian disetujui.
@@ -140,13 +140,15 @@ Migration `add_sale_voids_and_refunds` menambahkan status transaksi serta ledger
 
 ## Shift kasir dan tutup kas
 
-Migration `add_cash_shifts` menambahkan shift kasir, pergerakan kas, audit shift, dan relasi nullable dari transaksi lama ke shift. Checkout baru oleh owner, manager, maupun kasir wajib memakai shift pribadi yang aktif pada outlet session.
+Migration `add_cash_shifts` menambahkan shift kasir, pergerakan kas, audit shift, dan relasi nullable dari transaksi lama ke shift. Migration `add_cash_shift_reconciliation_corrections` menambahkan koreksi rekonsiliasi append-only. Checkout baru oleh owner, manager, maupun kasir wajib memakai shift pribadi yang aktif pada outlet session.
 
 - Satu user hanya dapat membuka satu shift secara global; shift tetap aktif melewati tengah malam dan tanggal bisnis mengikuti tanggal lokal saat dibuka.
 - Saldo kas seharusnya dihitung dari saldo awal + penjualan tunai + kas masuk - kas keluar - refund tunai. QRIS, kartu, transfer, dan platform delivery tetap diringkas tetapi tidak masuk cash drawer.
 - Input Rupiah untuk saldo, movement, hitung fisik, dan uang diterima otomatis memakai pemisah ribuan titik; server tetap menerima digit mentah dan menghitung dengan `Decimal`.
 - Kasir menutup shift dengan blind count. Expected cash dan selisih baru tampil setelah penutupan berhasil.
 - Owner/manager dapat menutup paksa shift dalam cakupan outlet dengan kas aktual dan alasan wajib.
+- Setelah shift ditutup, owner/manager dapat memperbaiki kas aktual yang salah hitung melalui **Koreksi rekonsiliasi**. Nilai penutupan asli tidak ditimpa; revisi, nilai efektif, alasan, pelaku, waktu, dan audit tetap tersimpan.
+- Riwayat, rincian shift, laporan, dan CSV memakai nilai efektif terbaru sambil tetap menampilkan nilai aktual/selisih asli ketika koreksi tersedia.
 - Pergantian outlet, arsip outlet, deaktivasi staf, dan perubahan assignment diblokir selama shift terdampak masih terbuka. Logout tetap diizinkan setelah peringatan.
 - `/shifts` menampilkan shift outlet aktif, riwayat, pembayaran per metode, movement, transaksi, dan audit tanpa persistent cache.
 

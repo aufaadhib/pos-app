@@ -4,15 +4,19 @@ import { AttendanceRosterStatus, Prisma, StaffPositionStatus } from "@/generated
 
 const mocks = vi.hoisted(() => ({
   auditCreate: vi.fn(),
+  entryCreate: vi.fn(),
+  entryDelete: vi.fn(),
   entryFindUnique: vi.fn(),
   entryUpdate: vi.fn(),
   outletFindFirst: vi.fn(),
   rosterCreate: vi.fn(),
   rosterFindUnique: vi.fn(),
+  rosterFindFirst: vi.fn(),
   rosterUpdate: vi.fn(),
   templateCreate: vi.fn(),
   templateFindFirst: vi.fn(),
   templateFindMany: vi.fn(),
+  templateUpdate: vi.fn(),
   transaction: vi.fn(),
   userFindMany: vi.fn(),
 }));
@@ -20,16 +24,16 @@ const mocks = vi.hoisted(() => ({
 vi.mock("server-only", () => ({}));
 vi.mock("@/lib/prisma", () => ({ prisma: { $transaction: mocks.transaction } }));
 
-import { createShiftTemplate, publishRosterWeek, saveRosterDraft, updatePublishedRosterEntry } from "@/lib/attendance/roster-service";
+import { addPublishedRosterEntry, changeShiftTemplateStatus, createShiftTemplate, publishRosterWeek, saveRosterDraft, updatePublishedRosterEntry, updateShiftTemplate } from "@/lib/attendance/roster-service";
 
 const actor = { id: "manager-1", name: "Manajer", email: "manager@example.com", role: "manager" as const };
 const outlet = { id: "outlet-1", timezone: "Asia/Jakarta", attendanceLateGraceMinutes: 15, attendanceEarlyLeaveGraceMinutes: 15 };
 const updatedAt = new Date("2026-08-11T01:00:00.000Z");
 const transactionClient = {
   attendanceAuditLog: { create: mocks.auditCreate },
-  attendanceRosterEntry: { findUnique: mocks.entryFindUnique, update: mocks.entryUpdate },
-  attendanceRosterWeek: { create: mocks.rosterCreate, findUnique: mocks.rosterFindUnique, update: mocks.rosterUpdate },
-  attendanceShiftTemplate: { create: mocks.templateCreate, findFirst: mocks.templateFindFirst, findMany: mocks.templateFindMany },
+  attendanceRosterEntry: { create: mocks.entryCreate, delete: mocks.entryDelete, findUnique: mocks.entryFindUnique, update: mocks.entryUpdate },
+  attendanceRosterWeek: { create: mocks.rosterCreate, findFirst: mocks.rosterFindFirst, findUnique: mocks.rosterFindUnique, update: mocks.rosterUpdate },
+  attendanceShiftTemplate: { create: mocks.templateCreate, findFirst: mocks.templateFindFirst, findMany: mocks.templateFindMany, update: mocks.templateUpdate },
   outlet: { findFirst: mocks.outletFindFirst },
   user: { findMany: mocks.userFindMany },
 };
@@ -64,6 +68,20 @@ describe("attendance roster service", () => {
     expect(mocks.transaction).toHaveBeenCalledOnce();
   });
 
+  it("updates and archives templates with optimistic versions and audit snapshots", async () => {
+    const current = { id: "shift-1", outletId: outlet.id, name: "Pagi", startMinute: 480, endMinute: 960, status: StaffPositionStatus.ACTIVE, updatedAt };
+    mocks.templateFindFirst.mockResolvedValue(current);
+    mocks.templateUpdate.mockResolvedValueOnce({ ...current, name: "Pagi awal", startMinute: 420 }).mockResolvedValueOnce({ ...current, status: StaffPositionStatus.ARCHIVED });
+
+    await updateShiftTemplate({ id: current.id, outletId: outlet.id, expectedUpdatedAt: updatedAt.toISOString(), name: "Pagi awal", startTime: "07:00", endTime: "16:00" }, actor);
+    await changeShiftTemplateStatus({ id: current.id, outletId: outlet.id, expectedUpdatedAt: updatedAt.toISOString() }, StaffPositionStatus.ARCHIVED, actor);
+
+    expect(mocks.templateUpdate).toHaveBeenNthCalledWith(1, expect.objectContaining({ data: expect.objectContaining({ name: "Pagi awal", startMinute: 420 }) }));
+    expect(mocks.templateUpdate).toHaveBeenNthCalledWith(2, expect.objectContaining({ data: expect.objectContaining({ status: StaffPositionStatus.ARCHIVED }) }));
+    expect(mocks.auditCreate).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ action: "SHIFT_TEMPLATE_UPDATE" }) }));
+    expect(mocks.auditCreate).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ action: "SHIFT_TEMPLATE_ARCHIVE" }) }));
+  });
+
   it("publishes a valid draft and its audit atomically", async () => {
     mocks.rosterFindUnique.mockResolvedValue({ id: "week-1", status: AttendanceRosterStatus.DRAFT, updatedAt, entries: [{ shiftTemplate: { status: StaffPositionStatus.ACTIVE }, user: { banned: false, outletAssignments: [{ outletId: outlet.id }] } }] });
     mocks.rosterUpdate.mockResolvedValue({ id: "week-1", status: AttendanceRosterStatus.PUBLISHED });
@@ -85,6 +103,42 @@ describe("attendance roster service", () => {
 
     expect(mocks.entryUpdate).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ shiftTemplateId: "shift-new", shiftName: "Siang" }) }));
     expect(mocks.auditCreate).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ after: expect.objectContaining({ reason: "Pertukaran jadwal staf" }) }) }));
+  });
+
+  it("changes a future published shift to Libur without mutating its audit history", async () => {
+    const entry = { id: "entry-1", outletId: outlet.id, workDate: new Date("2099-08-10T00:00:00.000Z"), timezone: "Asia/Jakarta", shiftTemplateId: "shift-old", shiftName: "Pagi", scheduledStartAt: new Date("2099-08-10T01:00:00.000Z"), scheduledEndAt: new Date("2099-08-10T09:00:00.000Z"), updatedAt, rosterWeek: { status: AttendanceRosterStatus.PUBLISHED } };
+    mocks.entryFindUnique.mockResolvedValue(entry);
+    mocks.entryDelete.mockResolvedValue(entry);
+
+    await updatePublishedRosterEntry({ entryId: entry.id, shiftTemplateId: null, expectedUpdatedAt: updatedAt.toISOString(), reason: "Staf mendapat jadwal libur" }, actor);
+
+    expect(mocks.entryDelete).toHaveBeenCalledWith({ where: { id: entry.id } });
+    expect(mocks.auditCreate).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ before: expect.objectContaining({ shiftName: "Pagi" }), after: { status: "DAY_OFF", reason: "Staf mendapat jadwal libur" } }) }));
+  });
+
+  it("adds a future shift to a published Libur cell and bumps the week version", async () => {
+    const week = { id: "week-1", outletId: outlet.id, weekStart: new Date("2099-08-10T00:00:00.000Z"), status: AttendanceRosterStatus.PUBLISHED, updatedAt };
+    mocks.rosterFindFirst.mockResolvedValue(week);
+    mocks.userFindMany.mockResolvedValue([{ id: "staff-1", jobPositionId: "position-1", jobPosition: { name: "Pelayan", status: StaffPositionStatus.ACTIVE } }]);
+    mocks.templateFindMany.mockResolvedValue([{ id: "shift-1", name: "Pagi", startMinute: 480, endMinute: 960 }]);
+    mocks.entryCreate.mockImplementation(async ({ data }) => ({ id: "entry-new", ...data }));
+    mocks.rosterUpdate.mockResolvedValue({ ...week, updatedAt: new Date() });
+
+    await addPublishedRosterEntry({ rosterWeekId: week.id, outletId: outlet.id, userId: "staff-1", workDate: "2099-08-10", shiftTemplateId: "shift-1", expectedWeekUpdatedAt: updatedAt.toISOString(), reason: "Menggantikan staf yang izin" }, actor);
+
+    expect(mocks.entryCreate).toHaveBeenCalledWith({ data: expect.objectContaining({ rosterWeekId: week.id, userId: "staff-1", shiftName: "Pagi" }) });
+    expect(mocks.rosterUpdate).toHaveBeenCalledWith({ where: { id: week.id }, data: { updatedAt: expect.any(Date) } });
+    expect(mocks.auditCreate).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ before: { status: "DAY_OFF", userId: "staff-1", workDate: "2099-08-10" }, after: expect.objectContaining({ reason: "Menggantikan staf yang izin" }) }) }));
+  });
+
+  it("locks adding a shift to a published date after its start time", async () => {
+    const week = { id: "week-old", outletId: outlet.id, weekStart: new Date("2020-08-10T00:00:00.000Z"), status: AttendanceRosterStatus.PUBLISHED, updatedAt };
+    mocks.rosterFindFirst.mockResolvedValue(week);
+    mocks.userFindMany.mockResolvedValue([{ id: "staff-1", jobPositionId: "position-1", jobPosition: { name: "Pelayan", status: StaffPositionStatus.ACTIVE } }]);
+    mocks.templateFindMany.mockResolvedValue([{ id: "shift-1", name: "Pagi", startMinute: 480, endMinute: 960 }]);
+
+    await expect(addPublishedRosterEntry({ rosterWeekId: week.id, outletId: outlet.id, userId: "staff-1", workDate: "2020-08-10", shiftTemplateId: "shift-1", expectedWeekUpdatedAt: updatedAt.toISOString(), reason: "Koreksi jadwal yang terlewat" }, actor)).rejects.toMatchObject({ code: "CONFLICT" });
+    expect(mocks.entryCreate).not.toHaveBeenCalled();
   });
 
   it("locks a published shift after it has started", async () => {

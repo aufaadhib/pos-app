@@ -39,6 +39,22 @@ export type CashShiftListItem = {
   expectedCash: string | null;
   actualCash: string | null;
   cashDifference: string | null;
+  originalActualCash: string | null;
+  originalCashDifference: string | null;
+  reconciliationCorrection: CashShiftReconciliationCorrection | null;
+};
+
+export type CashShiftReconciliationCorrection = {
+  id: string;
+  revision: number;
+  previousActualCash: string;
+  correctedActualCash: string;
+  previousDifference: string;
+  correctedDifference: string;
+  reason: string;
+  actorName: string;
+  actorEmail: string;
+  createdAt: string;
 };
 
 export type CurrentCashShift = CashShiftListItem & {
@@ -79,7 +95,7 @@ export type CashShiftDetail = CashShiftListItem & {
   }>;
   audits: Array<{
     id: string;
-    action: "OPEN" | "CASH_IN" | "CASH_OUT" | "CLOSE" | "FORCE_CLOSE";
+    action: "OPEN" | "CASH_IN" | "CASH_OUT" | "CLOSE" | "FORCE_CLOSE" | "RECONCILIATION_CORRECT";
     actorEmail: string;
     createdAt: string;
   }>;

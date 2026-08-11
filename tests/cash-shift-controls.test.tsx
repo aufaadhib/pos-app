@@ -7,9 +7,10 @@ vi.mock("@/app/shifts/actions", () => ({
   addCashMovementAction: vi.fn(async () => ({ status: "success", message: "Movement tersimpan." })),
   closeCashShiftAction: vi.fn(async () => ({ status: "success", message: "Shift ditutup." })),
   forceCloseCashShiftAction: vi.fn(async () => ({ status: "success", message: "Shift ditutup." })),
+  correctCashShiftReconciliationAction: vi.fn(async () => ({ status: "success", message: "Rekonsiliasi dikoreksi." })),
 }));
 
-import { OpenShiftCard, PosShiftBar, WrongOutletShiftCard } from "@/components/shifts/shift-controls";
+import { CashShiftCorrectionDialog, OpenShiftCard, PosShiftBar, WrongOutletShiftCard } from "@/components/shifts/shift-controls";
 
 const shift = {
   id: "shift-1",
@@ -28,6 +29,9 @@ const shift = {
   expectedCash: null,
   actualCash: null,
   cashDifference: null,
+  originalActualCash: null,
+  originalCashDifference: null,
+  reconciliationCorrection: null,
 };
 
 describe("cash shift controls", () => {
@@ -49,5 +53,14 @@ describe("cash shift controls", () => {
     render(<WrongOutletShiftCard shift={{ ...shift, outletId: "outlet-2", outletName: "Glutong Timur" }} />);
     expect(screen.getByText("Shift masih aktif di Glutong Timur")).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Buka rincian shift" })).toHaveAttribute("href", "/shifts/shift-1");
+  });
+
+  it("explains that a reconciliation correction preserves the original close values", async () => {
+    const user = userEvent.setup();
+    render(<CashShiftCorrectionDialog shift={{ ...shift, status: "CLOSED", expectedCash: "375000.00", actualCash: "350000.00", cashDifference: "-25000.00", originalActualCash: "350000.00", originalCashDifference: "-25000.00" }} />);
+    await user.click(screen.getByRole("button", { name: "Koreksi rekonsiliasi" }));
+    expect(screen.getByText(/Nilai asli tidak diubah/)).toBeInTheDocument();
+    expect(screen.getByLabelText("Kas fisik aktual yang benar (Rp)")).toHaveValue("350.000");
+    expect(screen.getByLabelText("Alasan koreksi")).toBeInTheDocument();
   });
 });
