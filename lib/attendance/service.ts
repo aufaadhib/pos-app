@@ -8,6 +8,7 @@ import {
   AttendanceKind,
   AttendanceSessionStatus,
   AttendanceVerificationStatus,
+  FaceReenrollmentStatus,
   OutletStatus,
   Prisma,
 } from "@/generated/prisma/client";
@@ -43,7 +44,7 @@ export class AttendanceError extends Error {
   }
 }
 
-/** Replaces the signed-in user's active encrypted face profile with three averaged samples. */
+/** Enrolls a first profile directly, while cashier reenrollment waits for manager approval. */
 export async function enrollFaceProfile(input: AttendanceEnrollmentInput, actor: AttendanceActor) {
   let template: number[];
   try {
@@ -57,32 +58,63 @@ export async function enrollFaceProfile(input: AttendanceEnrollmentInput, actor:
   } catch {
     throw new AttendanceError("NOT_CONFIGURED", "Kunci enkripsi absensi belum valid. Periksa ATTENDANCE_EMBEDDING_KEY lalu coba kembali.");
   }
-  return prisma.$transaction(async (transaction) => {
-    const active = await transaction.faceProfile.findUnique({ where: { activeUserKey: actor.id } });
-    if (active) {
-      await transaction.faceProfile.update({
-        where: { id: active.id },
-        data: { activeUserKey: null, embeddingCiphertext: null, embeddingIv: null, revokedAt: new Date() },
+  try {
+    return await prisma.$transaction(async (transaction) => {
+      const pending = await transaction.faceReenrollmentRequest.findUnique({ where: { pendingUserKey: actor.id }, select: { id: true } });
+      if (pending) throw new AttendanceError("CONFLICT", "Permintaan daftar ulang wajah masih menunggu persetujuan.");
+      const active = await transaction.faceProfile.findUnique({ where: { activeUserKey: actor.id } });
+      const consentAt = new Date();
+      if (active && actor.role === "cashier") {
+        const request = await transaction.faceReenrollmentRequest.create({
+          data: {
+            userId: actor.id,
+            pendingUserKey: actor.id,
+            embeddingCiphertext: encrypted.ciphertext,
+            embeddingIv: encrypted.iv,
+            embeddingLength: encrypted.length,
+            modelVersion: input.modelVersion,
+            consentAt,
+          },
+        });
+        await writeAttendanceAudit(transaction, "FACE_REENROLLMENT", request.id, AttendanceAuditAction.REENROLL_REQUEST, actor, null, {
+          userId: actor.id,
+          modelVersion: request.modelVersion,
+          embeddingLength: request.embeddingLength,
+          requestedAt: request.requestedAt.toISOString(),
+        });
+        return { pendingApproval: true as const, requestId: request.id, requestedAt: request.requestedAt.toISOString() };
+      }
+      if (active) {
+        await transaction.faceProfile.update({
+          where: { id: active.id },
+          data: { activeUserKey: null, embeddingCiphertext: null, embeddingIv: null, revokedAt: consentAt },
+        });
+      }
+      const profile = await transaction.faceProfile.create({
+        data: {
+          userId: actor.id,
+          activeUserKey: actor.id,
+          embeddingCiphertext: encrypted.ciphertext,
+          embeddingIv: encrypted.iv,
+          embeddingLength: encrypted.length,
+          modelVersion: input.modelVersion,
+          consentAt,
+        },
       });
+      await writeAttendanceAudit(transaction, "FACE_PROFILE", profile.id, AttendanceAuditAction.ENROLL, actor, null, {
+        modelVersion: profile.modelVersion,
+        embeddingLength: profile.embeddingLength,
+        consentAt: profile.consentAt.toISOString(),
+      });
+      return { pendingApproval: false as const, profileId: profile.id, enrolledAt: profile.enrolledAt.toISOString() };
+    }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
+  } catch (error) {
+    if (error instanceof AttendanceError) throw error;
+    if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002") {
+      throw new AttendanceError("CONFLICT", "Pendaftaran wajah lain sedang diproses. Muat ulang lalu coba kembali.");
     }
-    const profile = await transaction.faceProfile.create({
-      data: {
-        userId: actor.id,
-        activeUserKey: actor.id,
-        embeddingCiphertext: encrypted.ciphertext,
-        embeddingIv: encrypted.iv,
-        embeddingLength: encrypted.length,
-        modelVersion: input.modelVersion,
-        consentAt: new Date(),
-      },
-    });
-    await writeAttendanceAudit(transaction, "FACE_PROFILE", profile.id, AttendanceAuditAction.ENROLL, actor, null, {
-      modelVersion: profile.modelVersion,
-      embeddingLength: profile.embeddingLength,
-      consentAt: profile.consentAt.toISOString(),
-    });
-    return { profileId: profile.id, enrolledAt: profile.enrolledAt.toISOString() };
-  });
+    throw error;
+  }
 }
 
 /** Revokes a user's active face profile and erases its encrypted biometric payload. */
@@ -90,6 +122,8 @@ export async function revokeFaceProfile(userId: string, actor: AttendanceActor) 
   assertManager(actor);
   return prisma.$transaction(async (transaction) => {
     await assertUserInActorScope(transaction, userId, actor);
+    const pending = await transaction.faceReenrollmentRequest.findUnique({ where: { pendingUserKey: userId }, select: { id: true } });
+    if (pending) throw new AttendanceError("CONFLICT", "Tinjau permintaan daftar ulang sebelum membatalkan profil wajah.");
     const profile = await transaction.faceProfile.findUnique({ where: { activeUserKey: userId } });
     if (!profile) throw new AttendanceError("NOT_FOUND", "Profil wajah aktif tidak ditemukan.");
     await transaction.faceProfile.update({
@@ -98,6 +132,58 @@ export async function revokeFaceProfile(userId: string, actor: AttendanceActor) 
     });
     await writeAttendanceAudit(transaction, "FACE_PROFILE", profile.id, AttendanceAuditAction.REVOKE, actor, { userId }, { revoked: true });
   });
+}
+
+/** Approves or rejects one cashier reenrollment request and erases its pending payload. */
+export async function reviewFaceReenrollment(input: AttendanceReviewInput, actor: AttendanceActor) {
+  assertManager(actor);
+  return prisma.$transaction(async (transaction) => {
+    const request = await transaction.faceReenrollmentRequest.findUnique({ where: { id: input.requestId } });
+    if (!request || request.status !== FaceReenrollmentStatus.PENDING || !request.embeddingCiphertext || !request.embeddingIv) {
+      throw new AttendanceError("NOT_FOUND", "Permintaan daftar ulang wajah tidak ditemukan atau sudah ditinjau.");
+    }
+    await assertUserInActorScope(transaction, request.userId, actor);
+    const reviewedAt = new Date();
+    let profileId: string | null = null;
+    if (input.decision === FaceReenrollmentStatus.APPROVED) {
+      const active = await transaction.faceProfile.findUnique({ where: { activeUserKey: request.userId } });
+      if (active) {
+        await transaction.faceProfile.update({
+          where: { id: active.id },
+          data: { activeUserKey: null, embeddingCiphertext: null, embeddingIv: null, revokedAt: reviewedAt },
+        });
+      }
+      const profile = await transaction.faceProfile.create({
+        data: {
+          userId: request.userId,
+          activeUserKey: request.userId,
+          embeddingCiphertext: request.embeddingCiphertext,
+          embeddingIv: request.embeddingIv,
+          embeddingLength: request.embeddingLength,
+          modelVersion: request.modelVersion,
+          consentAt: request.consentAt,
+        },
+      });
+      profileId = profile.id;
+    }
+    const updated = await transaction.faceReenrollmentRequest.update({
+      where: { id: request.id },
+      data: {
+        pendingUserKey: null,
+        status: input.decision,
+        embeddingCiphertext: null,
+        embeddingIv: null,
+        reviewedByUserId: actor.id,
+        reviewedByName: actor.name,
+        reviewedByEmail: actor.email,
+        reviewReason: input.reason,
+        reviewedAt,
+      },
+    });
+    const action = input.decision === FaceReenrollmentStatus.APPROVED ? AttendanceAuditAction.REENROLL_APPROVE : AttendanceAuditAction.REENROLL_REJECT;
+    await writeAttendanceAudit(transaction, "FACE_REENROLLMENT", request.id, action, actor, { status: request.status, userId: request.userId }, { status: updated.status, profileId, reviewReason: input.reason });
+    return { approved: input.decision === FaceReenrollmentStatus.APPROVED, profileId };
+  }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
 }
 
 /** Starts or rotates a short-lived single-use verification challenge for an available outlet. */

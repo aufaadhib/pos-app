@@ -7,6 +7,7 @@ import {
   AdminAuditAction,
   AdminAuditEntityType,
   AttendanceAuditAction,
+  FaceReenrollmentStatus,
   OutletStatus,
   Prisma,
 } from "@/generated/prisma/client";
@@ -264,10 +265,16 @@ async function changeStaffStatus(target: StaffMutationTarget, actor: AdminActor,
     });
     assertUpdateSucceeded(update.count);
     if (banned) {
+      const deactivatedAt = new Date();
       await transaction.session.deleteMany({ where: { userId: current.id } });
+      const faceRequest = await transaction.faceReenrollmentRequest.findUnique({ where: { pendingUserKey: current.id }, select: { id: true } });
+      if (faceRequest) {
+        await transaction.faceReenrollmentRequest.update({ where: { id: faceRequest.id }, data: { pendingUserKey: null, status: FaceReenrollmentStatus.REJECTED, embeddingCiphertext: null, embeddingIv: null, reviewedByUserId: actor.id, reviewedByEmail: actor.email, reviewReason: "Akun staf dinonaktifkan.", reviewedAt: deactivatedAt } });
+        await transaction.attendanceAuditLog.create({ data: { entityType: "FACE_REENROLLMENT", entityId: faceRequest.id, action: AttendanceAuditAction.REENROLL_REJECT, actorUserId: actor.id, actorEmail: actor.email, before: { userId: current.id, status: FaceReenrollmentStatus.PENDING }, after: { status: FaceReenrollmentStatus.REJECTED, rejectedByStaffDeactivation: true } } });
+      }
       const faceProfile = await transaction.faceProfile.findUnique({ where: { activeUserKey: current.id }, select: { id: true } });
       if (faceProfile) {
-        await transaction.faceProfile.update({ where: { id: faceProfile.id }, data: { activeUserKey: null, embeddingCiphertext: null, embeddingIv: null, revokedAt: new Date() } });
+        await transaction.faceProfile.update({ where: { id: faceProfile.id }, data: { activeUserKey: null, embeddingCiphertext: null, embeddingIv: null, revokedAt: deactivatedAt } });
         await transaction.attendanceAuditLog.create({ data: { entityType: "FACE_PROFILE", entityId: faceProfile.id, action: AttendanceAuditAction.REVOKE, actorUserId: actor.id, actorEmail: actor.email, before: { userId: current.id }, after: { revokedByStaffDeactivation: true } } });
       }
     }

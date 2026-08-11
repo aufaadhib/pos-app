@@ -109,14 +109,14 @@ Migration `add_receipt_printer_settings` menambahkan ukuran kertas dan footer st
 
 ### Absensi karyawan
 
-Migration `add_employee_attendance` menambahkan profil wajah terenkripsi, challenge sekali pakai, attempt dan foto bukti privat, sesi masuk/pulang, pengecualian, koreksi append-only, audit, serta geofence outlet.
+Migration `add_employee_attendance` menambahkan profil wajah terenkripsi, challenge sekali pakai, attempt dan foto bukti privat, sesi masuk/pulang, pengecualian, koreksi append-only, audit, serta geofence outlet. Migration `add_face_reenrollment_approval` menambahkan antrean persetujuan daftar ulang kasir.
 
 - Setiap staf menggunakan akun Better Auth sendiri. Pencocokan selalu `1:1` terhadap profil akun login, bukan pencarian wajah seluruh staf.
-- `/attendance` mendukung pendaftaran tiga sampel, check-in/check-out, liveness ringan, GPS maksimal 100 m, geofence 50–500 m, dan riwayat pribadi. Mode tablet bersama hanya menyimpan preferensi logout otomatis di browser dengan key `glutong:attendance:shared-device`.
+- `/attendance` mendukung pendaftaran tiga sampel, check-in/check-out, liveness ringan, GPS maksimal 100 m, geofence 50–500 m, dan riwayat pribadi. Pendaftaran pertama langsung aktif; daftar ulang kasir mempertahankan profil lama sampai salah satu owner/manager menyetujui sampel baru. Mode tablet bersama hanya menyimpan preferensi logout otomatis di browser dengan key `glutong:attendance:shared-device`.
 - `/settings/attendance` menyediakan peta OpenStreetMap interaktif: pusat dan handle radius dapat digeser, lokasi perangkat dapat dipakai, dan koordinat/radius manual tetap tersinkron dua arah.
-- Setelah tiga kegagalan dalam verification session 15 menit, staf dapat meminta pengecualian. `/attendance/manage` membatasi manager ke outlet penugasannya, menolak self-approval, menyediakan koreksi waktu append-only, pembatalan profil, serta ekspor CSV maksimal 10.000 baris.
+- Setelah tiga kegagalan dalam verification session 15 menit, staf dapat meminta pengecualian. `/attendance/manage` membatasi manager ke outlet penugasannya, menolak self-approval, menyediakan review daftar ulang kasir, koreksi waktu append-only, pembatalan profil, serta ekspor CSV maksimal 10.000 baris.
 - Waktu server menjadi sumber kebenaran dan tanggal bisnis mengikuti zona outlet. Satu staf hanya dapat memiliki satu sesi terbuka; check-out wajib pada outlet check-in.
-- Foto attempt disimpan pada Vercel Blob private terpisah dan cron menghapusnya setelah 30 hari. Embedding probe tidak disimpan; template aktif dienkripsi AES-256-GCM dan dihapus saat dibatalkan.
+- Foto attempt disimpan pada Vercel Blob private terpisah dan cron menghapusnya setelah 30 hari. Embedding probe tidak disimpan; template aktif dan sampel daftar ulang pending dienkripsi AES-256-GCM. Payload pending dihapus setelah keputusan, sedangkan template lama baru dihapus ketika penggantian disetujui.
 - Liveness browser hanya mitigasi ringan, bukan jaminan anti-spoof tingkat tinggi. Model dan threshold `0,60` wajib dikalibrasi lagi pada tablet/ponsel Android nyata sebelum dipakai sebagai dasar payroll.
 
 Siapkan private Blob store dan tiga environment khusus absensi. `ATTENDANCE_EMBEDDING_KEY` harus berupa 32 byte acak dalam base64; credential ini divalidasi hanya saat fitur absensi digunakan.

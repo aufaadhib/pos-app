@@ -18,6 +18,7 @@ import { Textarea } from "@/components/ui/textarea";
 import type { AttendanceChallengeAction } from "@/lib/attendance/constants";
 import { getSharedDevicePreference, setSharedDevicePreference, subscribeSharedDevicePreference } from "@/lib/attendance/device-preference";
 import { authClient } from "@/lib/auth/client";
+import type { AppRole } from "@/lib/auth/permissions";
 
 type AttendanceOutlet = { id: string; code: string; name: string; attendanceEnabled: boolean; attendanceLatitude: number | null; attendanceLongitude: number | null; attendanceRadiusMeters: number };
 type RecentSession = { id: string; status: "OPEN" | "CLOSED"; checkInAt: string; checkOutAt: string | null; outlet: { code: string; name: string; timezone: string }; correction: { reason: string } | null };
@@ -31,10 +32,11 @@ const enrollmentSteps = [
 ] as const;
 
 /** Runs enrollment and 1:1 attendance for the signed-in account with optional shared-device logout. */
-export function AttendanceClock({ user, outlets, profile, openSession, recentSessions }: {
-  user: { name: string; email: string };
+export function AttendanceClock({ user, outlets, profile, pendingReenrollment, openSession, recentSessions }: {
+  user: { name: string; email: string; role: AppRole };
   outlets: AttendanceOutlet[];
   profile: { enrolledAt: string; modelVersion: string } | null;
+  pendingReenrollment: { id: string; requestedAt: string } | null;
   openSession: { id: string; checkInAt: string; outlet: { id: string; code: string; name: string; timezone: string } } | null;
   recentSessions: RecentSession[];
 }) {
@@ -60,6 +62,7 @@ export function AttendanceClock({ user, outlets, profile, openSession, recentSes
   const sharedDevice = useSyncExternalStore(subscribeSharedDevice, getSharedDevicePreference, getManualSharedDeviceSnapshot);
   const selectedOutlet = outlets.find((outlet) => outlet.id === selectedOutletId);
   const attendanceKind = openSession ? "CHECK_OUT" : "CHECK_IN";
+  const reenrollmentNeedsApproval = Boolean(profile && user.role === "cashier");
 
   const refreshChallenge = useCallback(async () => {
     if (!selectedOutlet) throw new Error("Pilih outlet absensi terlebih dahulu.");
@@ -192,7 +195,7 @@ export function AttendanceClock({ user, outlets, profile, openSession, recentSes
         const data = await response.json();
         if (!response.ok) throw new Error(data.message);
         if (cancelled()) return;
-        toast.success("Wajah akun berhasil didaftarkan.");
+        toast.success(data.pendingApproval ? "Permintaan daftar ulang dikirim untuk persetujuan." : "Wajah akun berhasil didaftarkan.");
         closeDialog();
         router.refresh();
       } catch (error) {
@@ -318,9 +321,10 @@ export function AttendanceClock({ user, outlets, profile, openSession, recentSes
         {!outlets.length && <Alert variant="destructive"><ShieldAlert aria-hidden="true" /><AlertTitle>Belum ada outlet</AlertTitle><AlertDescription>Akun Anda belum ditugaskan pada outlet aktif. Hubungi pemilik atau manajer.</AlertDescription></Alert>}
         {selectedOutlet && !selectedOutlet.attendanceEnabled && <Alert><ShieldAlert aria-hidden="true" /><AlertTitle>Absensi outlet nonaktif</AlertTitle><AlertDescription>Manajer perlu mengatur titik lokasi dan mengaktifkan absensi outlet ini.</AlertDescription></Alert>}
         <div className="grid gap-3 sm:grid-cols-2">
-          <Button className="min-h-12" onClick={openEnrollment} type="button" variant="outline"><ScanFace aria-hidden="true" />{profile ? "Daftarkan ulang wajah" : "Daftarkan wajah"}</Button>
+          <Button className="min-h-12" disabled={pendingReenrollment !== null} onClick={openEnrollment} type="button" variant="outline"><ScanFace aria-hidden="true" />{pendingReenrollment ? "Menunggu persetujuan" : reenrollmentNeedsApproval ? "Ajukan daftar ulang wajah" : profile ? "Daftarkan ulang wajah" : "Daftarkan wajah"}</Button>
           <Button className="min-h-12" disabled={!selectedOutlet?.attendanceEnabled || !profile} onClick={openVerification} type="button">{openSession ? <ClockArrowDown aria-hidden="true" /> : <ClockArrowUp aria-hidden="true" />}{openSession ? "Absensi pulang" : "Absensi masuk"}</Button>
         </div>
+        {pendingReenrollment && <Alert><ShieldAlert aria-hidden="true" /><AlertTitle>Daftar ulang menunggu persetujuan</AlertTitle><AlertDescription>Profil wajah lama tetap aktif sampai owner atau manajer menyetujui sampel baru.</AlertDescription></Alert>}
         <div className="flex min-h-14 items-start justify-between gap-4 rounded-xl border bg-muted/35 p-4"><span><span className="flex items-center gap-2 font-semibold"><Smartphone aria-hidden="true" className="size-4" />Tablet bersama</span><span className="mt-1 block text-sm leading-5 text-muted-foreground">Logout otomatis setelah absensi atau pengecualian dikirim.</span></span><Switch aria-label="Logout otomatis pada tablet bersama" checked={sharedDevice} onCheckedChange={changeSharedDevice} /></div>
       </div>
     </section>
@@ -331,7 +335,7 @@ export function AttendanceClock({ user, outlets, profile, openSession, recentSes
       <div className="mt-6"><h3 className="font-semibold">Riwayat terakhir</h3><div className="mt-3 grid gap-2">{recentSessions.length ? recentSessions.slice(0, 5).map((session) => <div className="rounded-lg border p-3 text-sm" key={session.id}><div className="flex items-center justify-between gap-2"><span className="font-semibold">{session.outlet.code}</span><Badge variant="outline">{session.status === "OPEN" ? "Terbuka" : "Selesai"}</Badge></div><p className="mt-1 text-muted-foreground">{formatAttendanceTime(session.checkInAt, session.outlet.timezone)} — {session.checkOutAt ? formatAttendanceTime(session.checkOutAt, session.outlet.timezone) : "Belum pulang"}</p>{session.correction && <p className="mt-1 text-xs text-primary">Dikoreksi: {session.correction.reason}</p>}</div>) : <p className="text-sm text-muted-foreground">Belum ada riwayat absensi.</p>}</div></div>
     </aside>
 
-    <Dialog onOpenChange={(open) => { if (!open) closeDialog(); }} open={dialogMode !== null}><DialogContent className="gap-3 p-4 sm:w-[min(34rem,calc(100vw-3rem))] sm:gap-5 sm:p-6"><DialogHeader className="gap-1.5 sm:gap-2"><DialogTitle className="text-lg sm:text-xl">{dialogMode === "enroll" ? "Daftarkan wajah akun" : openSession ? "Verifikasi absensi pulang" : "Verifikasi absensi masuk"}</DialogTitle><DialogDescription className="text-xs leading-5 sm:text-sm sm:leading-6">{dialogMode === "enroll" ? "Setelah disetujui, tiga sampel diambil otomatis dan disimpan sebagai template terenkripsi." : "Izinkan kamera dan lokasi, lalu ikuti gerakan. Verifikasi diproses otomatis."}</DialogDescription></DialogHeader>
+    <Dialog onOpenChange={(open) => { if (!open) closeDialog(); }} open={dialogMode !== null}><DialogContent className="gap-3 p-4 sm:w-[min(34rem,calc(100vw-3rem))] sm:gap-5 sm:p-6"><DialogHeader className="gap-1.5 sm:gap-2"><DialogTitle className="text-lg sm:text-xl">{dialogMode === "enroll" ? reenrollmentNeedsApproval ? "Ajukan daftar ulang wajah" : "Daftarkan wajah akun" : openSession ? "Verifikasi absensi pulang" : "Verifikasi absensi masuk"}</DialogTitle><DialogDescription className="text-xs leading-5 sm:text-sm sm:leading-6">{dialogMode === "enroll" ? reenrollmentNeedsApproval ? "Tiga sampel baru disimpan terenkripsi dan baru menggantikan profil aktif setelah disetujui owner atau manajer." : "Setelah disetujui, tiga sampel diambil otomatis dan disimpan sebagai template terenkripsi." : "Izinkan kamera dan lokasi, lalu ikuti gerakan. Verifikasi diproses otomatis."}</DialogDescription></DialogHeader>
       <figure className="mx-auto grid w-full max-w-[min(12rem,27svh)] gap-2 sm:max-w-[min(19rem,45svh)] sm:gap-3">
         <div className="relative aspect-[3/4] w-full overflow-hidden rounded-2xl bg-black ring-1 ring-white/10">
           <video aria-label="Pratinjau kamera absensi" className="h-full w-full scale-x-[-1] object-cover" muted playsInline ref={videoRef} />

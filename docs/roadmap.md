@@ -264,10 +264,10 @@ Status: `In Progress`. Implementasi web, schema, migration, RBAC, verifikasi `1:
 ### Status implementasi
 
 - `/attendance`, `/attendance/manage`, dan `/settings/attendance` sudah tersedia sebagai halaman dynamic dengan skeleton responsif.
-- Enrollment tiga sampel, template AES-256-GCM, nonce sekali pakai, similarity `0,60`, liveness ringan, geofence, idempotency, dan sesi masuk/pulang dijalankan di server sesuai scope akun/outlet.
+- Enrollment tiga sampel, persetujuan daftar ulang kasir, template AES-256-GCM, nonce sekali pakai, similarity `0,60`, liveness ringan, geofence, idempotency, dan sesi masuk/pulang dijalankan di server sesuai scope akun/outlet.
 - Peta OSM menyinkronkan marker pusat, handle radius 44 px, lokasi perangkat, serta input koordinat/radius manual.
 - Foto JPEG maksimal 300 KB disimpan privat selama 30 hari dan dihapus melalui Vercel Cron; akses bukti selalu melalui Route Handler terotorisasi.
-- Pengecualian setelah tiga kegagalan, larangan self-approval, koreksi append-only, revoke profile, CSV, dan pembersihan profil saat staf dinonaktifkan sudah diterapkan.
+- Pengecualian setelah tiga kegagalan, review daftar ulang kasir oleh owner/manager, larangan self-approval, koreksi append-only, revoke profile, CSV, dan pembersihan profil saat staf dinonaktifkan sudah diterapkan.
 - Prisma validate/generate, Next typegen, seluruh test, lint, typecheck, dan production build lulus. Migration production tetap manual.
 - Tersisa sebelum `Completed`: konfigurasi secret/store, `prisma migrate deploy`, serta pilot Android nyata untuk izin kamera/GPS, performa WebGL/WASM, kondisi cahaya, false accept/reject, dan threshold.
 
@@ -281,7 +281,7 @@ Mencatat waktu masuk dan pulang staf dengan bukti wajah, lokasi outlet, waktu se
 - Semua perangkat memakai verifikasi `1:1`: wajah hanya dibandingkan dengan profil wajah akun yang sedang login, bukan dicari dari seluruh staf outlet.
 - Jika staf ditugaskan ke beberapa outlet, staf memilih outlet tujuan dari daftar penugasannya sebelum kamera dan validasi lokasi dijalankan.
 - Tablet bersama tidak memiliki session khusus; staf wajib login dan logout akun sendiri, sedangkan layar absensi selalu menampilkan nama akun sebelum kamera dibuka untuk mencegah salah akun.
-- Pendaftaran wajah dilakukan sendiri melalui session akun aktif dan langsung dapat digunakan; owner/manager dapat membatalkan profil serta mewajibkan pendaftaran ulang.
+- Pendaftaran wajah pertama dilakukan sendiri melalui session akun aktif dan langsung dapat digunakan. Daftar ulang kasir menyimpan sampel baru sebagai request terenkripsi; profil lama tetap aktif sampai salah satu owner/manager dalam scope menyetujui. Penolakan mempertahankan profil lama dan menghapus payload request.
 - Model `@vladmandic/human` dimuat secara lazy hanya pada layar absensi, memakai WebGL dengan WASM sebagai fallback.
 - Liveness ringan menggunakan challenge acak seperti berkedip atau menoleh, nonce sekali pakai, dan masa berlaku singkat. Pendekatan browser-only tidak dianggap sebagai perlindungan spoofing tingkat tinggi.
 - Setiap percobaan menyimpan akun pelaksana, hasil pengenalan, foto bukti privat, koordinat, akurasi GPS, jarak dari outlet, dan waktu server.
@@ -295,7 +295,7 @@ Mencatat waktu masuk dan pulang staf dengan bukti wajah, lokasi outlet, waktu se
 ### Interface dan data yang direncanakan
 
 - Tambahkan konfigurasi `attendanceEnabled`, latitude, longitude, dan radius pada `Outlet` melalui migration versioned.
-- Tambahkan profil wajah terenkripsi dan berversi model, percobaan verifikasi, sesi absensi, serta permintaan pengecualian.
+- Tambahkan profil wajah terenkripsi dan berversi model, request persetujuan daftar ulang, percobaan verifikasi, sesi absensi, serta permintaan pengecualian.
 - Batasi satu sesi absensi terbuka per staf secara global; check-out normal harus dilakukan pada outlet check-in yang sama.
 - Waktu server menjadi sumber kebenaran dan tanggal bisnis mengikuti zona waktu outlet.
 - Tambahkan permission terpusat untuk clock-in/out, melihat absensi sendiri, review pengecualian, pengaturan outlet, serta laporan absensi.
@@ -311,7 +311,7 @@ Mencatat waktu masuk dan pulang staf dengan bukti wajah, lokasi outlet, waktu se
 - Editor peta dimuat dinamis sebagai Client Component kecil. Tombol “Gunakan lokasi saya” meminta geolocation hanya saat ditekan; perubahan marker, handle radius, dan input angka belum mengubah database sampai form disimpan.
 - Marker dan lingkaran otomatis difokuskan agar seluruh radius terlihat. Input radius memakai satuan meter, dibatasi 50–500, dan menyediakan alternatif keyboard ketika drag peta tidak dapat digunakan.
 - Foto bukti berada di object storage privat dengan akses terotorisasi; tidak memakai URL publik katalog.
-- Enrollment menampilkan persetujuan penggunaan data wajah dan kebijakan retensi sebelum kamera dibuka.
+- Enrollment menampilkan persetujuan penggunaan data wajah dan kebijakan retensi sebelum kamera dibuka. Hanya satu request daftar ulang kasir boleh pending; payload terenkripsi dihapus setelah approval/rejection dan tidak dikirim ke UI pengelola.
 - Absensi membutuhkan koneksi internet karena challenge, waktu, pencocokan, geofence, dan idempotency harus diverifikasi server.
 
 ### Belum termasuk
@@ -327,7 +327,7 @@ Mencatat waktu masuk dan pulang staf dengan bukti wajah, lokasi outlet, waktu se
 - Peta menginisialisasi koordinat tersimpan atau lokasi perangkat, menyinkronkan drag/input radius tanpa loop, membatasi nilai 50–500 meter, dan tetap dapat dioperasikan dengan sentuhan maupun keyboard.
 - Izin lokasi ditolak, lokasi tidak akurat, peta gagal dimuat, dan outlet belum memiliki koordinat menampilkan petunjuk pemulihan tanpa menghilangkan input manual.
 - Kegagalan ketiga membuka pengecualian; approval memakai waktu percobaan asli, menyimpan reviewer/alasan, dan menolak self-approval.
-- Profil wajah, bukti foto, session akun, permission, outlet assignment, penghapusan 30 hari, dan pencabutan staf diuji.
+- Profil wajah, request daftar ulang, approval/rejection, bukti foto, session akun, permission, outlet assignment, penghapusan 30 hari, dan pencabutan staf diuji.
 - Pilot pada Android tablet dan Android phone membuktikan login akun sendiri, verifikasi `1:1`, serta model/fallback dapat digunakan tanpa menghambat navigasi aplikasi lain.
 - Loading, camera/location permission, empty, success, failure, dan review state dapat digunakan pada mobile, tablet, serta desktop tanpa overflow horizontal.
 - README dan dokumentasi fungsi baru diperbarui hanya setelah implementasi selesai dan milestone siap ditandai `Completed`.
@@ -370,6 +370,7 @@ Mencatat waktu masuk dan pulang staf dengan bukti wajah, lokasi outlet, waktu se
 | 9 Agustus 2026 | Absensi wajah dan geofence direncanakan sebagai Milestone 9 | Setiap staf memakai akun sendiri dan verifikasi wajah `1:1` pada tablet atau ponsel; geofence default 100 meter, pengecualian setelah tiga kegagalan, serta retensi foto 30 hari |
 | 9 Agustus 2026 | Geofence dikonfigurasi melalui peta dan input radius dua arah | Owner/manager dapat melihat cakupan nyata, menggeser pusat, serta mengubah radius lewat drag atau angka tanpa menebak koordinat mentah |
 | 9 Agustus 2026 | Milestone 7 ditunda dan Milestone 9 menjadi aktif | Printer Bluetooth menunggu perangkat EPPOS RPP02; absensi web selesai di source tetapi tetap `In Progress` sampai migration deployment dan pilot Android nyata lulus |
+| 11 Agustus 2026 | Daftar ulang wajah kasir memerlukan satu persetujuan owner atau manager | Template lama tetap aktif selama review; sampel baru terenkripsi dan dihapus dari request setelah disetujui atau ditolak |
 
 ## Cara memperbarui roadmap
 

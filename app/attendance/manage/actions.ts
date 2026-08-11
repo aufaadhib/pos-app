@@ -2,7 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 
-import { AttendanceError, correctAttendanceSession, reviewAttendanceException, revokeFaceProfile } from "@/lib/attendance/service";
+import { AttendanceError, correctAttendanceSession, reviewAttendanceException, reviewFaceReenrollment, revokeFaceProfile } from "@/lib/attendance/service";
 import type { AttendanceActionState } from "@/lib/attendance/types";
 import { attendanceCorrectionSchema, attendanceReviewSchema } from "@/lib/attendance/validation";
 import { isAppRole } from "@/lib/auth/permissions";
@@ -16,6 +16,22 @@ export async function reviewAttendanceExceptionAction(rawInput: unknown): Promis
 /** Appends a corrected time record while preserving original attendance timestamps. */
 export async function correctAttendanceSessionAction(rawInput: unknown): Promise<AttendanceActionState> {
   return runManagerAction({ attendance: ["correct"] }, rawInput, attendanceCorrectionSchema.safeParse, correctAttendanceSession);
+}
+
+/** Reviews one cashier face reenrollment request in the manager's staff scope. */
+export async function reviewFaceReenrollmentAction(rawInput: unknown): Promise<AttendanceActionState> {
+  const session = await requirePermission({ attendance: ["manage"] });
+  if (!isAppRole(session.user.role)) return { status: "error", message: "Peran akun tidak valid." };
+  const parsed = attendanceReviewSchema.safeParse(rawInput);
+  if (!parsed.success) return { status: "error", message: parsed.error.issues[0]?.message ?? "Data review tidak valid." };
+  try {
+    const result = await reviewFaceReenrollment(parsed.data, actorFrom(session));
+    revalidatePath("/attendance");
+    revalidatePath("/attendance/manage");
+    return { status: "success", message: result.approved ? "Daftar ulang wajah disetujui." : "Daftar ulang wajah ditolak." };
+  } catch (error) {
+    return safeManagerError(error);
+  }
 }
 
 /** Erases the selected staff member's active biometric template in manager scope. */

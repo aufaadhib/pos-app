@@ -8,31 +8,32 @@ datasource db {
 }
 
 model User {
-  id                      String                       @id
-  name                    String
-  email                   String                       @unique
-  emailVerified           Boolean                      @default(false)
-  image                   String?
-  role                    String?
-  banned                  Boolean?                     @default(false)
-  banReason               String?
-  banExpires              DateTime?
-  mustChangePassword      Boolean                      @default(false)
-  createdAt               DateTime                     @default(now())
-  updatedAt               DateTime                     @updatedAt
-  sessions                Session[]
-  accounts                Account[]
-  outletAssignments       UserOutletAssignment[]
-  openedCashShifts        CashShift[]                  @relation("CashShiftOpenedBy")
-  closedCashShifts        CashShift[]                  @relation("CashShiftClosedBy")
-  cashMovements           CashMovement[]               @relation("CashMovementActor")
-  cashShiftAuditLogs      CashShiftAuditLog[]          @relation("CashShiftAuditActor")
-  faceProfiles            FaceProfile[]
-  attendanceVerifications AttendanceVerification[]
-  attendanceAttempts      AttendanceAttempt[]
-  attendanceSessions      AttendanceSession[]
-  attendanceExceptions    AttendanceExceptionRequest[]
-  attendanceCorrections   AttendanceCorrection[]       @relation("AttendanceCorrectionActor")
+  id                       String                       @id
+  name                     String
+  email                    String                       @unique
+  emailVerified            Boolean                      @default(false)
+  image                    String?
+  role                     String?
+  banned                   Boolean?                     @default(false)
+  banReason                String?
+  banExpires               DateTime?
+  mustChangePassword       Boolean                      @default(false)
+  createdAt                DateTime                     @default(now())
+  updatedAt                DateTime                     @updatedAt
+  sessions                 Session[]
+  accounts                 Account[]
+  outletAssignments        UserOutletAssignment[]
+  openedCashShifts         CashShift[]                  @relation("CashShiftOpenedBy")
+  closedCashShifts         CashShift[]                  @relation("CashShiftClosedBy")
+  cashMovements            CashMovement[]               @relation("CashMovementActor")
+  cashShiftAuditLogs       CashShiftAuditLog[]          @relation("CashShiftAuditActor")
+  faceProfiles             FaceProfile[]
+  faceReenrollmentRequests FaceReenrollmentRequest[]
+  attendanceVerifications  AttendanceVerification[]
+  attendanceAttempts       AttendanceAttempt[]
+  attendanceSessions       AttendanceSession[]
+  attendanceExceptions     AttendanceExceptionRequest[]
+  attendanceCorrections    AttendanceCorrection[]       @relation("AttendanceCorrectionActor")
 
   @@map("user")
 }
@@ -377,9 +378,18 @@ enum AttendanceExceptionStatus {
   REJECTED
 }
 
+enum FaceReenrollmentStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
 enum AttendanceAuditAction {
   ENROLL
   REVOKE
+  REENROLL_REQUEST
+  REENROLL_APPROVE
+  REENROLL_REJECT
   CHECK_IN
   CHECK_OUT
   EXCEPTION_REQUEST
@@ -450,6 +460,31 @@ model FaceProfile {
 
   @@index([userId, enrolledAt])
   @@map("face_profile")
+}
+
+model FaceReenrollmentRequest {
+  id                  String                 @id @default(cuid())
+  userId              String
+  pendingUserKey      String?                @unique
+  status              FaceReenrollmentStatus @default(PENDING)
+  embeddingCiphertext Bytes?
+  embeddingIv         Bytes?
+  embeddingLength     Int                    @default(1024)
+  modelVersion        String                 @db.VarChar(80)
+  consentAt           DateTime
+  requestedAt         DateTime               @default(now())
+  reviewedByUserId    String?
+  reviewedByName      String?
+  reviewedByEmail     String?
+  reviewReason        String?                @db.VarChar(240)
+  reviewedAt          DateTime?
+  createdAt           DateTime               @default(now())
+  updatedAt           DateTime               @updatedAt
+  user                User                   @relation(fields: [userId], references: [id], onDelete: Restrict)
+
+  @@index([status, requestedAt])
+  @@index([userId, requestedAt])
+  @@map("face_reenrollment_request")
 }
 
 model AttendanceVerification {

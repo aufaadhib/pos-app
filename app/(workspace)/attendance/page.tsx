@@ -22,6 +22,6 @@ export default async function AttendancePage() {
       <div><p className="text-sm font-medium text-success">Identitas akun · Verifikasi 1:1</p><h1 className="mt-1 font-heading text-2xl font-semibold tracking-tight sm:text-3xl">Absensi karyawan</h1><p className="mt-2 max-w-2xl leading-6 text-muted-foreground">Wajah dibandingkan hanya dengan profil akun yang sedang login. Lokasi diperiksa saat tombol absensi ditekan.</p></div>
       {session.user.role !== "cashier" && <div className="flex flex-wrap gap-2"><Link className={buttonVariants({ variant: "outline", className: "min-h-11" })} href="/settings/attendance"><Settings2 aria-hidden="true" />Atur lokasi</Link><Link className={buttonVariants({ className: "min-h-11" })} href="/attendance/manage"><UsersRound aria-hidden="true" />Kelola absensi</Link></div>}
     </header>
-    <AttendanceClock openSession={data.openSession} outlets={data.outlets} profile={data.profile} recentSessions={data.recentSessions} user={{ name: session.user.name, email: session.user.email }} />
+    <AttendanceClock openSession={data.openSession} outlets={data.outlets} pendingReenrollment={data.pendingReenrollment} profile={data.profile} recentSessions={data.recentSessions} user={{ name: session.user.name, email: session.user.email, role: session.user.role }} />
   </main>;
 }

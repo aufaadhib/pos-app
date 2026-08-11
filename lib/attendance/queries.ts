@@ -8,8 +8,9 @@ const attendancePageSize = 20;
 
 /** Loads the signed-in employee's profile, available outlets, open state, and recent records. */
 export async function getAttendanceHome(userId: string, role: AttendanceActor["role"]) {
-  const [profile, outlets, openSession, recentSessions] = await Promise.all([
+  const [profile, pendingReenrollment, outlets, openSession, recentSessions] = await Promise.all([
     prisma.faceProfile.findUnique({ where: { activeUserKey: userId }, select: { id: true, enrolledAt: true, modelVersion: true } }),
+    prisma.faceReenrollmentRequest.findUnique({ where: { pendingUserKey: userId }, select: { id: true, requestedAt: true } }),
     prisma.outlet.findMany({
       where: { status: OutletStatus.ACTIVE, ...(role === "owner" ? {} : { assignments: { some: { userId } } }) },
       orderBy: { name: "asc" },
@@ -25,6 +26,7 @@ export async function getAttendanceHome(userId: string, role: AttendanceActor["r
   ]);
   return {
     profile: profile ? { ...profile, enrolledAt: profile.enrolledAt.toISOString() } : null,
+    pendingReenrollment: pendingReenrollment ? { id: pendingReenrollment.id, requestedAt: pendingReenrollment.requestedAt.toISOString() } : null,
     outlets: outlets.map((outlet) => ({ ...outlet, attendanceLatitude: outlet.attendanceLatitude?.toNumber() ?? null, attendanceLongitude: outlet.attendanceLongitude?.toNumber() ?? null })),
     openSession: openSession ? { id: openSession.id, outlet: openSession.outlet, checkInAt: openSession.checkInAt.toISOString() } : null,
     recentSessions: recentSessions.map((session) => serializeAttendanceSession(session)),
@@ -45,7 +47,7 @@ export async function getAttendanceManagement(outletId: string, actor: Attendanc
     prisma.userOutletAssignment.findMany({
       where: { outletId },
       orderBy: { user: { name: "asc" } },
-      select: { user: { select: { id: true, name: true, email: true, banned: true, faceProfiles: { where: { activeUserKey: { not: null } }, select: { id: true, enrolledAt: true }, take: 1 } } } },
+      select: { user: { select: { id: true, name: true, email: true, banned: true, faceProfiles: { where: { activeUserKey: { not: null } }, select: { id: true, enrolledAt: true }, take: 1 }, faceReenrollmentRequests: { where: { pendingUserKey: { not: null } }, select: { id: true, requestedAt: true }, take: 1 } } } },
     }),
   ]);
   const totalPages = Math.max(1, Math.ceil(totalItems / attendancePageSize));
@@ -59,7 +61,7 @@ export async function getAttendanceManagement(outletId: string, actor: Attendanc
   });
   return {
     pending: pending.map((request) => ({ ...request, requestedAt: request.requestedAt.toISOString(), attempt: { id: request.attempt.id, attemptedAt: request.attempt.attemptedAt.toISOString(), failureReason: request.attempt.failureReason, evidenceAvailable: isAttendanceEvidenceAvailable(request.attempt) } })),
-    staffProfiles: staffProfiles.map(({ user }) => ({ id: user.id, name: user.name, email: user.email, banned: user.banned, profile: user.faceProfiles[0] ? { ...user.faceProfiles[0], enrolledAt: user.faceProfiles[0].enrolledAt.toISOString() } : null })),
+    staffProfiles: staffProfiles.map(({ user }) => ({ id: user.id, name: user.name, email: user.email, banned: user.banned, profile: user.faceProfiles[0] ? { ...user.faceProfiles[0], enrolledAt: user.faceProfiles[0].enrolledAt.toISOString() } : null, reenrollmentRequest: user.faceReenrollmentRequests[0] ? { id: user.faceReenrollmentRequests[0].id, requestedAt: user.faceReenrollmentRequests[0].requestedAt.toISOString() } : null })),
     sessions: sessions.map(serializeAttendanceSession),
     page: currentPage,
     pageSize: attendancePageSize,

@@ -38,14 +38,14 @@ describe("attendance clock", () => {
   });
 
   it("keeps verification disabled until the signed-in account has a face profile", () => {
-    render(<AttendanceClock openSession={null} outlets={[outlet]} profile={null} recentSessions={[]} user={{ name: "Kasir Satu", email: "kasir@example.com" }} />);
+    render(<AttendanceClock openSession={null} outlets={[outlet]} pendingReenrollment={null} profile={null} recentSessions={[]} user={{ name: "Kasir Satu", email: "kasir@example.com", role: "cashier" }} />);
     expect(screen.getByText("Kasir Satu")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Absensi masuk" })).toBeDisabled();
   });
 
   it("stores shared-tablet logout preference only in this browser", async () => {
     const user = userEvent.setup();
-    render(<AttendanceClock openSession={null} outlets={[outlet]} profile={{ enrolledAt: new Date().toISOString(), modelVersion: "human-3.3.6" }} recentSessions={[]} user={{ name: "Kasir Satu", email: "kasir@example.com" }} />);
+    render(<AttendanceClock openSession={null} outlets={[outlet]} pendingReenrollment={null} profile={{ enrolledAt: new Date().toISOString(), modelVersion: "human-3.3.6" }} recentSessions={[]} user={{ name: "Kasir Satu", email: "kasir@example.com", role: "cashier" }} />);
     await user.click(screen.getByRole("switch", { name: "Logout otomatis pada tablet bersama" }));
     expect(localStorage.getItem(attendanceSharedDeviceKey)).toBe("1");
   });
@@ -53,7 +53,7 @@ describe("attendance clock", () => {
   it("stays in manual logout mode when local storage is unavailable", async () => {
     const user = userEvent.setup();
     const storage = vi.spyOn(Storage.prototype, "setItem").mockImplementationOnce(() => { throw new Error("blocked"); });
-    render(<AttendanceClock openSession={null} outlets={[outlet]} profile={{ enrolledAt: new Date().toISOString(), modelVersion: "human-3.3.6" }} recentSessions={[]} user={{ name: "Kasir Satu", email: "kasir@example.com" }} />);
+    render(<AttendanceClock openSession={null} outlets={[outlet]} pendingReenrollment={null} profile={{ enrolledAt: new Date().toISOString(), modelVersion: "human-3.3.6" }} recentSessions={[]} user={{ name: "Kasir Satu", email: "kasir@example.com", role: "cashier" }} />);
     const toggle = screen.getByRole("switch", { name: "Logout otomatis pada tablet bersama" });
     await user.click(toggle);
     expect(toggle).toHaveAttribute("aria-checked", "false");
@@ -61,8 +61,15 @@ describe("attendance clock", () => {
     storage.mockRestore();
   });
 
+  it("keeps the current profile usable while cashier reenrollment awaits approval", () => {
+    render(<AttendanceClock openSession={null} outlets={[outlet]} pendingReenrollment={{ id: "face-request-1", requestedAt: new Date().toISOString() }} profile={{ enrolledAt: new Date().toISOString(), modelVersion: "human-3.3.6" }} recentSessions={[]} user={{ name: "Kasir Satu", email: "kasir@example.com", role: "cashier" }} />);
+    expect(screen.getByRole("button", { name: "Menunggu persetujuan" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Absensi masuk" })).toBeEnabled();
+    expect(screen.getByText("Profil wajah lama tetap aktif sampai owner atau manajer menyetujui sampel baru.")).toBeInTheDocument();
+  });
+
   it("formats recent attendance using each outlet timezone", () => {
-    render(<AttendanceClock openSession={null} outlets={[outlet]} profile={null} recentSessions={[{ id: "session-1", status: "CLOSED", checkInAt: "2026-08-10T12:30:00.000Z", checkOutAt: "2026-08-10T13:30:00.000Z", outlet: { code: "TMR", name: "Timur", timezone: "Asia/Jayapura" }, correction: null }]} user={{ name: "Kasir Satu", email: "kasir@example.com" }} />);
+    render(<AttendanceClock openSession={null} outlets={[outlet]} pendingReenrollment={null} profile={null} recentSessions={[{ id: "session-1", status: "CLOSED", checkInAt: "2026-08-10T12:30:00.000Z", checkOutAt: "2026-08-10T13:30:00.000Z", outlet: { code: "TMR", name: "Timur", timezone: "Asia/Jayapura" }, correction: null }]} user={{ name: "Kasir Satu", email: "kasir@example.com", role: "cashier" }} />);
     expect(screen.getByText(/21\.30 WIT.*22\.30 WIT/)).toBeInTheDocument();
   });
 
@@ -73,7 +80,7 @@ describe("attendance clock", () => {
       return { ok: true, json: async () => ({ success: true }) } as Response;
     });
     mocks.detect.mockResolvedValue({ face: [{ embedding: Array.from({ length: 32 }, () => 0.1), live: 0.9, real: 0.9 }], gesture: [{ gesture: "blink left eye" }] });
-    render(<AttendanceClock openSession={null} outlets={[outlet]} profile={{ enrolledAt: new Date().toISOString(), modelVersion: "human-3.3.6" }} recentSessions={[]} user={{ name: "Kasir Satu", email: "kasir@example.com" }} />);
+    render(<AttendanceClock openSession={null} outlets={[outlet]} pendingReenrollment={null} profile={{ enrolledAt: new Date().toISOString(), modelVersion: "human-3.3.6" }} recentSessions={[]} user={{ name: "Kasir Satu", email: "kasir@example.com", role: "cashier" }} />);
 
     await user.click(screen.getByRole("button", { name: "Absensi masuk" }));
 

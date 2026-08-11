@@ -4,11 +4,20 @@ const mocks = vi.hoisted(() => ({
   cashShiftFindFirst: vi.fn(),
   cashShiftFindUnique: vi.fn(),
   attendanceSessionFindUnique: vi.fn(),
+  adminAuditCreate: vi.fn(),
+  attendanceAuditCreate: vi.fn(),
+  faceProfileFindUnique: vi.fn(),
+  faceProfileUpdate: vi.fn(),
+  faceRequestFindUnique: vi.fn(),
+  faceRequestUpdate: vi.fn(),
   outletFindFirst: vi.fn(),
   outletFindUnique: vi.fn(),
+  sessionDeleteMany: vi.fn(),
   sessionUpdate: vi.fn(),
   transaction: vi.fn(),
   userFindUnique: vi.fn(),
+  userFindUniqueOrThrow: vi.fn(),
+  userUpdateMany: vi.fn(),
 }));
 
 vi.mock("server-only", () => ({}));
@@ -26,8 +35,12 @@ describe("open shift administration guards", () => {
       outlet: { findFirst: mocks.outletFindFirst, findUnique: mocks.outletFindUnique },
       cashShift: { findFirst: mocks.cashShiftFindFirst, findUnique: mocks.cashShiftFindUnique },
       attendanceSession: { findUnique: mocks.attendanceSessionFindUnique },
-      session: { update: mocks.sessionUpdate },
-      user: { findUnique: mocks.userFindUnique },
+      adminAuditLog: { create: mocks.adminAuditCreate },
+      attendanceAuditLog: { create: mocks.attendanceAuditCreate },
+      faceProfile: { findUnique: mocks.faceProfileFindUnique, update: mocks.faceProfileUpdate },
+      faceReenrollmentRequest: { findUnique: mocks.faceRequestFindUnique, update: mocks.faceRequestUpdate },
+      session: { deleteMany: mocks.sessionDeleteMany, update: mocks.sessionUpdate },
+      user: { findUnique: mocks.userFindUnique, findUniqueOrThrow: mocks.userFindUniqueOrThrow, updateMany: mocks.userUpdateMany },
     }));
   });
 
@@ -58,5 +71,27 @@ describe("open shift administration guards", () => {
     mocks.cashShiftFindUnique.mockResolvedValue(null);
     mocks.attendanceSessionFindUnique.mockResolvedValue({ id: "attendance-1" });
     await expect(deactivateStaff({ id: "cashier-1", expectedUpdatedAt: updatedAt.toISOString() }, owner)).rejects.toBeInstanceOf(StaffError);
+  });
+
+  it("erases a cashier's pending reenrollment and active profile when deactivated", async () => {
+    const updatedAt = new Date("2026-08-08T00:00:00.000Z");
+    const cashier = { id: "cashier-1", name: "Kasir", email: "cashier@example.com", role: "cashier", banned: false, mustChangePassword: false, updatedAt, outletAssignments: [{ outletId: "outlet-1" }] };
+    mocks.userFindUnique.mockResolvedValue(cashier);
+    mocks.cashShiftFindUnique.mockResolvedValue(null);
+    mocks.attendanceSessionFindUnique.mockResolvedValue(null);
+    mocks.userUpdateMany.mockResolvedValue({ count: 1 });
+    mocks.faceRequestFindUnique.mockResolvedValue({ id: "face-request-1" });
+    mocks.faceProfileFindUnique.mockResolvedValue({ id: "face-profile-1" });
+    mocks.userFindUniqueOrThrow.mockResolvedValue({ ...cashier, banned: true });
+
+    await deactivateStaff({ id: cashier.id, expectedUpdatedAt: updatedAt.toISOString() }, owner);
+
+    expect(mocks.faceRequestUpdate).toHaveBeenCalledWith(expect.objectContaining({
+      data: expect.objectContaining({ embeddingCiphertext: null, embeddingIv: null, pendingUserKey: null, status: "REJECTED" }),
+    }));
+    expect(mocks.faceProfileUpdate).toHaveBeenCalledWith(expect.objectContaining({
+      data: expect.objectContaining({ activeUserKey: null, embeddingCiphertext: null, embeddingIv: null }),
+    }));
+    expect(mocks.attendanceAuditCreate).toHaveBeenCalledTimes(2);
   });
 });
