@@ -48,7 +48,7 @@ Hanya satu milestone utama yang sebaiknya berstatus `In Progress` agar perubahan
 | 6 | Diskon, promo, split payment, dan pelanggan | Planned | Refund dan laporan dasar | Metode pembayaran serta retensi pelanggan menjadi lebih fleksibel |
 | 7 | Printer struk dan Kitchen Display System | Deferred | Open order | Browser printing pelanggan selesai; perangkat dapur dan integrasi printer menunggu pembelian serta pengujian perangkat |
 | 8 | Integrasi platform eksternal | Planned | Order, settlement, dan laporan stabil | Input manual dapat dikurangi melalui impor atau koneksi resmi |
-| 9 | Absensi karyawan berbasis wajah dan lokasi | Deferred | Authentication, staf, outlet, RBAC, dan audit | Implementasi web selesai; aktivasi operasional menunggu migration deployment dan pilot perangkat Android nyata |
+| 9 | Absensi karyawan berbasis wajah dan lokasi | Completed | Authentication, staf, outlet, RBAC, dan audit | Absensi production tersedia; kalibrasi Android tetap menjadi gate operasional sebelum payroll |
 | 10 | Role staf, jabatan, dan roster absensi | Completed | Absensi, outlet, staf, RBAC, dan audit | Jadwal kerja per outlet dapat diterbitkan, dicocokkan saat absensi, dan dilaporkan tanpa membuka akses POS |
 
 ## Milestone 1 — Shift kasir dan tutup kas
@@ -263,7 +263,7 @@ Integrasi harus dikembangkan bertahap. Jangan menjanjikan API langsung sebelum a
 
 ## Milestone 9 — Absensi karyawan berbasis wajah dan lokasi
 
-Status: `Deferred`. Implementasi web, schema, migration, RBAC, verifikasi `1:1`, geofence, pengecualian, koreksi, laporan, retensi, UI responsif, test, dan production build sudah tersedia. Aktivasi operasional sengaja ditunda sampai migration diterapkan pada environment tujuan serta pilot kamera/GPS pada Android tablet dan ponsel mengalibrasi threshold nyata. Pengembangan software aktif dilanjutkan pada Milestone 10.
+Status: `Completed`. Implementasi web, schema, migration production, RBAC, verifikasi `1:1`, geofence, pengecualian, koreksi, laporan, retensi, UI responsif, dan quality gate sudah tersedia. Credential production tervalidasi tanpa membuka secret, private Blob dapat diakses, dan cleanup cron terautentikasi berhasil dijalankan. Kalibrasi Android nyata tetap wajib sebelum data dipakai untuk payroll atau keputusan disipliner, tetapi menjadi checklist operasional pascarilis dan bukan blocker software.
 
 ### Status implementasi
 
@@ -272,8 +272,8 @@ Status: `Deferred`. Implementasi web, schema, migration, RBAC, verifikasi `1:1`,
 - Peta OSM menyinkronkan marker pusat, handle radius 44 px, lokasi perangkat, serta input koordinat/radius manual.
 - Foto JPEG maksimal 300 KB disimpan privat selama 30 hari dan dihapus melalui Vercel Cron; akses bukti selalu melalui Route Handler terotorisasi.
 - Pengecualian setelah tiga kegagalan, review daftar ulang kasir/staf oleh owner/manager, larangan self-approval, koreksi append-only, revoke profile, CSV, dan pembersihan profil saat staf dinonaktifkan sudah diterapkan.
-- Prisma validate/generate, Next typegen, seluruh test, lint, typecheck, dan production build lulus. Migration production tetap manual.
-- Tersisa sebelum `Completed`: konfigurasi secret/store, `prisma migrate deploy`, serta pilot Android nyata untuk izin kamera/GPS, performa WebGL/WASM, kondisi cahaya, false accept/reject, dan threshold.
+- Prisma validate/generate, Next typegen, seluruh test, lint, typecheck, dan production build lulus. Seluruh 19 migration production sudah up to date.
+- `ATTENDANCE_EMBEDDING_KEY`, private attendance Blob, dan `CRON_SECRET` tersedia di production; koneksi Blob serta endpoint cleanup cron telah diuji langsung tanpa menampilkan nilai credential.
 
 ### Tujuan
 
@@ -296,21 +296,21 @@ Mencatat waktu masuk dan pulang staf dengan bukti wajah, lokasi outlet, waktu se
 - Owner dapat meninjau seluruh outlet; manager hanya staf/outlet dalam cakupannya dan tidak boleh menyetujui permintaannya sendiri.
 - Foto bukti dihapus otomatis setelah 30 hari. Template wajah dienkripsi dan dihapus ketika profil dibatalkan atau staf dinonaktifkan.
 
-### Interface dan data yang direncanakan
+### Interface dan data
 
 - Tambahkan konfigurasi `attendanceEnabled`, latitude, longitude, dan radius pada `Outlet` melalui migration versioned.
 - Tambahkan profil wajah terenkripsi dan berversi model, request persetujuan daftar ulang, percobaan verifikasi, sesi absensi, serta permintaan pengecualian.
 - Batasi satu sesi absensi terbuka per staf secara global; check-out normal harus dilakukan pada outlet check-in yang sama.
 - Waktu server menjadi sumber kebenaran dan tanggal bisnis mengikuti zona waktu outlet.
 - Tambahkan permission terpusat untuk clock-in/out, melihat absensi sendiri, review pengecualian, pengaturan outlet, serta laporan absensi.
-- Rencanakan halaman `/attendance`, `/attendance/manage`, dan `/settings/attendance` dengan state akun aktif, kamera, lokasi, loading, error, izin ditolak, fallback pengecualian, serta editor peta geofence.
+- Halaman `/attendance`, `/attendance/manage`, dan `/settings/attendance` menangani state akun aktif, kamera, lokasi, loading, error, izin ditolak, fallback pengecualian, serta editor peta geofence.
 - Route Handler melayani challenge dan verifikasi wajah dari session akun aktif; Server Action menangani enrollment, pengaturan, review, dan koreksi internal yang dilindungi session/permission.
 - Semua event penting memakai idempotency key, transaction, dan audit trail. Koreksi tidak menimpa catatan asal.
 
 ### Keputusan pencocokan dan keamanan
 
 - Embedding probe dibuat di browser, tetapi pencocokan dengan template terenkripsi dan validasi geofence tetap dilakukan di server.
-- Threshold awal similarity verifikasi `1:1` adalah `0,60`. Nilai disimpan bersama versi model dan wajib dikalibrasi pada perangkat nyata sebelum rilis.
+- Threshold awal similarity verifikasi `1:1` adalah `0,60`; hasil similarity tersimpan pada attempt dan profil menyimpan versi model untuk evaluasi. Threshold wajib dikalibrasi pada perangkat nyata sebelum absensi dipakai untuk payroll atau keputusan disipliner.
 - Server selalu mengambil template dari user ID session terverifikasi dan menolak probe wajah yang tidak cocok dengan akun tersebut.
 - Editor peta dimuat dinamis sebagai Client Component kecil. Tombol “Gunakan lokasi saya” meminta geolocation hanya saat ditekan; perubahan marker, handle radius, dan input angka belum mengubah database sampai form disimpan.
 - Marker dan lingkaran otomatis difokuskan agar seluruh radius terlihat. Input radius memakai satuan meter, dibatasi 50–500, dan menyediakan alternatif keyboard ketika drag peta tidak dapat digunakan.
@@ -332,13 +332,20 @@ Mencatat waktu masuk dan pulang staf dengan bukti wajah, lokasi outlet, waktu se
 - Izin lokasi ditolak, lokasi tidak akurat, peta gagal dimuat, dan outlet belum memiliki koordinat menampilkan petunjuk pemulihan tanpa menghilangkan input manual.
 - Kegagalan ketiga membuka pengecualian; approval memakai waktu percobaan asli, menyimpan reviewer/alasan, dan menolak self-approval.
 - Profil wajah, request daftar ulang, approval/rejection, bukti foto, session akun, permission, outlet assignment, penghapusan 30 hari, dan pencabutan staf diuji.
-- Pilot pada Android tablet dan Android phone membuktikan login akun sendiri, verifikasi `1:1`, serta model/fallback dapat digunakan tanpa menghambat navigasi aplikasi lain.
+- Runtime production membuktikan credential biometrik valid, private Blob dapat diakses, cleanup cron terautentikasi bekerja, dan seluruh migration sudah terpasang.
 - Loading, camera/location permission, empty, success, failure, dan review state dapat digunakan pada mobile, tablet, serta desktop tanpa overflow horizontal.
 - README dan dokumentasi fungsi baru diperbarui hanya setelah implementasi selesai dan milestone siap ditandai `Completed`.
 
+### Kalibrasi operasional setelah rilis
+
+- Uji minimal lima kali pendaftaran, masuk, dan pulang pada Android tablet target serta satu ponsel Android pembanding dalam cahaya normal dan redup.
+- Catat izin kamera/lokasi, waktu muat WebGL dan fallback WASM, akurasi GPS, similarity pengguna benar, penolakan wajah akun lain, serta jumlah pengulangan yang diperlukan.
+- Jangan menurunkan threshold `0,60` hanya untuk mengurangi false reject. Bandingkan sampel pengguna berbeda lebih dahulu dan pertahankan jalur pengecualian sebagai fallback aman.
+- Data absensi belum boleh menjadi dasar payroll atau sanksi sampai pilot perangkat tersebut ditandatangani pemilik usaha.
+
 ## Milestone 10 — Role staf, jabatan, dan roster absensi
 
-Status: `Completed`. Migration production, pengelolaan template, roster draf/terbit, revisi tambah/ganti/Libur, permission, test, lint, typecheck, dan production build telah lulus. Pilot kamera/GPS tetap mengikuti status operasional Milestone 9.
+Status: `Completed`. Migration production, pengelolaan template, roster draf/terbit, revisi tambah/ganti/Libur, permission, test, lint, typecheck, dan production build telah lulus. Kalibrasi kamera/GPS perangkat nyata mengikuti checklist operasional Milestone 9.
 
 ### Tujuan
 
@@ -417,6 +424,7 @@ Memisahkan jabatan pekerjaan dari hak akses aplikasi serta menghubungkan jadwal 
 | 11 Agustus 2026 | Roster memakai satu shift per staf per tanggal secara global | Staf multi-outlet tidak boleh memiliki jadwal bertabrakan; snapshot menjaga histori tetap benar setelah template, jabatan, zona waktu, atau toleransi berubah |
 | 11 Agustus 2026 | Koreksi rekonsiliasi shift memakai revision append-only | Salah hitung kas aktual harus dapat diperbaiki tanpa menimpa nilai penutupan asli atau menyamarkan kekurangan kas historis |
 | 11 Agustus 2026 | Milestone 10 selesai dan migration production diterapkan | Role staff, jabatan, template, roster global, tambah/ganti/Libur terbit, audit, UI responsif, 288 test, lint, typecheck, dan build telah lulus |
+| 11 Agustus 2026 | Milestone 9 selesai sebagai fitur software production | Migration, credential, private Blob, cron retensi, RBAC, verifikasi 1:1, geofence, audit, laporan, dan UI sudah terverifikasi; pilot Android dipertahankan sebagai gate operasional sebelum payroll |
 
 ## Cara memperbarui roadmap
 

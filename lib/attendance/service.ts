@@ -248,7 +248,8 @@ export async function verifyAttendance(
       if (verification.status !== AttendanceVerificationStatus.ACTIVE || verification.expiresAt <= now || verification.nonceHash !== hashAttendanceNonce(input.nonce)) {
         throw new AttendanceError("CONFLICT", "Challenge sudah digunakan atau kedaluwarsa. Muat challenge baru.");
       }
-      const failure = await determineFailure(transaction, verification, input, actor);
+      const evaluation = await evaluateAttendanceAttempt(transaction, verification, input, actor);
+      const failure = evaluation.failure;
       const attemptCount = Math.min(3, verification.attemptCount + (failure ? 1 : 0));
       const attempt = await transaction.attendanceAttempt.create({
         data: {
@@ -258,12 +259,12 @@ export async function verifyAttendance(
           kind: verification.kind,
           result: failure ? AttendanceAttemptResult.FAILED : AttendanceAttemptResult.SUCCESS,
           failureReason: failure?.reason,
-          similarity: failure?.similarity ?? null,
+          similarity: evaluation.similarity ?? null,
           livenessPassed: input.livenessPassed,
           latitude: input.location.latitude,
           longitude: input.location.longitude,
           accuracyMeters: input.location.accuracyMeters,
-          distanceMeters: failure?.distance ?? calculateDistance(verification.outlet, input),
+          distanceMeters: evaluation.distance ?? calculateDistance(verification.outlet, input),
           evidencePath,
           evidenceExpiresAt: new Date(now.getTime() + attendanceEvidenceRetentionDays * 86_400_000),
           idempotencyKey: input.idempotencyKey,
@@ -393,33 +394,34 @@ export async function cleanupExpiredAttendanceEvidence(limit = 100) {
   return { scanned: attempts.length, deleted };
 }
 
-async function determineFailure(
+/** Evaluates one attempt and retains successful face/location metrics for device calibration. */
+async function evaluateAttendanceAttempt(
   transaction: Prisma.TransactionClient,
   verification: VerificationWithOutlet,
   input: AttendanceVerificationInput,
   actor: AttendanceActor,
-): Promise<{ reason: AttendanceFailureReason; message: string; similarity?: number; distance?: number } | null> {
+): Promise<{ failure: { reason: AttendanceFailureReason; message: string } | null; similarity?: number; distance?: number }> {
   const outlet = verification.outlet;
-  if (outlet.status !== OutletStatus.ACTIVE || (actor.role !== "owner" && outlet.assignments.length === 0)) return { reason: AttendanceFailureReason.CONFIGURATION_MISSING, message: "Outlet tidak tersedia untuk akun Anda." };
-  if (!outlet.attendanceEnabled || outlet.attendanceLatitude === null || outlet.attendanceLongitude === null) return { reason: AttendanceFailureReason.CONFIGURATION_MISSING, message: "Absensi outlet belum dikonfigurasi." };
-  if (input.location.accuracyMeters > attendanceMaxGpsAccuracyMeters) return { reason: AttendanceFailureReason.LOCATION_INACCURATE, message: "Akurasi lokasi harus 100 meter atau lebih baik." };
+  if (outlet.status !== OutletStatus.ACTIVE || (actor.role !== "owner" && outlet.assignments.length === 0)) return { failure: { reason: AttendanceFailureReason.CONFIGURATION_MISSING, message: "Outlet tidak tersedia untuk akun Anda." } };
+  if (!outlet.attendanceEnabled || outlet.attendanceLatitude === null || outlet.attendanceLongitude === null) return { failure: { reason: AttendanceFailureReason.CONFIGURATION_MISSING, message: "Absensi outlet belum dikonfigurasi." } };
+  if (input.location.accuracyMeters > attendanceMaxGpsAccuracyMeters) return { failure: { reason: AttendanceFailureReason.LOCATION_INACCURATE, message: "Akurasi lokasi harus 100 meter atau lebih baik." } };
   const distance = calculateDistance(outlet, input);
-  if (distance > outlet.attendanceRadiusMeters) return { reason: AttendanceFailureReason.LOCATION_OUTSIDE, message: `Lokasi berada ${Math.round(distance)} meter dari outlet.`, distance };
-  if (!input.livenessPassed) return { reason: AttendanceFailureReason.LIVENESS_FAILED, message: "Gerakan liveness belum terdeteksi.", distance };
+  if (distance > outlet.attendanceRadiusMeters) return { failure: { reason: AttendanceFailureReason.LOCATION_OUTSIDE, message: `Lokasi berada ${Math.round(distance)} meter dari outlet.` }, distance };
+  if (!input.livenessPassed) return { failure: { reason: AttendanceFailureReason.LIVENESS_FAILED, message: "Gerakan liveness belum terdeteksi." }, distance };
   const profile = await transaction.faceProfile.findUnique({ where: { activeUserKey: actor.id } });
-  if (!profile?.embeddingCiphertext || !profile.embeddingIv) return { reason: AttendanceFailureReason.FACE_PROFILE_MISSING, message: "Daftarkan wajah terlebih dahulu.", distance };
+  if (!profile?.embeddingCiphertext || !profile.embeddingIv) return { failure: { reason: AttendanceFailureReason.FACE_PROFILE_MISSING, message: "Daftarkan wajah terlebih dahulu." }, distance };
   let similarity: number;
   try {
     similarity = faceSimilarity(normalizeEmbedding(input.embedding), decryptEmbedding(profile.embeddingCiphertext, profile.embeddingIv, profile.embeddingLength));
   } catch {
-    return { reason: AttendanceFailureReason.FACE_INVALID, message: "Template wajah tidak dapat dibandingkan.", distance };
+    return { failure: { reason: AttendanceFailureReason.FACE_INVALID, message: "Template wajah tidak dapat dibandingkan." }, distance };
   }
-  if (similarity < attendanceSimilarityThreshold) return { reason: AttendanceFailureReason.FACE_MISMATCH, message: "Wajah tidak cocok dengan akun yang sedang login.", similarity, distance };
+  if (similarity < attendanceSimilarityThreshold) return { failure: { reason: AttendanceFailureReason.FACE_MISMATCH, message: "Wajah tidak cocok dengan akun yang sedang login." }, similarity, distance };
   const open = await transaction.attendanceSession.findUnique({ where: { openUserKey: actor.id }, select: { outletId: true } });
-  if (verification.kind === AttendanceKind.CHECK_IN && open) return { reason: AttendanceFailureReason.ALREADY_CHECKED_IN, message: "Anda sudah memiliki absensi masuk aktif.", similarity, distance };
-  if (verification.kind === AttendanceKind.CHECK_OUT && !open) return { reason: AttendanceFailureReason.SESSION_MISSING, message: "Absensi masuk aktif tidak ditemukan.", similarity, distance };
-  if (verification.kind === AttendanceKind.CHECK_OUT && open?.outletId !== verification.outletId) return { reason: AttendanceFailureReason.OUTLET_MISMATCH, message: "Absensi pulang harus dilakukan pada outlet tempat Anda masuk.", similarity, distance };
-  return null;
+  if (verification.kind === AttendanceKind.CHECK_IN && open) return { failure: { reason: AttendanceFailureReason.ALREADY_CHECKED_IN, message: "Anda sudah memiliki absensi masuk aktif." }, similarity, distance };
+  if (verification.kind === AttendanceKind.CHECK_OUT && !open) return { failure: { reason: AttendanceFailureReason.SESSION_MISSING, message: "Absensi masuk aktif tidak ditemukan." }, similarity, distance };
+  if (verification.kind === AttendanceKind.CHECK_OUT && open?.outletId !== verification.outletId) return { failure: { reason: AttendanceFailureReason.OUTLET_MISMATCH, message: "Absensi pulang harus dilakukan pada outlet tempat Anda masuk." }, similarity, distance };
+  return { failure: null, similarity, distance };
 }
 
 type VerificationWithOutlet = {

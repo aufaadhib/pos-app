@@ -23,7 +23,7 @@ export async function getAttendanceHome(userId: string, role: AttendanceActor["r
       where: { userId },
       orderBy: { checkInAt: "desc" },
       take: 10,
-      include: { outlet: { select: { code: true, name: true, timezone: true } }, checkInAttempt: { select: { id: true, evidencePath: true, evidenceExpiresAt: true, evidenceDeletedAt: true } }, checkOutAttempt: { select: { id: true, evidencePath: true, evidenceExpiresAt: true, evidenceDeletedAt: true } }, corrections: { orderBy: { createdAt: "desc" }, take: 1 } },
+      include: { outlet: { select: { code: true, name: true, timezone: true } }, checkInAttempt: { select: { id: true, similarity: true, evidencePath: true, evidenceExpiresAt: true, evidenceDeletedAt: true } }, checkOutAttempt: { select: { id: true, similarity: true, evidencePath: true, evidenceExpiresAt: true, evidenceDeletedAt: true } }, corrections: { orderBy: { createdAt: "desc" }, take: 1 } },
     }),
     getPublishedRosterForUser(userId),
   ]);
@@ -45,7 +45,7 @@ export async function getAttendanceManagement(outletId: string, actor: Attendanc
     prisma.attendanceExceptionRequest.findMany({
       where: { status: AttendanceExceptionStatus.PENDING, verification: { outletId } },
       orderBy: { requestedAt: "asc" },
-      include: { user: { select: { id: true, name: true, email: true } }, verification: { select: { kind: true } }, attempt: { select: { id: true, attemptedAt: true, failureReason: true, evidencePath: true, evidenceExpiresAt: true, evidenceDeletedAt: true } } },
+      include: { user: { select: { id: true, name: true, email: true } }, verification: { select: { kind: true } }, attempt: { select: { id: true, attemptedAt: true, failureReason: true, similarity: true, evidencePath: true, evidenceExpiresAt: true, evidenceDeletedAt: true } } },
     }),
     prisma.attendanceSession.count({ where }),
     prisma.userOutletAssignment.findMany({
@@ -61,10 +61,10 @@ export async function getAttendanceManagement(outletId: string, actor: Attendanc
     orderBy: { checkInAt: "desc" },
     skip: (currentPage - 1) * attendancePageSize,
     take: attendancePageSize,
-    include: { user: { select: { id: true, name: true, email: true } }, outlet: { select: { code: true, name: true, timezone: true } }, checkInAttempt: { select: { id: true, evidencePath: true, evidenceExpiresAt: true, evidenceDeletedAt: true } }, checkOutAttempt: { select: { id: true, evidencePath: true, evidenceExpiresAt: true, evidenceDeletedAt: true } }, corrections: { orderBy: { createdAt: "desc" }, take: 1 } },
+    include: { user: { select: { id: true, name: true, email: true } }, outlet: { select: { code: true, name: true, timezone: true } }, checkInAttempt: { select: { id: true, similarity: true, evidencePath: true, evidenceExpiresAt: true, evidenceDeletedAt: true } }, checkOutAttempt: { select: { id: true, similarity: true, evidencePath: true, evidenceExpiresAt: true, evidenceDeletedAt: true } }, corrections: { orderBy: { createdAt: "desc" }, take: 1 } },
   });
   return {
-    pending: pending.map((request) => ({ ...request, requestedAt: request.requestedAt.toISOString(), attempt: { id: request.attempt.id, attemptedAt: request.attempt.attemptedAt.toISOString(), failureReason: request.attempt.failureReason, evidenceAvailable: isAttendanceEvidenceAvailable(request.attempt) } })),
+    pending: pending.map((request) => ({ ...request, requestedAt: request.requestedAt.toISOString(), attempt: { id: request.attempt.id, attemptedAt: request.attempt.attemptedAt.toISOString(), failureReason: request.attempt.failureReason, similarity: request.attempt.similarity?.toString() ?? null, evidenceAvailable: isAttendanceEvidenceAvailable(request.attempt) } })),
     staffProfiles: staffProfiles.map(({ user }) => ({ id: user.id, name: user.name, email: user.email, banned: user.banned, profile: user.faceProfiles[0] ? { ...user.faceProfiles[0], enrolledAt: user.faceProfiles[0].enrolledAt.toISOString() } : null, reenrollmentRequest: user.faceReenrollmentRequests[0] ? { id: user.faceReenrollmentRequests[0].id, requestedAt: user.faceReenrollmentRequests[0].requestedAt.toISOString() } : null })),
     sessions: sessions.map(serializeAttendanceSession),
     page: currentPage,
@@ -160,7 +160,7 @@ function serializeAttendanceSession(session: {
   };
 }
 
-type AttendanceEvidenceAttempt = { id: string; evidencePath: string | null; evidenceExpiresAt: Date | null; evidenceDeletedAt: Date | null };
+type AttendanceEvidenceAttempt = { id: string; similarity: Prisma.Decimal | null; evidencePath: string | null; evidenceExpiresAt: Date | null; evidenceDeletedAt: Date | null };
 
 /** Returns whether a private attendance photo is still present and within retention. */
 function isAttendanceEvidenceAvailable(attempt: Omit<AttendanceEvidenceAttempt, "id">) {
@@ -169,5 +169,5 @@ function isAttendanceEvidenceAvailable(attempt: Omit<AttendanceEvidenceAttempt, 
 
 /** Serializes evidence metadata without exposing its private Blob pathname. */
 function serializeAttendanceEvidence(attempt: AttendanceEvidenceAttempt | null) {
-  return attempt ? { attemptId: attempt.id, available: isAttendanceEvidenceAvailable(attempt) } : null;
+  return attempt ? { attemptId: attempt.id, available: isAttendanceEvidenceAvailable(attempt), similarity: attempt.similarity?.toString() ?? null } : null;
 }

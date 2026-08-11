@@ -120,6 +120,8 @@ Migration `add_employee_attendance` menambahkan profil wajah terenkripsi, challe
 - Waktu server menjadi sumber kebenaran dan tanggal bisnis mengikuti zona outlet. Satu staf hanya dapat memiliki satu sesi terbuka; check-out wajib pada outlet check-in.
 - Foto attempt disimpan pada Vercel Blob private terpisah dan cron menghapusnya setelah 30 hari. Embedding probe tidak disimpan; template aktif dan sampel daftar ulang pending dienkripsi AES-256-GCM. Payload pending dihapus setelah keputusan, sedangkan template lama baru dihapus ketika penggantian disetujui.
 - Liveness browser hanya mitigasi ringan, bukan jaminan anti-spoof tingkat tinggi. Model dan threshold `0,60` wajib dikalibrasi lagi pada tablet/ponsel Android nyata sebelum dipakai sebagai dasar payroll.
+- Production memerlukan `ATTENDANCE_EMBEDDING_KEY`, `ATTENDANCE_BLOB_READ_WRITE_TOKEN`, dan `CRON_SECRET`. Setelah konfigurasi, validasi koneksi private Blob dan respons `200` cleanup cron sebelum mengaktifkan absensi outlet.
+- Sebelum data dipakai untuk payroll atau keputusan disipliner, lakukan pilot pada perangkat Android target dalam cahaya normal/redup, catat similarity dan false reject, uji wajah akun lain, serta pastikan GPS stabil di dalam dan di luar radius.
 
 Siapkan private Blob store dan tiga environment khusus absensi. `ATTENDANCE_EMBEDDING_KEY` harus berupa 32 byte acak dalam base64; credential ini divalidasi hanya saat fitur absensi digunakan.
 

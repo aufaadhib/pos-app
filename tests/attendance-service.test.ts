@@ -3,6 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 const mocks = vi.hoisted(() => ({
   attemptFindUnique: vi.fn(),
   attemptCreate: vi.fn(),
+  attendanceSessionCreate: vi.fn(),
   attendanceSessionFindUnique: vi.fn(),
   attendanceRosterEntryFindUnique: vi.fn(),
   auditCreate: vi.fn(),
@@ -31,7 +32,7 @@ vi.mock("@/lib/attendance/evidence", () => ({ uploadAttendanceEvidence: mocks.up
 vi.mock("@/lib/prisma", () => ({ prisma: { attendanceAttempt: { findUnique: mocks.attemptFindUnique }, $transaction: mocks.transaction } }));
 
 import { AttendanceError, createAttendanceChallenge, enrollFaceProfile, reviewAttendanceException, reviewFaceReenrollment, updateAttendanceSettings, verifyAttendance } from "@/lib/attendance/service";
-import { hashAttendanceNonce } from "@/lib/attendance/crypto";
+import { encryptEmbedding, hashAttendanceNonce } from "@/lib/attendance/crypto";
 
 const actor = { id: "manager-1", name: "Manajer", email: "manager@example.com", role: "manager" as const };
 const transactionClient = {
@@ -40,7 +41,7 @@ const transactionClient = {
   attendanceExceptionRequest: { findUnique: mocks.exceptionFindUnique, update: mocks.exceptionUpdate },
   faceProfile: { create: mocks.faceProfileCreate, findUnique: mocks.faceProfileFindUnique, update: mocks.faceProfileUpdate },
   faceReenrollmentRequest: { create: mocks.faceRequestCreate, findUnique: mocks.faceRequestFindUnique, update: mocks.faceRequestUpdate },
-  attendanceSession: { findUnique: mocks.attendanceSessionFindUnique },
+  attendanceSession: { create: mocks.attendanceSessionCreate, findUnique: mocks.attendanceSessionFindUnique },
   attendanceRosterEntry: { findUnique: mocks.attendanceRosterEntryFindUnique },
   attendanceVerification: { create: mocks.verificationCreate, findFirst: mocks.verificationFindFirst, update: mocks.verificationUpdate },
   outlet: { findFirst: mocks.outletFindFirst, update: mocks.outletUpdate },
@@ -205,6 +206,32 @@ describe("attendance service", () => {
     const result = await verifyAttendance({ verificationId: "verification-1", nonce, idempotencyKey: "request-123", embedding, livenessPassed: false, location: { latitude: -6.2, longitude: 106.8, accuracyMeters: 10 } }, new File([new Uint8Array([0xff, 0xd8, 0xff, 0xd9])], "evidence.jpg", { type: "image/jpeg" }), actor);
     expect(result).toEqual(expect.objectContaining({ success: false, attemptCount: 3, exceptionAvailable: true }));
     expect(mocks.verificationUpdate).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ status: "EXCEPTION_AVAILABLE", attemptCount: 3 }) }));
+  });
+
+  it("stores successful face similarity and distance for device calibration", async () => {
+    const nonce = "s".repeat(32);
+    const encrypted = encryptEmbedding(embedding);
+    mocks.verificationFindFirst.mockResolvedValue({
+      id: "verification-success",
+      userId: actor.id,
+      outletId: "outlet-1",
+      kind: "CHECK_IN",
+      status: "ACTIVE",
+      attemptCount: 0,
+      expiresAt: new Date(Date.now() + 60_000),
+      nonceHash: hashAttendanceNonce(nonce),
+      rosterEntryId: null,
+      scheduleMatch: "UNSCHEDULED",
+      outlet: { id: "outlet-1", name: "Pusat", timezone: "Asia/Jakarta", status: "ACTIVE", attendanceEnabled: true, attendanceLatitude: { toString: () => "-6.2", valueOf: () => -6.2 }, attendanceLongitude: { toString: () => "106.8", valueOf: () => 106.8 }, attendanceRadiusMeters: 100, assignments: [{ userId: actor.id }] },
+    });
+    mocks.faceProfileFindUnique.mockResolvedValue({ embeddingCiphertext: encrypted.ciphertext, embeddingIv: encrypted.iv, embeddingLength: encrypted.length });
+    mocks.attemptCreate.mockResolvedValue({ id: "attempt-success" });
+    mocks.attendanceSessionCreate.mockResolvedValue({ id: "session-success" });
+    mocks.verificationUpdate.mockResolvedValue({ status: "VERIFIED" });
+
+    await expect(verifyAttendance({ verificationId: "verification-success", nonce, idempotencyKey: "request-success", embedding, livenessPassed: true, location: { latitude: -6.2, longitude: 106.8, accuracyMeters: 10 } }, new File([new Uint8Array([0xff, 0xd8, 0xff, 0xd9])], "evidence.jpg", { type: "image/jpeg" }), actor)).resolves.toEqual(expect.objectContaining({ success: true, attendanceSessionId: "session-success" }));
+
+    expect(mocks.attemptCreate).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ result: "SUCCESS", similarity: expect.closeTo(1, 5), distanceMeters: expect.closeTo(0, 5) }) }));
   });
 });
 

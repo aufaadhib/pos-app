@@ -34,8 +34,8 @@ describe("attendance management", () => {
         originalCheckInAt: "2026-08-10T12:30:00.000Z",
         originalCheckOutAt: "2026-08-10T13:30:00.000Z",
         outlet: { code: "TMR", name: "Timur", timezone: "Asia/Jayapura" },
-        checkInEvidence: { attemptId: "attempt-in", available: true },
-        checkOutEvidence: { attemptId: "attempt-out", available: false },
+        checkInEvidence: { attemptId: "attempt-in", available: true, similarity: "0.87321" },
+        checkOutEvidence: { attemptId: "attempt-out", available: false, similarity: "0.81234" },
         correction: null,
       }]}
       staffProfiles={[]}
@@ -45,6 +45,8 @@ describe("attendance management", () => {
     expect(screen.getByLabelText("Dari")).toHaveClass("ios-date-input");
     expect(screen.getByLabelText("Sampai")).toHaveClass("ios-date-input");
     expect(screen.getAllByText(/21\.30 WIT/).length).toBeGreaterThan(0);
+    expect(screen.getAllByText("Wajah 87,3%").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("Wajah 81,2%").length).toBeGreaterThan(0);
     for (const link of screen.getAllByRole("button", { name: "Foto masuk" })) {
       expect(link).toHaveAttribute("href", "/api/attendance/evidence/attempt-in");
     }
