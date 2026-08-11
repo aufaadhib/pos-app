@@ -92,10 +92,11 @@ export async function getAttendanceEvidencePath(attemptId: string, actor: Attend
       evidencePath: { not: null },
       evidenceExpiresAt: { gt: new Date() },
       evidenceDeletedAt: null,
-      OR: [
-        { userId: actor.id },
-        ...(actor.role === "owner" ? [{}] : actor.role === "manager" ? [{ outlet: { assignments: { some: { userId: actor.id } } } }] : []),
-      ],
+      ...(actor.role === "owner"
+        ? {}
+        : actor.role === "manager"
+          ? { OR: [{ userId: actor.id }, { outlet: { assignments: { some: { userId: actor.id } } } }] }
+          : { userId: actor.id }),
     },
     select: { evidencePath: true },
   });
