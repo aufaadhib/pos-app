@@ -17,7 +17,7 @@ Dokumen ini mencatat function dan component function yang ditambahkan pada miles
 | `parseServerEnvironment()` | Object environment | Environment tervalidasi | Memvalidasi URL database, base URL auth, dan secret. Melempar error tanpa membocorkan nilai rahasia. |
 | `parseOwnerEnvironment()` | Object environment | Environment owner tervalidasi | Menambahkan validasi nama/email serta password bootstrap minimum 12 karakter. |
 | `getServerEnvironment()` | Tidak ada | Environment server tervalidasi | Membaca `process.env` hanya dari modul berpagar `server-only`. |
-| `isAppRole()` | String role | Type predicate | Menentukan apakah nilai merupakan `owner`, `manager`, atau `cashier`. |
+| `isAppRole()` | String role | Type predicate | Menentukan apakah nilai merupakan `owner`, `manager`, `cashier`, atau `staff`. |
 | `roleHasPermission()` | Role dan permission | Boolean | Mengevaluasi matrix RBAC yang sama dengan Better Auth untuk kebutuhan presentasi server. |
 
 ## Outlet, wilayah, dan konteks session
@@ -44,16 +44,18 @@ Dokumen ini mencatat function dan component function yang ditambahkan pada miles
 
 | Function | Input | Output | Tujuan dan side effect |
 | --- | --- | --- | --- |
-| `assertStaffRoleAllowed()` | Role actor dan target | `void` atau error | Mencegah manager membuat manager dan mencegah kasir melakukan pengelolaan. |
-| `assertOutletAssignmentCount()` | Role staf dan outlet IDs | `void` atau error | Mewajibkan satu outlet untuk kasir dan minimal satu untuk manager. |
+| `assertStaffRoleAllowed()` | Role actor dan target | `void` atau error | Mencegah manager membuat manager serta mencegah cashier/staff melakukan pengelolaan. |
+| `assertOutletAssignmentCount()` | Role staf dan outlet IDs | `void` atau error | Mewajibkan tepat satu outlet untuk kasir dan minimal satu untuk manager/staff. |
 | `generateTemporaryPassword()` | Panjang opsional | Password acak | Membuat password minimum 12 karakter dengan uppercase, lowercase, angka, simbol, dan tanpa karakter ambigu. |
-| `getStaff()` | Filter, page, actor | DTO halaman staf | Membaca staf sesuai cakupan role; manager hanya melihat kasir yang berbagi outlet. |
+| `getStaff()` | Filter, page, actor | DTO halaman staf | Membaca staf sesuai cakupan role; manager hanya melihat kasir/staff yang berbagi outlet. |
 | `getManageableOutlets()` | User ID dan role | Opsi outlet | Membatasi pilihan penugasan ke outlet aktif yang boleh dikelola actor. |
 | `createStaff()` | Data staf dan actor | User dan password sementara | Meng-hash via Better Auth lalu membuat user, account, assignments, dan audit dalam satu transaction. |
 | `updateStaff()` | Data, versi, actor | User terbaru | Mengubah nama/role/penugasan secara optimistic dan mengaudit assignment yang berubah. |
 | `deactivateStaff()`, `reactivateStaff()` | Target dan actor | User terbaru | Mengubah status tanpa delete; deaktivasi mencabut seluruh session. |
 | `resetStaffPassword()` | Target dan actor | User serta password sementara | Mengganti hash, menandai wajib ganti password, mencabut session, dan mengaudit tanpa menyimpan plaintext. |
 | `changeOwnPassword()` | Password lama/baru, session, actor | `void` | Memverifikasi password, mengganti hash, membersihkan kewajiban, dan mencabut session lain secara atomic. |
+| `getStaffPositions()` | Tidak ada | Maksimal 200 jabatan | Membaca jabatan global beserta status dan jumlah akun secara fresh untuk konfigurasi owner. |
+| `createStaffPosition()`, `updateStaffPosition()`, `changeStaffPositionStatus()` | Nama/target/versi dan actor owner | Jabatan terbaru | Membuat, mengganti nama, mengarsipkan, atau memulihkan jabatan dalam transaction dengan optimistic concurrency dan admin audit tanpa menghapus referensi historis. |
 | Action staf dan `changePasswordAction()` | State dan FormData | State/redirect | Memvalidasi permission/input dan hanya mengembalikan password sementara pada respons mutation pertama. |
 | `OutletFormDialog()`, `StaffFormDialog()` | DTO dan hak actor | Dialog responsif | Menyusun form shadcn, state pending/error, wilayah, role, serta assignment aksesibel. |
 | `OutletStatusAction()`, `StaffAccountActions()` | Snapshot entity | Form mutation | Menjalankan arsip/pemulihan atau deaktivasi/reset dengan optimistic version tersembunyi. |
@@ -182,22 +184,30 @@ Dokumen ini mencatat function dan component function yang ditambahkan pada miles
 | `distanceInMeters()`, `businessDateAt()` | Dua koordinat atau timestamp/timezone | Jarak meter atau tanggal bisnis | Menggunakan Haversine serta kalender lokal outlet tanpa menjadikan waktu browser sebagai sumber kebenaran. |
 | Schema attendance | Payload enrollment/challenge/verify/settings/review/correction/report | Input tervalidasi atau error | Membatasi embedding, koordinat, radius 50–500 m, alasan, timestamp koreksi, dan filter laporan pada trust boundary. |
 | `uploadAttendanceEvidence()`, `readAttendanceEvidence()`, `deleteAttendanceEvidence()` | JPEG/Path private | Path, stream, atau void | Memvalidasi JPEG maksimal 300 KB dan memakai Blob private tanpa mengekspos URL storage ke UI. |
-| `enrollFaceProfile()`, `reviewFaceReenrollment()`, `revokeFaceProfile()` | Tiga sampel, keputusan review, atau user target dan actor | Profil, request pending, hasil review, atau void | Mengaktifkan pendaftaran pertama, menahan daftar ulang kasir sampai disetujui owner/manager, mengganti profil secara atomik, menghapus payload pending setelah keputusan, memeriksa scope, dan menulis audit. |
-| `createAttendanceChallenge()` | Outlet, jenis, actor | Nonce/action 15 menit | Memeriksa assignment serta state sesi, lalu membuat atau merotasi challenge liveness satu kali pakai. |
+| `enrollFaceProfile()`, `reviewFaceReenrollment()`, `revokeFaceProfile()` | Tiga sampel, keputusan review, atau user target dan actor | Profil, request pending, hasil review, atau void | Mengaktifkan pendaftaran pertama, menahan daftar ulang kasir/staff sampai disetujui owner/manager, mengganti profil secara atomik, menghapus payload pending setelah keputusan, memeriksa scope, dan menulis audit. |
+| `createAttendanceChallenge()` | Outlet, jenis, konfirmasi di luar jadwal, actor | Nonce/action 15 menit | Memeriksa assignment, sesi, serta roster hari ini/hari sebelumnya untuk shift malam, lalu membuat atau merotasi challenge liveness satu kali pakai. |
 | `verifyAttendance()` | Probe, liveness, GPS, nonce, idempotency, JPEG, actor | Hasil attempt/sesi | Mengunggah bukti privat, memverifikasi akun `1:1`, akurasi, radius, dan nonce, lalu check-in/out dalam transaction serializable; retry aman melalui idempotency key. |
 | `requestAttendanceException()`, `reviewAttendanceException()` | Verification/alasan atau keputusan, actor | Request/review | Membuka permintaan setelah kegagalan ketiga, membatasi scope manager, menolak self-approval, dan memakai waktu attempt asli saat disetujui. |
 | `correctAttendanceSession()` | Session, timestamp efektif, alasan, actor | Correction | Menambahkan ledger koreksi dan audit tanpa menimpa waktu asli. |
-| `updateAttendanceSettings()` | Geofence tervalidasi dan actor | `void` | Memperbarui outlet aktif/assigned dan audit before/after dalam satu transaction. |
+| `updateAttendanceSettings()` | Geofence, toleransi jadwal, dan actor | `void` | Memperbarui outlet aktif/assigned dan audit before/after dalam satu transaction. |
 | `cleanupExpiredAttendanceEvidence()` | Batas batch | Jumlah scan/hapus | Menghapus foto kedaluwarsa secara best effort, menandai record sukses, dan menulis audit sistem. |
-| `getAttendanceHome()`, `getAttendanceManagement()`, `getAttendanceSettings()` | User/outlet/actor/page | DTO serializable | Membaca profil, status/request daftar ulang, outlet tugas, sesi, exception, staf, serta geofence secara fresh dan bounded tanpa mengirim payload biometrik. |
+| `getAttendanceHome()`, `getAttendanceManagement()`, `getAttendanceSettings()` | User/outlet/actor/page | DTO serializable | Membaca profil, status/request daftar ulang, outlet tugas, sesi, roster pribadi, exception, staf, serta geofence secara fresh dan bounded tanpa mengirim payload biometrik. |
 | `getAttendanceEvidencePath()`, `getAttendanceExportRows()` | Attempt/filter dan actor | Path/rows atau penolakan | Mengulang ownership/assignment dan membatasi ekspor maksimal 10.000 baris di Route Handler. |
 | Attendance Route Handlers | Request enrollment/challenge/verify/evidence/export/cron | JSON, stream, atau CSV | Mengulang session, permission, validasi, no-store, scope, dan secret cron pada server. |
 | Attendance Server Actions | Input exception/review daftar ulang/correction/revoke/settings | `AttendanceActionState` | Mengulang permission dan actor dari session, memanggil domain service, lalu me-revalidate route terdampak. |
-| `AttendanceClock()` | Akun dan DTO absensi | UI kamera/lokasi | Memuat Human secara lazy dengan WebGL/WASM fallback, mengelola tiga sampel, liveness, geolocation, bukti JPEG, pengecualian, dan logout tablet bersama. |
+| `AttendanceClock()` | Akun dan DTO absensi/roster | UI kamera/lokasi | Memuat Human secara lazy dengan WebGL/WASM fallback, menampilkan dua minggu jadwal, meminta konfirmasi di luar jadwal, serta mengelola tiga sampel, liveness, geolocation, bukti JPEG, pengecualian, dan logout tablet bersama. |
 | `AttendanceMap()`, `MapViewport()` | Koordinat/radius dan callback | Peta editor | Menyinkronkan marker pusat, handle radius, input luar, dan viewport dengan target drag sentuh serta attribution OSM. |
-| `AttendanceSettingsForm()` | Konfigurasi outlet | Form/peta responsif | Menyatukan lokasi terkini, koordinat manual, radius, status aktif, pending, serta feedback simpan. |
+| `AttendanceSettingsForm()` | Konfigurasi outlet | Form/peta responsif | Menyatukan lokasi terkini, koordinat manual, radius, toleransi terlambat/pulang cepat, status aktif, pending, serta feedback simpan. |
 | `AttendanceManagement()` | Queue, sessions, profiles/request, outlet | Workspace review/report | Menyediakan kartu mobile, tabel desktop, review daftar ulang, bukti privat, koreksi, revoke, dan filter ekspor tanpa overflow horizontal. |
-| Attendance pages/loading | Session, active outlet, search params | Route dynamic/skeleton | Melindungi tiga route dengan permission dan menjaga bentuk final pada mobile, tablet, serta desktop. |
+| Attendance pages/loading | Session, active outlet, search params | Route dynamic/skeleton | Melindungi route absensi, pengelolaan, pengaturan, dan roster dengan permission serta menjaga bentuk final pada mobile, tablet, dan desktop. |
+| `mondayOf()`, `addIsoDays()`, `scheduledRange()`, `isWithinScheduledWindow()` | Tanggal/jam/zona waktu | Tanggal atau rentang UTC | Membentuk minggu Senin–Minggu, shift normal/lintas tengah malam, dan jendela check-in dua jam tanpa bergantung pada timezone browser. |
+| `attendanceDisplay()` | Jadwal, toleransi, waktu efektif, dan waktu kini | Status serta menit/jam | Menghasilkan status terjadwal, belum masuk, tepat waktu, terlambat, pulang cepat, checkout terlewat, tidak hadir, atau di luar jadwal. |
+| Schema roster | Template/draf/publish/salin/revisi | Input tervalidasi | Membatasi jam, tanggal minggu, satu shift per staf/tanggal, versi optimistic, dan alasan perubahan jadwal terbit. |
+| `createShiftTemplate()`, `updateShiftTemplate()`, `changeShiftTemplateStatus()` | Template outlet dan actor | Template terbaru | Mengelola template shift scoped outlet dalam transaction dan mempertahankan snapshot roster yang sudah diterbitkan. |
+| `saveRosterDraft()`, `copyRosterWeek()`, `publishRosterWeek()` | Minggu/entries/versi dan actor | Roster week | Memvalidasi staf, jabatan, assignment, template, serta konflik global lalu menyimpan snapshot dan audit secara atomik. |
+| `updatePublishedRosterEntry()` | Entry, shift pengganti, alasan, versi | Entry terbaru | Mengganti hanya shift masa depan pada roster terbit dan menyimpan before/after beserta alasan dalam audit. |
+| `getRosterWorkspace()`, `getPublishedRosterForUser()`, `getAttendanceRosterSummary()` | Outlet/user/week/actor | DTO roster | Membaca editor outlet, dua minggu jadwal pribadi, dan ringkasan status hari ini secara fresh dan permission-scoped. |
+| `RosterPlanner()` | Outlet, staf, template, minggu | Papan/kartu roster | Menyediakan draf, salin, publish, revisi terbit, papan desktop, dan kartu hari tablet/mobile tanpa overflow horizontal. |
 
 ## Void dan refund transaksi
 

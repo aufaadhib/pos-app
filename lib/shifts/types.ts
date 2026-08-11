@@ -1,8 +1,10 @@
+import type { AppRole } from "@/lib/auth/permissions";
+
 export type ShiftActor = {
   id: string;
   name: string;
   email: string;
-  role: "owner" | "manager" | "cashier";
+  role: AppRole;
 };
 
 export type ShiftActionState = {

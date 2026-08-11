@@ -1,9 +1,10 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const mocks = vi.hoisted(() => ({
   attemptFindUnique: vi.fn(),
   attemptCreate: vi.fn(),
   attendanceSessionFindUnique: vi.fn(),
+  attendanceRosterEntryFindUnique: vi.fn(),
   auditCreate: vi.fn(),
   exceptionFindUnique: vi.fn(),
   exceptionUpdate: vi.fn(),
@@ -40,6 +41,7 @@ const transactionClient = {
   faceProfile: { create: mocks.faceProfileCreate, findUnique: mocks.faceProfileFindUnique, update: mocks.faceProfileUpdate },
   faceReenrollmentRequest: { create: mocks.faceRequestCreate, findUnique: mocks.faceRequestFindUnique, update: mocks.faceRequestUpdate },
   attendanceSession: { findUnique: mocks.attendanceSessionFindUnique },
+  attendanceRosterEntry: { findUnique: mocks.attendanceRosterEntryFindUnique },
   attendanceVerification: { create: mocks.verificationCreate, findFirst: mocks.verificationFindFirst, update: mocks.verificationUpdate },
   outlet: { findFirst: mocks.outletFindFirst, update: mocks.outletUpdate },
   userOutletAssignment: { findFirst: mocks.userAssignmentFindFirst },
@@ -53,17 +55,20 @@ describe("attendance service", () => {
     mocks.uploadEvidence.mockResolvedValue("attendance/user/evidence.jpg");
     mocks.attemptFindUnique.mockResolvedValue(null);
     mocks.attendanceSessionFindUnique.mockResolvedValue(null);
+    mocks.attendanceRosterEntryFindUnique.mockResolvedValue(null);
     mocks.faceRequestFindUnique.mockResolvedValue(null);
     mocks.verificationFindFirst.mockResolvedValue(null);
     process.env.ATTENDANCE_EMBEDDING_KEY = Buffer.alloc(32, 1).toString("base64");
   });
 
+  afterEach(() => vi.useRealTimers());
+
   it("allows an owner to start attendance at any active outlet without assignment", async () => {
     const owner = { id: "owner-1", name: "Pemilik", email: "owner@example.com", role: "owner" as const };
-    mocks.outletFindFirst.mockResolvedValue({ id: "outlet-1", attendanceEnabled: true });
+    mocks.outletFindFirst.mockResolvedValue({ id: "outlet-1", attendanceEnabled: true, timezone: "Asia/Jakarta" });
     mocks.verificationCreate.mockResolvedValue({ id: "verification-1", challengeAction: "TURN_LEFT", expiresAt: new Date(Date.now() + 60_000), attemptCount: 0 });
 
-    await createAttendanceChallenge({ outletId: "outlet-1", kind: "CHECK_IN" }, owner);
+    await createAttendanceChallenge({ outletId: "outlet-1", kind: "CHECK_IN", unscheduledAcknowledged: true }, owner);
 
     expect(mocks.outletFindFirst).toHaveBeenCalledWith(expect.objectContaining({ where: { id: "outlet-1", status: "ACTIVE" } }));
     expect(mocks.verificationCreate).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ outletId: "outlet-1", userId: owner.id }) }));
@@ -72,15 +77,29 @@ describe("attendance service", () => {
   it("continues to require an outlet assignment for managers", async () => {
     mocks.outletFindFirst.mockResolvedValue(null);
 
-    await expect(createAttendanceChallenge({ outletId: "outlet-2", kind: "CHECK_IN" }, actor)).rejects.toMatchObject({ code: "FORBIDDEN" });
+    await expect(createAttendanceChallenge({ outletId: "outlet-2", kind: "CHECK_IN", unscheduledAcknowledged: true }, actor)).rejects.toMatchObject({ code: "FORBIDDEN" });
 
     expect(mocks.outletFindFirst).toHaveBeenCalledWith(expect.objectContaining({ where: expect.objectContaining({ assignments: { some: { userId: actor.id } } }) }));
     expect(mocks.verificationCreate).not.toHaveBeenCalled();
   });
 
+  it("matches an overnight roster from the previous outlet-local date", async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-08-10T18:00:00.000Z"));
+    mocks.outletFindFirst.mockResolvedValue({ id: "outlet-1", attendanceEnabled: true, timezone: "Asia/Jakarta" });
+    mocks.attendanceRosterEntryFindUnique
+      .mockResolvedValueOnce(null)
+      .mockResolvedValueOnce({ id: "roster-night", outletId: "outlet-1", scheduledStartAt: new Date("2026-08-10T15:00:00.000Z"), scheduledEndAt: new Date("2026-08-10T23:00:00.000Z"), rosterWeek: { status: "PUBLISHED" } });
+    mocks.verificationCreate.mockResolvedValue({ id: "verification-1", challengeAction: "BLINK", expiresAt: new Date("2026-08-10T18:05:00.000Z"), attemptCount: 0, scheduleMatch: "SCHEDULED" });
+
+    await createAttendanceChallenge({ outletId: "outlet-1", kind: "CHECK_IN", unscheduledAcknowledged: false }, actor);
+
+    expect(mocks.verificationCreate).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ rosterEntryId: "roster-night", scheduleMatch: "SCHEDULED" }) }));
+  });
+
   it("updates only an assigned outlet and writes settings audit atomically", async () => {
     mocks.outletFindFirst.mockResolvedValue({ id: "outlet-1", attendanceEnabled: false, attendanceLatitude: null, attendanceLongitude: null, attendanceRadiusMeters: 100 });
-    await updateAttendanceSettings({ outletId: "outlet-1", attendanceEnabled: true, latitude: -6.2, longitude: 106.8, radiusMeters: 150 }, actor);
+    await updateAttendanceSettings({ outletId: "outlet-1", attendanceEnabled: true, latitude: -6.2, longitude: 106.8, radiusMeters: 150, lateGraceMinutes: 15, earlyLeaveGraceMinutes: 15 }, actor);
     expect(mocks.outletFindFirst).toHaveBeenCalledWith(expect.objectContaining({ where: expect.objectContaining({ assignments: { some: { userId: actor.id } } }) }));
     expect(mocks.outletUpdate).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ attendanceRadiusMeters: 150 }) }));
     expect(mocks.auditCreate).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ action: "SETTINGS_UPDATE" }) }));

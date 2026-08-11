@@ -6,7 +6,7 @@ import { useState } from "react";
 import { BarChart3, BookOpen, CalendarCheck2, ChefHat, HandCoins, House, Menu, Palette, ReceiptText, Settings2, ShoppingBasket, Store, Users, WalletCards } from "lucide-react";
 
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import type { AppRole } from "@/lib/auth/permissions";
+import { roleHasPermission, type AppRole } from "@/lib/auth/permissions";
 import { cn } from "@/lib/utils";
 
 const navigationItems = [
@@ -25,7 +25,8 @@ const navigationItems = [
   { href: "/design-system", label: "Sistem UI", route: "design-system", icon: Palette },
 ] as const;
 
-const primaryMobileRoutes = new Set<string>(["workspace", "pos", "kitchen", "shifts"]);
+const operationalMobileRoutes = new Set<string>(["workspace", "pos", "kitchen", "shifts"]);
+const staffMobileRoutes = new Set<string>(["workspace", "attendance"]);
 
 type WorkspaceNavigationProps = {
   canManageStaff: boolean;
@@ -38,12 +39,8 @@ type WorkspaceNavigationProps = {
 export function WorkspaceNavigation({ canManageStaff, canViewDesignSystem, mobile = false, role }: WorkspaceNavigationProps) {
   const pathname = usePathname();
   const [moreOpen, setMoreOpen] = useState(false);
-  const items = navigationItems.filter((item) => {
-    if (item.route === "reports" || item.route === "settlements" || item.route === "settings") return role !== "cashier";
-    if (item.route === "staff") return canManageStaff;
-    if (item.route === "design-system") return canViewDesignSystem;
-    return true;
-  });
+  const items = navigationItems.filter((item) => routeAllowed(item.route, role, canManageStaff, canViewDesignSystem));
+  const primaryMobileRoutes = role === "staff" ? staffMobileRoutes : operationalMobileRoutes;
   const visibleItems = mobile ? items.filter((item) => primaryMobileRoutes.has(item.route)) : items;
   const moreItems = mobile ? items.filter((item) => !primaryMobileRoutes.has(item.route)) : [];
   const moreActive = moreItems.some((item) => isActiveRoute(pathname, item.href));
@@ -60,4 +57,20 @@ export function WorkspaceNavigation({ canManageStaff, canViewDesignSystem, mobil
 /** Matches a route root and its nested detail pages. */
 function isActiveRoute(pathname: string, href: string) {
   return pathname === href || (href !== "/workspace" && pathname.startsWith(`${href}/`));
+}
+
+function routeAllowed(route: string, role: AppRole, canManageStaff: boolean, canViewDesignSystem: boolean) {
+  if (route === "workspace") return true;
+  if (route === "pos" || route === "kitchen") return roleHasPermission(role, { pos: ["operate"] });
+  if (route === "shifts") return roleHasPermission(role, { shift: ["view"] });
+  if (route === "attendance") return roleHasPermission(role, { attendance: ["clock"] });
+  if (route === "transactions") return roleHasPermission(role, { shift: ["view"] });
+  if (route === "reports") return roleHasPermission(role, { report: ["view"] });
+  if (route === "settlements") return roleHasPermission(role, { settlement: ["view"] });
+  if (route === "catalog") return roleHasPermission(role, { catalog: ["view"] });
+  if (route === "outlets") return roleHasPermission(role, { outlet: ["view"] });
+  if (route === "staff") return canManageStaff;
+  if (route === "settings") return roleHasPermission(role, { settings: ["view"] });
+  if (route === "design-system") return canViewDesignSystem;
+  return false;
 }

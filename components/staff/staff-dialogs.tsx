@@ -39,16 +39,18 @@ import { SearchableSelect } from "@/components/ui/searchable-select";
 import { Spinner } from "@/components/ui/spinner";
 import { useAutoCloseDialogAction } from "@/components/ui/use-auto-close-dialog-action";
 import type { AppRole } from "@/lib/auth/permissions";
-import type { StaffItem, StaffOutletOption, TemporaryCredentials } from "@/lib/staff/types";
+import type { StaffItem, StaffOutletOption, StaffPositionOption, TemporaryCredentials } from "@/lib/staff/types";
 import { initialStaffActionState } from "@/lib/staff/types";
 
 export function StaffFormDialog({
   actorRole,
   outlets,
+  positions,
   staff,
 }: {
   actorRole: AppRole;
   outlets: StaffOutletOption[];
+  positions: StaffPositionOption[];
   staff?: StaffItem;
 }) {
   const isEditing = Boolean(staff);
@@ -57,7 +59,7 @@ export function StaffFormDialog({
     initialStaffActionState,
     isEditing,
   );
-  const defaultRole = staff?.role === "manager" ? "manager" : "cashier";
+  const defaultRole = staff?.role === "manager" || staff?.role === "staff" ? staff.role : "cashier";
 
   return (
     <Dialog onOpenChange={setOpen} open={open}>
@@ -80,8 +82,13 @@ export function StaffFormDialog({
               {!staff && <StaffField autoComplete="off" errors={state.fieldErrors?.email} label="Email login" maxLength={160} name="email" placeholder="staf@glutong.id" type="email" />}
               <Field data-invalid={Boolean(state.fieldErrors?.role)}>
                 <FieldLabel htmlFor={`staff-role-${staff?.id ?? "new"}`}>Peran</FieldLabel>
-                <SearchableSelect defaultValue={defaultRole} id={`staff-role-${staff?.id ?? "new"}`} name="role" options={[...(actorRole === "owner" ? [{ label: "Manajer", value: "manager" }] : []), { label: "Kasir", value: "cashier" }]} placeholder="Cari peran" />
+                <SearchableSelect defaultValue={defaultRole} id={`staff-role-${staff?.id ?? "new"}`} name="role" options={[...(actorRole === "owner" ? [{ label: "Manajer", value: "manager" }] : []), { label: "Kasir", value: "cashier" }, { label: "Staf", value: "staff" }]} placeholder="Cari peran" />
                 <FieldError errors={toFieldErrors(state.fieldErrors?.role)} />
+              </Field>
+              <Field data-invalid={Boolean(state.fieldErrors?.jobPositionId)}>
+                <FieldLabel htmlFor={`staff-position-${staff?.id ?? "new"}`}>Jabatan</FieldLabel>
+                <SearchableSelect defaultValue={staff?.jobPosition?.id} id={`staff-position-${staff?.id ?? "new"}`} name="jobPositionId" options={positions.map((position) => ({ label: position.name, value: position.id }))} placeholder="Pilih jabatan" />
+                <FieldError errors={toFieldErrors(state.fieldErrors?.jobPositionId)} />
               </Field>
               <Field data-invalid={Boolean(state.fieldErrors?.outletIds)}>
                 <FieldLabel>Penugasan outlet</FieldLabel>
@@ -94,12 +101,12 @@ export function StaffFormDialog({
                   ))}
                   {outlets.length === 0 && <p className="p-2 text-sm text-muted-foreground">Belum ada outlet aktif yang dapat ditugaskan.</p>}
                 </div>
-                <p className="text-xs leading-5 text-muted-foreground">Kasir wajib memiliki tepat satu outlet; manajer dapat memiliki beberapa outlet.</p>
+                <p className="text-xs leading-5 text-muted-foreground">Kasir wajib tepat satu outlet; manajer dan staf dapat memiliki beberapa outlet.</p>
                 <FieldError errors={toFieldErrors(state.fieldErrors?.outletIds)} />
               </Field>
             </FieldGroup>
             {state.status !== "idle" && state.status !== "success" && <Alert variant="destructive"><AlertDescription>{state.message}</AlertDescription></Alert>}
-            <DialogFooter><Button disabled={pending || outlets.length === 0} type="submit">{pending && <Spinner />}{pending ? "Menyimpan…" : isEditing ? "Simpan penugasan" : "Buat staf"}</Button></DialogFooter>
+            <DialogFooter><Button disabled={pending || outlets.length === 0 || positions.length === 0} type="submit">{pending && <Spinner />}{pending ? "Menyimpan…" : isEditing ? "Simpan penugasan" : "Buat staf"}</Button></DialogFooter>
           </form>
         )}
       </DialogContent>

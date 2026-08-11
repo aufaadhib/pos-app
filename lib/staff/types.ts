@@ -4,11 +4,14 @@ export type StaffOutletOption = {
   name: string;
 };
 
+export type StaffPositionOption = { id: string; name: string };
+
 export type StaffItem = {
   id: string;
   name: string;
   email: string;
-  role: "owner" | "manager" | "cashier";
+  role: "owner" | "manager" | "cashier" | "staff";
+  jobPosition: StaffPositionOption | null;
   banned: boolean;
   mustChangePassword: boolean;
   outlets: StaffOutletOption[];

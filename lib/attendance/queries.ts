@@ -2,19 +2,21 @@ import "server-only";
 
 import { AttendanceExceptionStatus, OutletStatus, Prisma } from "@/generated/prisma/client";
 import type { AttendanceActor } from "@/lib/attendance/types";
+import { getPublishedRosterForUser } from "@/lib/attendance/roster-queries";
+import { attendanceDisplay, attendanceStatusLabels } from "@/lib/attendance/roster";
 import { prisma } from "@/lib/prisma";
 
 const attendancePageSize = 20;
 
 /** Loads the signed-in employee's profile, available outlets, open state, and recent records. */
 export async function getAttendanceHome(userId: string, role: AttendanceActor["role"]) {
-  const [profile, pendingReenrollment, outlets, openSession, recentSessions] = await Promise.all([
+  const [profile, pendingReenrollment, outlets, openSession, recentSessions, roster] = await Promise.all([
     prisma.faceProfile.findUnique({ where: { activeUserKey: userId }, select: { id: true, enrolledAt: true, modelVersion: true } }),
     prisma.faceReenrollmentRequest.findUnique({ where: { pendingUserKey: userId }, select: { id: true, requestedAt: true } }),
     prisma.outlet.findMany({
       where: { status: OutletStatus.ACTIVE, ...(role === "owner" ? {} : { assignments: { some: { userId } } }) },
       orderBy: { name: "asc" },
-      select: { id: true, code: true, name: true, attendanceEnabled: true, attendanceLatitude: true, attendanceLongitude: true, attendanceRadiusMeters: true },
+      select: { id: true, code: true, name: true, timezone: true, attendanceEnabled: true, attendanceLatitude: true, attendanceLongitude: true, attendanceRadiusMeters: true },
     }),
     prisma.attendanceSession.findUnique({ where: { openUserKey: userId }, include: { outlet: { select: { id: true, code: true, name: true, timezone: true } } } }),
     prisma.attendanceSession.findMany({
@@ -23,6 +25,7 @@ export async function getAttendanceHome(userId: string, role: AttendanceActor["r
       take: 10,
       include: { outlet: { select: { code: true, name: true, timezone: true } }, checkInAttempt: { select: { id: true, evidencePath: true, evidenceExpiresAt: true, evidenceDeletedAt: true } }, checkOutAttempt: { select: { id: true, evidencePath: true, evidenceExpiresAt: true, evidenceDeletedAt: true } }, corrections: { orderBy: { createdAt: "desc" }, take: 1 } },
     }),
+    getPublishedRosterForUser(userId),
   ]);
   return {
     profile: profile ? { ...profile, enrolledAt: profile.enrolledAt.toISOString() } : null,
@@ -30,6 +33,7 @@ export async function getAttendanceHome(userId: string, role: AttendanceActor["r
     outlets: outlets.map((outlet) => ({ ...outlet, attendanceLatitude: outlet.attendanceLatitude?.toNumber() ?? null, attendanceLongitude: outlet.attendanceLongitude?.toNumber() ?? null })),
     openSession: openSession ? { id: openSession.id, outlet: openSession.outlet, checkInAt: openSession.checkInAt.toISOString() } : null,
     recentSessions: recentSessions.map((session) => serializeAttendanceSession(session)),
+    roster,
   };
 }
 
@@ -74,7 +78,7 @@ export async function getAttendanceManagement(outletId: string, actor: Attendanc
 export async function getAttendanceSettings(outletId: string, actor: AttendanceActor) {
   const outlet = await prisma.outlet.findFirst({
     where: { id: outletId, status: OutletStatus.ACTIVE, ...(actor.role === "owner" ? {} : { assignments: { some: { userId: actor.id } } }) },
-    select: { id: true, code: true, name: true, addressLine: true, cityName: true, attendanceEnabled: true, attendanceLatitude: true, attendanceLongitude: true, attendanceRadiusMeters: true },
+    select: { id: true, code: true, name: true, addressLine: true, cityName: true, attendanceEnabled: true, attendanceLatitude: true, attendanceLongitude: true, attendanceRadiusMeters: true, attendanceLateGraceMinutes: true, attendanceEarlyLeaveGraceMinutes: true },
   });
   if (!outlet) return null;
   return { ...outlet, attendanceLatitude: outlet.attendanceLatitude?.toNumber() ?? null, attendanceLongitude: outlet.attendanceLongitude?.toNumber() ?? null };
@@ -101,16 +105,24 @@ export async function getAttendanceEvidencePath(attemptId: string, actor: Attend
 /** Returns attendance rows for a bounded, authorized CSV export. */
 export async function getAttendanceExportRows(outletId: string, from: Date, to: Date, actor: AttendanceActor, limit = 10_001) {
   await assertManagementOutlet(outletId, actor);
-  return prisma.attendanceSession.findMany({
-    where: { outletId, checkInAt: { gte: from, lte: to } },
-    orderBy: { checkInAt: "asc" },
-    take: limit,
-    include: { user: { select: { name: true, email: true } }, outlet: { select: { code: true, name: true, timezone: true } }, corrections: { orderBy: { createdAt: "desc" }, take: 1 } },
+  const [rosterEntries, unscheduled] = await Promise.all([
+    prisma.attendanceRosterEntry.findMany({ where: { outletId, workDate: { gte: from, lte: to }, rosterWeek: { status: "PUBLISHED" } }, orderBy: { workDate: "asc" }, take: limit, include: { user: { select: { name: true, email: true } }, outlet: { select: { code: true, name: true } }, session: { include: { corrections: { orderBy: { createdAt: "desc" }, take: 1 } } } } }),
+    prisma.attendanceSession.findMany({ where: { outletId, businessDate: { gte: from, lte: to }, scheduleMatch: "UNSCHEDULED" }, orderBy: { businessDate: "asc" }, take: limit, include: { user: { select: { name: true, email: true, jobPosition: { select: { name: true } } } }, outlet: { select: { code: true, name: true } }, corrections: { orderBy: { createdAt: "desc" }, take: 1 } } }),
+  ]);
+  const now = new Date();
+  const scheduledRows = rosterEntries.map((entry) => {
+    const correction = entry.session?.corrections[0];
+    const checkInAt = correction?.correctedCheckInAt ?? entry.session?.checkInAt ?? null;
+    const checkOutAt = correction?.correctedCheckOutAt ?? entry.session?.checkOutAt ?? null;
+    const display = attendanceDisplay({ now, scheduledStartAt: entry.scheduledStartAt, scheduledEndAt: entry.scheduledEndAt, lateGraceMinutes: entry.lateGraceMinutes, earlyLeaveGraceMinutes: entry.earlyLeaveGraceMinutes, checkInAt, checkOutAt, sessionOpen: entry.session?.status === "OPEN" });
+    return { businessDate: entry.workDate, outlet: entry.outlet, user: entry.user, positionName: entry.positionName, scheduledStartAt: entry.scheduledStartAt, scheduledEndAt: entry.scheduledEndAt, checkInAt, checkOutAt, status: attendanceStatusLabels[display.status], lateMinutes: display.lateMinutes, earlyLeaveMinutes: display.earlyLeaveMinutes, totalMinutes: display.totalMinutes, correctionReason: correction?.reason ?? "" };
   });
+  const unscheduledRows = unscheduled.map((session) => { const correction = session.corrections[0]; const checkInAt = correction?.correctedCheckInAt ?? session.checkInAt; const checkOutAt = correction?.correctedCheckOutAt ?? session.checkOutAt; return { businessDate: session.businessDate, outlet: session.outlet, user: session.user, positionName: session.user.jobPosition?.name ?? "", scheduledStartAt: null, scheduledEndAt: null, checkInAt, checkOutAt, status: attendanceStatusLabels.UNSCHEDULED, lateMinutes: 0, earlyLeaveMinutes: 0, totalMinutes: checkOutAt ? Math.max(0, Math.floor((checkOutAt.getTime() - checkInAt.getTime()) / 60_000)) : 0, correctionReason: correction?.reason ?? "" }; });
+  return [...scheduledRows, ...unscheduledRows].sort((left, right) => left.businessDate.getTime() - right.businessDate.getTime()).slice(0, limit);
 }
 
 async function assertManagementOutlet(outletId: string, actor: AttendanceActor) {
-  if (actor.role === "cashier") throw new Error("FORBIDDEN");
+  if (actor.role !== "owner" && actor.role !== "manager") throw new Error("FORBIDDEN");
   const outlet = await prisma.outlet.findFirst({ where: { id: outletId, ...(actor.role === "owner" ? {} : { assignments: { some: { userId: actor.id } } }) }, select: { id: true } });
   if (!outlet) throw new Error("FORBIDDEN");
 }

@@ -18,7 +18,7 @@ export async function updatePrinterSettings(
   input: PrinterSettingsInput,
   actor: PrinterSettingsActor,
 ): Promise<PrinterSettingsActionState> {
-  if (actor.role === "cashier") {
+  if (actor.role !== "owner" && actor.role !== "manager") {
     throw new PrinterSettingsError("FORBIDDEN", "Kasir tidak dapat mengubah pengaturan printer.");
   }
 

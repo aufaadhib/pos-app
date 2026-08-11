@@ -74,4 +74,20 @@ describe("workspace navigation", () => {
     expect(screen.queryByRole("link", { name: "Laporan" })).not.toBeInTheDocument();
     expect(screen.queryByRole("link", { name: "Pengaturan" })).not.toBeInTheDocument();
   });
+
+  it("shows staff only their workspace, attendance, and outlet routes", async () => {
+    const user = userEvent.setup();
+    render(<WorkspaceNavigation canManageStaff={false} canViewDesignSystem={false} role="staff" mobile />);
+
+    expect(screen.getByRole("link", { name: "Beranda" })).toBeVisible();
+    expect(screen.getByRole("link", { name: "Absensi" })).toBeVisible();
+    await user.click(screen.getByRole("button", { name: "Lainnya" }));
+    expect(screen.getByRole("link", { name: "Outlet" })).toBeVisible();
+    expect(screen.queryByRole("link", { name: "Kasir" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: "Shift" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: "Katalog" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: "Laporan" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: "Staf" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: "Pengaturan" })).not.toBeInTheDocument();
+  });
 });

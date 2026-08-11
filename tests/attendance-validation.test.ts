@@ -12,9 +12,10 @@ describe("attendance validation", () => {
   });
 
   it("bounds geofence radius and requires coordinates when enabled", () => {
-    expect(attendanceSettingsSchema.safeParse({ outletId: "outlet-1", attendanceEnabled: true, latitude: -6.2, longitude: 106.8, radiusMeters: 100 }).success).toBe(true);
-    expect(attendanceSettingsSchema.safeParse({ outletId: "outlet-1", attendanceEnabled: true, latitude: null, longitude: null, radiusMeters: 100 }).success).toBe(false);
-    expect(attendanceSettingsSchema.safeParse({ outletId: "outlet-1", attendanceEnabled: false, latitude: -6.2, longitude: 106.8, radiusMeters: 501 }).success).toBe(false);
+    const grace = { lateGraceMinutes: 15, earlyLeaveGraceMinutes: 15 };
+    expect(attendanceSettingsSchema.safeParse({ outletId: "outlet-1", attendanceEnabled: true, latitude: -6.2, longitude: 106.8, radiusMeters: 100, ...grace }).success).toBe(true);
+    expect(attendanceSettingsSchema.safeParse({ outletId: "outlet-1", attendanceEnabled: true, latitude: null, longitude: null, radiusMeters: 100, ...grace }).success).toBe(false);
+    expect(attendanceSettingsSchema.safeParse({ outletId: "outlet-1", attendanceEnabled: false, latitude: -6.2, longitude: 106.8, radiusMeters: 501, ...grace }).success).toBe(false);
   });
 
   it("rejects invalid accuracy, identifiers, and reversed corrections", () => {

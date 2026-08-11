@@ -28,6 +28,8 @@ type AttendanceSettingsOutlet = {
   attendanceLatitude: number | null;
   attendanceLongitude: number | null;
   attendanceRadiusMeters: number;
+  attendanceLateGraceMinutes: number;
+  attendanceEarlyLeaveGraceMinutes: number;
 };
 
 const defaultMapCenter = { latitude: -6.2, longitude: 106.816666 };
@@ -38,6 +40,8 @@ export function AttendanceSettingsForm({ outlet }: { outlet: AttendanceSettingsO
   const [latitude, setLatitude] = useState<number | null>(outlet.attendanceLatitude);
   const [longitude, setLongitude] = useState<number | null>(outlet.attendanceLongitude);
   const [radiusMeters, setRadiusMeters] = useState(outlet.attendanceRadiusMeters);
+  const [lateGraceMinutes, setLateGraceMinutes] = useState(outlet.attendanceLateGraceMinutes);
+  const [earlyLeaveGraceMinutes, setEarlyLeaveGraceMinutes] = useState(outlet.attendanceEarlyLeaveGraceMinutes);
   const [locating, setLocating] = useState(false);
   const [pending, startTransition] = useTransition();
   const mapValue = { latitude: latitude ?? defaultMapCenter.latitude, longitude: longitude ?? defaultMapCenter.longitude, radiusMeters };
@@ -62,7 +66,7 @@ export function AttendanceSettingsForm({ outlet }: { outlet: AttendanceSettingsO
 
   function save() {
     startTransition(async () => {
-      const result = await updateAttendanceSettingsAction({ outletId: outlet.id, attendanceEnabled: enabled, latitude, longitude, radiusMeters });
+      const result = await updateAttendanceSettingsAction({ outletId: outlet.id, attendanceEnabled: enabled, latitude, longitude, radiusMeters, lateGraceMinutes, earlyLeaveGraceMinutes });
       if (result.status === "success") toast.success(result.message);
       else toast.error(result.message);
     });
@@ -85,6 +89,7 @@ export function AttendanceSettingsForm({ outlet }: { outlet: AttendanceSettingsO
           <div className="grid gap-2"><Label htmlFor="attendance-longitude">Longitude</Label><Input id="attendance-longitude" inputMode="decimal" onChange={(event) => setLongitude(parseOptionalNumber(event.target.value))} placeholder="106.816666" step="0.000001" type="number" value={longitude ?? ""} /></div>
         </div>
         <div className="grid gap-2"><Label htmlFor="attendance-radius">Radius kehadiran</Label><div className="relative"><Input className="h-11 pr-16" id="attendance-radius" max={500} min={50} onChange={(event) => setRadiusMeters(Math.min(500, Math.max(50, Number(event.target.value) || 50)))} step={10} type="number" value={radiusMeters} /><span className="pointer-events-none absolute inset-y-0 right-3 flex items-center text-sm text-muted-foreground">meter</span></div><p className="text-xs text-muted-foreground">Minimal 50 m, maksimal 500 m. Handle hijau pada peta mengikuti angka ini.</p></div>
+        <div className="grid gap-4 rounded-xl border bg-muted/25 p-4 sm:grid-cols-2"><div className="grid gap-2"><Label htmlFor="attendance-late-grace">Toleransi terlambat</Label><div className="relative"><Input className="h-11 pr-16" id="attendance-late-grace" max={120} min={0} onChange={(event) => setLateGraceMinutes(Math.min(120, Math.max(0, Number(event.target.value) || 0)))} type="number" value={lateGraceMinutes} /><span className="pointer-events-none absolute inset-y-0 right-3 flex items-center text-sm text-muted-foreground">menit</span></div></div><div className="grid gap-2"><Label htmlFor="attendance-early-grace">Toleransi pulang cepat</Label><div className="relative"><Input className="h-11 pr-16" id="attendance-early-grace" max={120} min={0} onChange={(event) => setEarlyLeaveGraceMinutes(Math.min(120, Math.max(0, Number(event.target.value) || 0)))} type="number" value={earlyLeaveGraceMinutes} /><span className="pointer-events-none absolute inset-y-0 right-3 flex items-center text-sm text-muted-foreground">menit</span></div></div><p className="text-xs leading-5 text-muted-foreground sm:col-span-2">Nilai ini disalin ke roster saat diterbitkan agar histori tidak berubah ketika toleransi outlet diperbarui.</p></div>
         <Alert><ShieldCheck aria-hidden="true" /><AlertTitle>Validasi lokasi</AlertTitle><AlertDescription>Pembacaan GPS dengan akurasi lebih dari 100 meter akan ditolak. Lokasi hanya dibaca ketika staf menjalankan absensi.</AlertDescription></Alert>
         <Button className="min-h-11 w-full" disabled={pending} onClick={save} type="button">{pending ? <Spinner /> : <Save aria-hidden="true" />}{pending ? "Menyimpan…" : "Simpan pengaturan"}</Button>
       </div>

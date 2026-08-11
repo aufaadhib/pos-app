@@ -1,3 +1,5 @@
+import type { AppRole } from "@/lib/auth/permissions";
+
 export const catalogStatuses = ["active", "archived", "all"] as const;
 
 export type CatalogStatusFilter = (typeof catalogStatuses)[number];
@@ -11,7 +13,7 @@ export type CatalogActionState = {
 export type CatalogActor = {
   id: string;
   email: string;
-  role?: "owner" | "manager" | "cashier";
+  role?: AppRole;
 };
 
 export type VariantOptionItem = {

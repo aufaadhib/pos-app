@@ -18,7 +18,7 @@ export async function correctAttendanceSessionAction(rawInput: unknown): Promise
   return runManagerAction({ attendance: ["correct"] }, rawInput, attendanceCorrectionSchema.safeParse, correctAttendanceSession);
 }
 
-/** Reviews one cashier face reenrollment request in the manager's staff scope. */
+/** Reviews one cashier/staff face reenrollment request in the manager's staff scope. */
 export async function reviewFaceReenrollmentAction(rawInput: unknown): Promise<AttendanceActionState> {
   const session = await requirePermission({ attendance: ["manage"] });
   if (!isAppRole(session.user.role)) return { status: "error", message: "Peran akun tidak valid." };

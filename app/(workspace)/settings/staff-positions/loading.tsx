@@ -1,0 +1,2 @@
+import { Skeleton } from "@/components/ui/skeleton";
+export default function StaffPositionsLoading() { return <main aria-busy="true" className="mx-auto w-full max-w-6xl px-4 py-6 sm:px-8 sm:py-8"><Skeleton className="h-40 rounded-2xl" /><div className="mt-6 grid gap-3 sm:grid-cols-2 xl:grid-cols-3">{Array.from({ length: 6 }, (_, index) => <Skeleton className="h-40 rounded-xl" key={index} />)}</div></main>; }

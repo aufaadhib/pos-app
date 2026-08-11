@@ -8,6 +8,7 @@ describe("staff validation", () => {
       name: "  Sari   Utami ",
       email: "SARI@EXAMPLE.COM",
       role: "manager",
+      jobPositionId: "position-manager",
       outletIds: ["outlet-a", "outlet-a", "outlet-b"],
     });
     expect(parsed.email).toBe("sari@example.com");

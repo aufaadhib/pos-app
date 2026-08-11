@@ -1,6 +1,6 @@
 # Glutong POS
 
-Fondasi aplikasi POS untuk kafe/restoran: login staf dengan Better Auth, RBAC, Prisma 7, Neon PostgreSQL, workspace terlindungi, katalog master multi-outlet, transaksi outlet, varian, modifier, laporan operasional, penugasan staf, absensi wajah/lokasi, dan design system responsif.
+Fondasi aplikasi POS untuk kafe/restoran: login staf dengan Better Auth, RBAC, Prisma 7, Neon PostgreSQL, workspace terlindungi, katalog master multi-outlet, transaksi outlet, varian, modifier, laporan operasional, penugasan staf, roster, absensi wajah/lokasi, dan design system responsif.
 
 Rencana pengembangan berikutnya tersedia di [`docs/roadmap.md`](docs/roadmap.md).
 
@@ -109,12 +109,14 @@ Migration `add_receipt_printer_settings` menambahkan ukuran kertas dan footer st
 
 ### Absensi karyawan
 
-Migration `add_employee_attendance` menambahkan profil wajah terenkripsi, challenge sekali pakai, attempt dan foto bukti privat, sesi masuk/pulang, pengecualian, koreksi append-only, audit, serta geofence outlet. Migration `add_face_reenrollment_approval` menambahkan antrean persetujuan daftar ulang kasir.
+Migration `add_employee_attendance` menambahkan profil wajah terenkripsi, challenge sekali pakai, attempt dan foto bukti privat, sesi masuk/pulang, pengecualian, koreksi append-only, audit, serta geofence outlet. Migration `add_face_reenrollment_approval` menambahkan antrean persetujuan daftar ulang. Migration `add_staff_roles_and_rosters` menambahkan role staf terbatas, jabatan kerja, template shift, roster mingguan, snapshot jadwal, dan toleransi outlet.
 
 - Setiap staf menggunakan akun Better Auth sendiri. Pencocokan selalu `1:1` terhadap profil akun login, bukan pencarian wajah seluruh staf.
-- `/attendance` mendukung pendaftaran tiga sampel, check-in/check-out, liveness ringan, GPS maksimal 100 m, geofence 50–500 m, dan riwayat pribadi. Pendaftaran pertama langsung aktif; daftar ulang kasir mempertahankan profil lama sampai salah satu owner/manager menyetujui sampel baru. Mode tablet bersama hanya menyimpan preferensi logout otomatis di browser dengan key `glutong:attendance:shared-device`.
+- `/attendance` mendukung pendaftaran tiga sampel, check-in/check-out, liveness ringan, GPS maksimal 100 m, geofence 50–500 m, roster dua minggu, dan riwayat pribadi. Pendaftaran pertama langsung aktif; daftar ulang kasir/staf mempertahankan profil lama sampai salah satu owner/manager menyetujui sampel baru. Mode tablet bersama hanya menyimpan preferensi logout otomatis di browser dengan key `glutong:attendance:shared-device`.
 - `/settings/attendance` menyediakan peta OpenStreetMap interaktif: pusat dan handle radius dapat digeser, lokasi perangkat dapat dipakai, dan koordinat/radius manual tetap tersinkron dua arah.
-- Setelah tiga kegagalan dalam verification session 15 menit, staf dapat meminta pengecualian. `/attendance/manage` membatasi manager ke outlet penugasannya, menolak self-approval, menyediakan review daftar ulang kasir, koreksi waktu append-only, pembatalan profil, serta ekspor CSV maksimal 10.000 baris.
+- Setelah tiga kegagalan dalam verification session 15 menit, staf dapat meminta pengecualian. `/attendance/manage` membatasi manager ke outlet penugasannya, menolak self-approval, menyediakan review daftar ulang kasir/staf, ringkasan jadwal hari ini, koreksi waktu append-only, pembatalan profil, serta ekspor CSV maksimal 10.000 baris.
+- `/attendance/roster` menyediakan template shift per outlet, papan Senin–Minggu, draf, salin minggu lalu, publish, dan perubahan shift masa depan dengan alasan audit. Satu staf hanya boleh memiliki satu shift per tanggal secara global; shift lintas tengah malam tetap memakai zona waktu outlet.
+- Check-in terjadwal dapat dimulai dua jam sebelum shift. Absensi yang tidak cocok roster tetap boleh dilanjutkan setelah konfirmasi dan ditandai **Di luar jadwal**. Toleransi terlambat dan pulang cepat diatur per outlet dengan default 15 menit.
 - Waktu server menjadi sumber kebenaran dan tanggal bisnis mengikuti zona outlet. Satu staf hanya dapat memiliki satu sesi terbuka; check-out wajib pada outlet check-in.
 - Foto attempt disimpan pada Vercel Blob private terpisah dan cron menghapusnya setelah 30 hari. Embedding probe tidak disimpan; template aktif dan sampel daftar ulang pending dienkripsi AES-256-GCM. Payload pending dihapus setelah keputusan, sedangkan template lama baru dihapus ketika penggantian disetujui.
 - Liveness browser hanya mitigasi ringan, bukan jaminan anti-spoof tingkat tinggi. Model dan threshold `0,60` wajib dikalibrasi lagi pada tablet/ponsel Android nyata sebelum dipakai sebagai dasar payroll.
@@ -187,6 +189,7 @@ Route utama:
 - `/shifts/[shiftId]` — rincian rekonsiliasi, pembayaran, movement, transaksi, dan audit shift.
 - `/attendance` — pendaftaran wajah serta absensi masuk/pulang milik akun aktif.
 - `/attendance/manage` — review pengecualian, koreksi, profil wajah, dan ekspor untuk owner/manager.
+- `/attendance/roster` — template shift dan roster mingguan outlet aktif untuk owner/manager.
 - `/transactions` — riwayat struk outlet aktif.
 - `/transactions/[saleId]` — rincian snapshot transaksi yang sudah dibayar.
 - `/settlements` — konfigurasi harga ojol, piutang platform, dan rekonsiliasi batch untuk owner/manager.
@@ -198,17 +201,19 @@ Route utama:
 - `/staff` — roster staf; owner mengelola manager/kasir, manager mengelola kasir pada outlet tugasnya.
 - `/settings` — pengaturan operasional outlet aktif untuk owner/manager.
 - `/settings/attendance` — editor peta, koordinat, radius, dan status absensi outlet aktif.
+- `/settings/staff-positions` — konfigurasi jabatan kerja global khusus owner.
 - `/select-outlet` — memilih konteks outlet aktif untuk session.
 - `/change-password` — penggantian wajib untuk password sementara.
 - `/design-system` — referensi UI khusus owner.
 
 ## Outlet dan staf
 
-Migration `add_outlets_staff` menambahkan outlet, penugasan user-outlet, outlet aktif pada session, kewajiban ganti password, dan audit administratif. Aturan utamanya:
+Migration `add_outlets_staff` menambahkan outlet, penugasan user-outlet, outlet aktif pada session, kewajiban ganti password, dan audit administratif. Migration `add_staff_roles_and_rosters` memisahkan role akses dari jabatan kerja. Aturan utamanya:
 
 - Hanya owner yang dapat membuat, mengubah, mengarsipkan, atau memulihkan outlet.
-- Manager dapat ditugaskan ke beberapa outlet; kasir wajib tepat satu outlet.
-- Manager hanya dapat mengelola kasir di outlet yang juga ditugaskan kepadanya.
+- Manager dan staf biasa dapat ditugaskan ke beberapa outlet; kasir wajib tepat satu outlet.
+- Manager hanya dapat mengelola kasir/staf biasa di outlet yang juga ditugaskan kepadanya. Hanya owner yang dapat membuat, mengubah, mengarsipkan, atau memulihkan jabatan.
+- Role `staff` hanya memperoleh workspace, daftar outlet, absensi pribadi, dan profil. Nama jabatan tidak menambah permission aplikasi.
 - Staf baru menerima password sementara 16 karakter yang hanya tampil sekali dan wajib diganti saat login pertama.
 - Nonaktifkan staf dan reset password mencabut seluruh session; akun tidak dihapus permanen.
 - Provinsi serta kabupaten/kota diverifikasi melalui `wilayah.web.id`; alamat jalan tetap opsional.

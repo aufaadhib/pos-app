@@ -2,7 +2,7 @@
 
 Dokumen ini adalah sumber utama rencana pengembangan Glutong POS. Perbarui status dan keputusan di sini sebelum memulai milestone baru. Fitur yang sudah selesai tetap didokumentasikan secara operasional di [`README.md`](../README.md), sedangkan aturan implementasi yang berlaku permanen tetap berada di [`AGENTS.md`](../AGENTS.md).
 
-Terakhir diperbarui: 9 Agustus 2026
+Terakhir diperbarui: 11 Agustus 2026
 
 ## Status
 
@@ -28,8 +28,8 @@ Hanya satu milestone utama yang sebaiknya berstatus `In Progress` agar perubahan
 
 | Area | Status | Ringkasan |
 | --- | --- | --- |
-| Authentication dan RBAC | Completed | Better Auth, owner/manager/cashier, password sementara, dan pencabutan session |
-| Outlet dan staf | Completed | Multi-outlet, penugasan staf, outlet aktif, wilayah, dan audit administratif |
+| Authentication dan RBAC | Completed | Better Auth, owner/manager/cashier/staff, password sementara, dan pencabutan session |
+| Outlet dan staf | Completed | Multi-outlet, jabatan kerja terpisah dari role, penugasan staf, outlet aktif, wilayah, dan audit administratif |
 | Katalog | Completed | Kategori, produk, varian, modifier, gambar, harga dan ketersediaan outlet |
 | Register POS | Completed | Dine-in, takeaway, delivery, perhitungan pajak/layanan, dan pembayaran satu metode |
 | Transaksi dan struk | Completed | Nomor struk outlet, snapshot item, riwayat, rincian transaksi, dan audit create |
@@ -48,7 +48,8 @@ Hanya satu milestone utama yang sebaiknya berstatus `In Progress` agar perubahan
 | 6 | Diskon, promo, split payment, dan pelanggan | Planned | Refund dan laporan dasar | Metode pembayaran serta retensi pelanggan menjadi lebih fleksibel |
 | 7 | Printer struk dan Kitchen Display System | Deferred | Open order | Browser printing pelanggan selesai; perangkat dapur dan integrasi printer menunggu pembelian serta pengujian perangkat |
 | 8 | Integrasi platform eksternal | Planned | Order, settlement, dan laporan stabil | Input manual dapat dikurangi melalui impor atau koneksi resmi |
-| 9 | Absensi karyawan berbasis wajah dan lokasi | In Progress | Authentication, staf, outlet, RBAC, dan audit | Implementasi web selesai; aktivasi menunggu migration deployment dan pilot perangkat Android nyata |
+| 9 | Absensi karyawan berbasis wajah dan lokasi | Deferred | Authentication, staf, outlet, RBAC, dan audit | Implementasi web selesai; aktivasi operasional menunggu migration deployment dan pilot perangkat Android nyata |
+| 10 | Role staf, jabatan, dan roster absensi | In Progress | Absensi, outlet, staf, RBAC, dan audit | Jadwal kerja per outlet dapat diterbitkan, dicocokkan saat absensi, dan dilaporkan tanpa membuka akses POS |
 
 ## Milestone 1 — Shift kasir dan tutup kas
 
@@ -259,15 +260,15 @@ Integrasi harus dikembangkan bertahap. Jangan menjanjikan API langsung sebelum a
 
 ## Milestone 9 — Absensi karyawan berbasis wajah dan lokasi
 
-Status: `In Progress`. Implementasi web, schema, migration, RBAC, verifikasi `1:1`, geofence, pengecualian, koreksi, laporan, retensi, UI responsif, test, dan production build sudah tersedia. Status baru menjadi `Completed` setelah migration diterapkan pada environment tujuan serta pilot kamera/GPS pada Android tablet dan ponsel mengalibrasi threshold nyata.
+Status: `Deferred`. Implementasi web, schema, migration, RBAC, verifikasi `1:1`, geofence, pengecualian, koreksi, laporan, retensi, UI responsif, test, dan production build sudah tersedia. Aktivasi operasional sengaja ditunda sampai migration diterapkan pada environment tujuan serta pilot kamera/GPS pada Android tablet dan ponsel mengalibrasi threshold nyata. Pengembangan software aktif dilanjutkan pada Milestone 10.
 
 ### Status implementasi
 
 - `/attendance`, `/attendance/manage`, dan `/settings/attendance` sudah tersedia sebagai halaman dynamic dengan skeleton responsif.
-- Enrollment tiga sampel, persetujuan daftar ulang kasir, template AES-256-GCM, nonce sekali pakai, similarity `0,60`, liveness ringan, geofence, idempotency, dan sesi masuk/pulang dijalankan di server sesuai scope akun/outlet.
+- Enrollment tiga sampel, persetujuan daftar ulang kasir/staf, template AES-256-GCM, nonce sekali pakai, similarity `0,60`, liveness ringan, geofence, idempotency, dan sesi masuk/pulang dijalankan di server sesuai scope akun/outlet.
 - Peta OSM menyinkronkan marker pusat, handle radius 44 px, lokasi perangkat, serta input koordinat/radius manual.
 - Foto JPEG maksimal 300 KB disimpan privat selama 30 hari dan dihapus melalui Vercel Cron; akses bukti selalu melalui Route Handler terotorisasi.
-- Pengecualian setelah tiga kegagalan, review daftar ulang kasir oleh owner/manager, larangan self-approval, koreksi append-only, revoke profile, CSV, dan pembersihan profil saat staf dinonaktifkan sudah diterapkan.
+- Pengecualian setelah tiga kegagalan, review daftar ulang kasir/staf oleh owner/manager, larangan self-approval, koreksi append-only, revoke profile, CSV, dan pembersihan profil saat staf dinonaktifkan sudah diterapkan.
 - Prisma validate/generate, Next typegen, seluruh test, lint, typecheck, dan production build lulus. Migration production tetap manual.
 - Tersisa sebelum `Completed`: konfigurasi secret/store, `prisma migrate deploy`, serta pilot Android nyata untuk izin kamera/GPS, performa WebGL/WASM, kondisi cahaya, false accept/reject, dan threshold.
 
@@ -316,7 +317,7 @@ Mencatat waktu masuk dan pulang staf dengan bukti wajah, lokasi outlet, waktu se
 
 ### Belum termasuk
 
-- Jadwal/roster kerja, status terlambat atau pulang cepat, istirahat, lembur, cuti, payroll, dan perhitungan gaji.
+- Jadwal/roster kerja serta status terlambat/pulang cepat dipindahkan ke Milestone 10. Istirahat, lembur, cuti, payroll, dan perhitungan gaji tetap belum termasuk.
 - Mode offline, aplikasi Android native, device attestation, dan jaminan anti-spoof setara layanan liveness khusus.
 - Pelacakan lokasi terus-menerus; koordinat hanya diminta ketika enrollment atau absensi dijalankan.
 
@@ -331,6 +332,44 @@ Mencatat waktu masuk dan pulang staf dengan bukti wajah, lokasi outlet, waktu se
 - Pilot pada Android tablet dan Android phone membuktikan login akun sendiri, verifikasi `1:1`, serta model/fallback dapat digunakan tanpa menghambat navigasi aplikasi lain.
 - Loading, camera/location permission, empty, success, failure, dan review state dapat digunakan pada mobile, tablet, serta desktop tanpa overflow horizontal.
 - README dan dokumentasi fungsi baru diperbarui hanya setelah implementasi selesai dan milestone siap ditandai `Completed`.
+
+## Milestone 10 — Role staf, jabatan, dan roster absensi
+
+Status: `In Progress`. Implementasi dan migration tersedia; status baru menjadi `Completed` setelah seluruh quality check lulus dan migration diterapkan pada environment tujuan. Pilot kamera/GPS tetap mengikuti status operasional Milestone 9.
+
+### Tujuan
+
+Memisahkan jabatan pekerjaan dari hak akses aplikasi serta menghubungkan jadwal kerja outlet ke check-in/check-out tanpa menambah scope payroll.
+
+### Cakupan MVP
+
+- Role `staff` hanya dapat membuka workspace, outlet yang ditugaskan, absensi pribadi, dan profil; POS, shift kasir, katalog, laporan, pengelolaan staf, pengaturan, roster, dan review ditolak secara default.
+- Jabatan kerja dikelola global oleh owner dan tidak memberi permission. Manager dapat mengelola akun kasir/staf biasa dalam cakupan outletnya, sedangkan privilege escalation ke manager tetap ditolak.
+- Kasir tetap ditugaskan tepat ke satu outlet. Manager dan staf biasa dapat ditugaskan ke beberapa outlet.
+- Template shift dimiliki outlet, menyimpan jam mulai/selesai, dan mendukung shift lintas tengah malam.
+- Roster memakai minggu Senin–Minggu, satu shift per staf per tanggal secara global, draf atomik, salin minggu lalu, publish, optimistic concurrency, snapshot zona waktu/jabatan/toleransi, dan audit.
+- Roster terbit tidak kembali menjadi draf. Shift masa depan dapat diganti dengan alasan wajib; jadwal yang sudah mulai atau berlalu dikunci.
+- Staf melihat roster terbit minggu berjalan dan minggu berikutnya. Check-in terjadwal dibuka dua jam sebelum shift; check-in lain membutuhkan konfirmasi **Di luar jadwal** dan tetap tercatat untuk ditinjau.
+- Toleransi terlambat dan pulang cepat diatur per outlet 0–120 menit dengan default 15 menit. Ringkasan manager dan CSV menampilkan jabatan, jadwal, status, menit terlambat/pulang cepat, serta total jam.
+
+### Interface dan data
+
+- Migration `add_staff_roles_and_rosters` menambahkan `StaffPosition`, `AttendanceShiftTemplate`, `AttendanceRosterWeek`, `AttendanceRosterEntry`, schedule match pada verification/session, jabatan pada user, serta toleransi outlet.
+- `/settings/staff-positions` hanya untuk owner. `/attendance/roster` hanya untuk owner/manager pada outlet aktif. `/attendance` tetap menjadi halaman semua role untuk absensi akun sendiri.
+- Constraint database `userId + workDate` mencegah satu staf dijadwalkan di dua outlet pada tanggal yang sama; semua mutation roster berjalan dalam transaction dan menulis audit before/after yang relevan.
+- Layout papan desktop berubah menjadi kartu per hari pada tablet/mobile dan loading skeleton mengikuti bentuk masing-masing viewport tanpa overflow horizontal.
+
+### Belum termasuk
+
+- Istirahat, split shift, lembur, cuti/izin, tukar shift mandiri, payroll, perhitungan gaji, dan notifikasi jadwal.
+- Roster berulang tanpa tanggal, kebutuhan tenaga per posisi, auto-scheduling, serta integrasi kalender eksternal.
+
+### Kriteria selesai
+
+- Permission role staff, aturan penugasan outlet, scope manager, jabatan owner-only, dan pencegahan privilege escalation memiliki test.
+- Shift lintas tengah malam, jendela dua jam, batas toleransi, status absensi, duplikasi global, publish, revisi masa depan, dan lock jadwal lalu memiliki test.
+- Prisma format/validate/generate, Next typegen, seluruh test, lint, typecheck, production build, dan pemeriksaan migration lulus.
+- Halaman jabatan, roster, absensi pribadi, dan ringkasan manager dapat digunakan pada mobile, tablet, dan desktop.
 
 ## Definition of Done setiap milestone
 
@@ -370,7 +409,9 @@ Mencatat waktu masuk dan pulang staf dengan bukti wajah, lokasi outlet, waktu se
 | 9 Agustus 2026 | Absensi wajah dan geofence direncanakan sebagai Milestone 9 | Setiap staf memakai akun sendiri dan verifikasi wajah `1:1` pada tablet atau ponsel; geofence default 100 meter, pengecualian setelah tiga kegagalan, serta retensi foto 30 hari |
 | 9 Agustus 2026 | Geofence dikonfigurasi melalui peta dan input radius dua arah | Owner/manager dapat melihat cakupan nyata, menggeser pusat, serta mengubah radius lewat drag atau angka tanpa menebak koordinat mentah |
 | 9 Agustus 2026 | Milestone 7 ditunda dan Milestone 9 menjadi aktif | Printer Bluetooth menunggu perangkat EPPOS RPP02; absensi web selesai di source tetapi tetap `In Progress` sampai migration deployment dan pilot Android nyata lulus |
-| 11 Agustus 2026 | Daftar ulang wajah kasir memerlukan satu persetujuan owner atau manager | Template lama tetap aktif selama review; sampel baru terenkripsi dan dihapus dari request setelah disetujui atau ditolak |
+| 11 Agustus 2026 | Daftar ulang wajah kasir/staff memerlukan satu persetujuan owner atau manager | Template lama tetap aktif selama review; sampel baru terenkripsi dan dihapus dari request setelah disetujui atau ditolak |
+| 11 Agustus 2026 | Role akses `staff` dipisahkan dari jabatan kerja | Pelayan, barista, dan pekerjaan lain perlu absensi serta outlet tanpa otomatis memperoleh akses POS atau pengelolaan |
+| 11 Agustus 2026 | Roster memakai satu shift per staf per tanggal secara global | Staf multi-outlet tidak boleh memiliki jadwal bertabrakan; snapshot menjaga histori tetap benar setelah template, jabatan, zona waktu, atau toleransi berubah |
 
 ## Cara memperbarui roadmap
 

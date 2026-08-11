@@ -127,7 +127,7 @@ export async function closeCashShift(input: CloseCashShiftInput, actor: ShiftAct
 
 /** Force-closes another operator's shift with elevated permission and a mandatory reason. */
 export async function forceCloseCashShift(input: ForceCloseCashShiftInput, actor: ShiftActor): Promise<ShiftActionState> {
-  if (actor.role === "cashier") throw new CashShiftError("FORBIDDEN", "Kasir tidak dapat menutup shift staf lain.");
+  if (actor.role !== "owner" && actor.role !== "manager") throw new CashShiftError("FORBIDDEN", "Akun ini tidak dapat menutup shift staf lain.");
   return completeCashShift(input, actor, CashShiftCloseMode.FORCED, input.reason);
 }
 

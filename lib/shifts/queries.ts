@@ -62,7 +62,7 @@ export async function getCashShiftPage(input: {
   if (!(await canAccessOutlet(input.outletId, input.actor))) return null;
   const scope = {
     outletId: input.outletId,
-    ...(input.actor.role === "cashier" ? { openedByUserId: input.actor.id } : {}),
+    ...(input.actor.role === "owner" || input.actor.role === "manager" ? {} : { openedByUserId: input.actor.id }),
   } satisfies Prisma.CashShiftWhereInput;
   const where = {
     ...scope,
@@ -107,7 +107,7 @@ export async function getCashShiftDetail(input: {
     where: {
       id: input.shiftId,
       outletId: input.outletId,
-      ...(input.actor.role === "cashier" ? { openedByUserId: input.actor.id } : {}),
+      ...(input.actor.role === "owner" || input.actor.role === "manager" ? {} : { openedByUserId: input.actor.id }),
     },
     select: {
       ...shiftListSelect,

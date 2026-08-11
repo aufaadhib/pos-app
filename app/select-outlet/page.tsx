@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
+import { redirect } from "next/navigation";
 import { Clock3, Store } from "lucide-react";
 
 import { OutletSelector } from "@/components/outlets/outlet-selector";
@@ -15,7 +16,8 @@ export const metadata: Metadata = { title: "Pilih Outlet" };
 
 export default async function SelectOutletPage() {
   const session = await requirePermission({ outlet: ["view"] });
-  const role = isAppRole(session.user.role) ? session.user.role : "cashier";
+  if (!isAppRole(session.user.role)) redirect("/workspace?access=denied");
+  const role = session.user.role;
   const [outlets, shift] = await Promise.all([
     getAccessibleOutlets(session.user.id, role),
     getCurrentCashShift(session.user.id),

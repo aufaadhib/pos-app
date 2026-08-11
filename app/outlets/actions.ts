@@ -3,7 +3,7 @@
 import { revalidatePath } from "next/cache";
 import type { ZodType } from "zod";
 
-import { isAppRole } from "@/lib/auth/permissions";
+import { isAppRole, type AppRole } from "@/lib/auth/permissions";
 import { requirePermission } from "@/lib/auth/session";
 import {
   archiveOutlet,
@@ -45,7 +45,7 @@ export async function restoreOutletAction(_state: OutletActionState, formData: F
 async function executeOutletAction<Input>(
   schema: ZodType<Input>,
   formData: FormData,
-  mutation: (input: Input, actor: { id: string; email: string; role: "owner" | "manager" | "cashier" }) => Promise<unknown>,
+  mutation: (input: Input, actor: { id: string; email: string; role: AppRole }) => Promise<unknown>,
   successMessage: string,
 ): Promise<OutletActionState> {
   const session = await requirePermission({ outlet: ["manage"] });

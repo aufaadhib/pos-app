@@ -3,7 +3,7 @@ import "server-only";
 import { Prisma } from "@/generated/prisma/client";
 import type { AppRole } from "@/lib/auth/permissions";
 import { prisma } from "@/lib/prisma";
-import type { StaffItem, StaffPage, StaffOutletOption } from "@/lib/staff/types";
+import type { StaffItem, StaffPage, StaffOutletOption, StaffPositionOption } from "@/lib/staff/types";
 import type { StaffSearch } from "@/lib/staff/validation";
 
 const staffPageSize = 20;
@@ -13,7 +13,7 @@ export async function getStaff(
   actor: { id: string; role: AppRole },
 ): Promise<StaffPage> {
   const managerOutletScope: Prisma.UserWhereInput = actor.role === "manager" ? {
-    role: "cashier",
+    role: { in: ["cashier", "staff"] },
     outletAssignments: {
       some: { outlet: { assignments: { some: { userId: actor.id } } } },
     },
@@ -46,6 +46,7 @@ export async function getStaff(
       banned: true,
       mustChangePassword: true,
       updatedAt: true,
+      jobPosition: { select: { id: true, name: true } },
       outletAssignments: {
         orderBy: { outlet: { name: "asc" } },
         select: { outlet: { select: { id: true, code: true, name: true } } },
@@ -55,7 +56,7 @@ export async function getStaff(
 
   return {
     items: users.flatMap((user) => {
-      if (user.role !== "owner" && user.role !== "manager" && user.role !== "cashier") return [];
+      if (user.role !== "owner" && user.role !== "manager" && user.role !== "cashier" && user.role !== "staff") return [];
       return [{
         id: user.id,
         name: user.name,
@@ -65,6 +66,7 @@ export async function getStaff(
         mustChangePassword: user.mustChangePassword,
         outlets: user.outletAssignments.map((assignment) => assignment.outlet),
         updatedAt: user.updatedAt.toISOString(),
+        jobPosition: user.jobPosition,
       } satisfies StaffItem];
     }),
     page,
@@ -75,7 +77,7 @@ export async function getStaff(
 }
 
 export async function getManageableOutlets(userId: string, role: AppRole): Promise<StaffOutletOption[]> {
-  if (role === "cashier") return [];
+  if (role !== "owner" && role !== "manager") return [];
   return prisma.outlet.findMany({
     where: {
       status: "ACTIVE",
@@ -84,4 +86,9 @@ export async function getManageableOutlets(userId: string, role: AppRole): Promi
     orderBy: { name: "asc" },
     select: { id: true, code: true, name: true },
   });
+}
+
+/** Lists active job positions that an authorized staff manager may assign. */
+export async function getManageablePositions(): Promise<StaffPositionOption[]> {
+  return prisma.staffPosition.findMany({ where: { status: "ACTIVE" }, orderBy: { name: "asc" }, select: { id: true, name: true } });
 }

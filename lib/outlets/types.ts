@@ -1,7 +1,9 @@
+import type { AppRole } from "@/lib/auth/permissions";
+
 export type AdminActor = {
   id: string;
   email: string;
-  role: "owner" | "manager" | "cashier";
+  role: AppRole;
 };
 
 export type OutletItem = {

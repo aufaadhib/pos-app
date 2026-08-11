@@ -1,4 +1,5 @@
-export type OrderActor = { id: string; name: string; email: string; role: "owner" | "manager" | "cashier" };
+import type { AppRole } from "@/lib/auth/permissions";
+export type OrderActor = { id: string; name: string; email: string; role: AppRole };
 
 export type OrderActionState = {
   status: "success" | "error" | "conflict";

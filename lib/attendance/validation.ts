@@ -16,6 +16,7 @@ export const attendanceEnrollmentSchema = z.object({
 export const attendanceChallengeSchema = z.object({
   outletId: z.string().trim().min(1),
   kind: z.enum(["CHECK_IN", "CHECK_OUT"]),
+  unscheduledAcknowledged: z.boolean().default(false),
 });
 
 export const attendanceVerificationSchema = z.object({
@@ -38,6 +39,8 @@ export const attendanceSettingsSchema = z.object({
   latitude: z.number().min(-90).max(90).nullable(),
   longitude: z.number().min(-180).max(180).nullable(),
   radiusMeters: z.number().int().min(50).max(500),
+  lateGraceMinutes: z.number().int().min(0).max(120),
+  earlyLeaveGraceMinutes: z.number().int().min(0).max(120),
 }).superRefine((value, context) => {
   if ((value.latitude === null) !== (value.longitude === null) || (value.attendanceEnabled && value.latitude === null)) {
     context.addIssue({ code: "custom", message: "Tentukan titik pusat outlet sebelum mengaktifkan absensi." });

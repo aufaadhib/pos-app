@@ -1,11 +1,12 @@
 import type { Metadata } from "next";
 import Link from "next/link";
+import { redirect } from "next/navigation";
 import { AlertCircle, BookOpen, CalendarCheck2, Clock3, Coffee, HandCoins, MapPin, ReceiptText, ShieldCheck, Store, Users, WalletCards } from "lucide-react";
 
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { isAppRole, roleLabels } from "@/lib/auth/permissions";
+import { isAppRole, roleHasPermission, roleLabels } from "@/lib/auth/permissions";
 import { requirePermission } from "@/lib/auth/session";
 import { requireActiveOutlet } from "@/lib/outlets/context";
 
@@ -24,7 +25,8 @@ export default async function WorkspacePage({ searchParams }: WorkspacePageProps
     requirePermission({ workspace: ["view"] }),
     searchParams,
   ]);
-  const role = isAppRole(session.user.role) ? session.user.role : "cashier";
+  if (!isAppRole(session.user.role)) redirect("/workspace?access=denied");
+  const role = session.user.role;
   const activeOutlet = await requireActiveOutlet(session);
   const currentTime = new Intl.DateTimeFormat("id-ID", {
     timeZone: activeOutlet.timezone,
@@ -87,7 +89,7 @@ export default async function WorkspacePage({ searchParams }: WorkspacePageProps
           </div>
 
           <div className="mt-5 grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
-            <Link className="rounded-xl focus-visible:ring-3 focus-visible:ring-ring/40 focus-visible:outline-none" href="/catalog">
+            {roleHasPermission(role, { catalog: ["view"] }) && <Link className="rounded-xl focus-visible:ring-3 focus-visible:ring-ring/40 focus-visible:outline-none" href="/catalog">
               <Card className="h-full border border-border shadow-none transition-colors hover:border-primary">
                 <CardHeader>
                   <BookOpen aria-hidden="true" className="mb-3 size-6 text-primary" />
@@ -95,20 +97,20 @@ export default async function WorkspacePage({ searchParams }: WorkspacePageProps
                   <CardDescription>Lihat kategori, produk, SKU, dan harga dasar.</CardDescription>
                 </CardHeader>
               </Card>
-            </Link>
-            <Link className="rounded-xl focus-visible:ring-3 focus-visible:ring-ring/40 focus-visible:outline-none" href="/pos">
+            </Link>}
+            {roleHasPermission(role, { pos: ["operate"] }) && <Link className="rounded-xl focus-visible:ring-3 focus-visible:ring-ring/40 focus-visible:outline-none" href="/pos">
               <Card className="h-full border border-border shadow-none transition-colors hover:border-primary"><CardHeader>
                 <Coffee aria-hidden="true" className="mb-3 size-6 text-primary" />
                 <CardTitle>Kasir & pesanan</CardTitle>
                 <CardDescription>Buat pesanan dine-in atau takeaway dan selesaikan pembayaran.</CardDescription>
               </CardHeader></Card>
-            </Link>
-            <Link className="rounded-xl focus-visible:ring-3 focus-visible:ring-ring/40 focus-visible:outline-none" href="/shifts"><Card className="h-full border border-border shadow-none transition-colors hover:border-primary"><CardHeader><WalletCards aria-hidden="true" className="mb-3 size-6 text-primary" /><CardTitle>Shift kasir</CardTitle><CardDescription>Buka kas, catat movement, dan cocokkan uang fisik saat tutup shift.</CardDescription></CardHeader></Card></Link>
+            </Link>}
+            {roleHasPermission(role, { shift: ["view"] }) && <Link className="rounded-xl focus-visible:ring-3 focus-visible:ring-ring/40 focus-visible:outline-none" href="/shifts"><Card className="h-full border border-border shadow-none transition-colors hover:border-primary"><CardHeader><WalletCards aria-hidden="true" className="mb-3 size-6 text-primary" /><CardTitle>Shift kasir</CardTitle><CardDescription>Buka kas, catat movement, dan cocokkan uang fisik saat tutup shift.</CardDescription></CardHeader></Card></Link>}
             <Link className="rounded-xl focus-visible:ring-3 focus-visible:ring-ring/40 focus-visible:outline-none" href="/attendance"><Card className="h-full border border-border shadow-none transition-colors hover:border-success"><CardHeader><CalendarCheck2 aria-hidden="true" className="mb-3 size-6 text-success" /><CardTitle>Absensi karyawan</CardTitle><CardDescription>Catat masuk dan pulang dengan verifikasi akun, wajah, serta lokasi outlet.</CardDescription></CardHeader></Card></Link>
-            <Link className="rounded-xl focus-visible:ring-3 focus-visible:ring-ring/40 focus-visible:outline-none" href="/transactions"><Card className="h-full border border-border shadow-none transition-colors hover:border-primary"><CardHeader><ReceiptText aria-hidden="true" className="mb-3 size-6 text-primary" /><CardTitle>Riwayat transaksi</CardTitle><CardDescription>Lihat struk dan rincian penjualan outlet aktif.</CardDescription></CardHeader></Card></Link>
-            {role !== "cashier" && <Link className="rounded-xl focus-visible:ring-3 focus-visible:ring-ring/40 focus-visible:outline-none" href="/settlements"><Card className="h-full border border-border shadow-none transition-colors hover:border-primary"><CardHeader><HandCoins aria-hidden="true" className="mb-3 size-6 text-primary" /><CardTitle>Ojol & settlement</CardTitle><CardDescription>Atur harga channel dan cocokkan dana platform yang masuk.</CardDescription></CardHeader></Card></Link>}
+            {roleHasPermission(role, { shift: ["view"] }) && <Link className="rounded-xl focus-visible:ring-3 focus-visible:ring-ring/40 focus-visible:outline-none" href="/transactions"><Card className="h-full border border-border shadow-none transition-colors hover:border-primary"><CardHeader><ReceiptText aria-hidden="true" className="mb-3 size-6 text-primary" /><CardTitle>Riwayat transaksi</CardTitle><CardDescription>Lihat struk dan rincian penjualan outlet aktif.</CardDescription></CardHeader></Card></Link>}
+            {roleHasPermission(role, { settlement: ["view"] }) && <Link className="rounded-xl focus-visible:ring-3 focus-visible:ring-ring/40 focus-visible:outline-none" href="/settlements"><Card className="h-full border border-border shadow-none transition-colors hover:border-primary"><CardHeader><HandCoins aria-hidden="true" className="mb-3 size-6 text-primary" /><CardTitle>Ojol & settlement</CardTitle><CardDescription>Atur harga channel dan cocokkan dana platform yang masuk.</CardDescription></CardHeader></Card></Link>}
             <Link className="rounded-xl focus-visible:ring-3 focus-visible:ring-ring/40 focus-visible:outline-none" href="/outlets"><Card className="h-full border border-border shadow-none transition-colors hover:border-primary"><CardHeader><Store aria-hidden="true" className="mb-3 size-6 text-success" /><CardTitle>Outlet</CardTitle><CardDescription>Lihat lokasi, zona waktu, dan cakupan operasional.</CardDescription></CardHeader></Card></Link>
-            {role !== "cashier" && <Link className="rounded-xl focus-visible:ring-3 focus-visible:ring-ring/40 focus-visible:outline-none" href="/staff"><Card className="h-full border border-border shadow-none transition-colors hover:border-primary"><CardHeader><Users aria-hidden="true" className="mb-3 size-6 text-success" /><CardTitle>Staf & akses</CardTitle><CardDescription>Kelola role, penugasan outlet, dan status akun.</CardDescription></CardHeader></Card></Link>}
+            {roleHasPermission(role, { staff: ["view"] }) && <Link className="rounded-xl focus-visible:ring-3 focus-visible:ring-ring/40 focus-visible:outline-none" href="/staff"><Card className="h-full border border-border shadow-none transition-colors hover:border-primary"><CardHeader><Users aria-hidden="true" className="mb-3 size-6 text-success" /><CardTitle>Staf & akses</CardTitle><CardDescription>Kelola role, jabatan, penugasan outlet, dan status akun.</CardDescription></CardHeader></Card></Link>}
             <Card className="border border-border shadow-none">
               <CardHeader>
                 <ShieldCheck aria-hidden="true" className="mb-3 size-6 text-foreground" />

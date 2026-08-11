@@ -39,7 +39,7 @@ export async function refundSale(input: RefundSaleInput, actor: PosActor): Promi
 
 /** Runs the common authorization, allocation, cash, settlement, status, and audit workflow. */
 async function createSaleCorrection(type: SaleRefundType, input: CorrectionInput, actor: PosActor): Promise<TransactionActionState> {
-  if (actor.role === "cashier") throw new SaleCorrectionError("FORBIDDEN", "Kasir tidak dapat melakukan void atau refund.");
+  if (actor.role !== "owner" && actor.role !== "manager") throw new SaleCorrectionError("FORBIDDEN", "Akun ini tidak dapat melakukan void atau refund.");
   const existing = await findIdempotentCorrection(input.operationToken, input.saleId, input.outletId, type, actor.id);
   if (existing) return existing;
 

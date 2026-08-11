@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import type { ZodType } from "zod";
 
 import { isAppRole } from "@/lib/auth/permissions";
+import type { AppRole } from "@/lib/auth/permissions";
 import { requirePermission } from "@/lib/auth/session";
 import {
   createStaff,
@@ -66,7 +67,7 @@ async function executeStaffAction<Input>(
   formData: FormData,
   mutation: (
     input: Input,
-    actor: { id: string; email: string; role: "owner" | "manager" | "cashier" },
+    actor: { id: string; email: string; role: AppRole },
   ) => Promise<{ message: string; credentials?: StaffActionState["credentials"] }>,
 ): Promise<StaffActionState> {
   const session = await requirePermission({ staff: ["manage"] });

@@ -276,7 +276,7 @@ async function assertOutletAccess(transaction: Prisma.TransactionClient, outletI
     },
     select: { id: true },
   });
-  if (!outlet || actor.role === "cashier") throw new AdvancedCatalogError("FORBIDDEN", "Anda tidak dapat mengubah katalog outlet ini.");
+  if (!outlet || (actor.role !== "owner" && actor.role !== "manager")) throw new AdvancedCatalogError("FORBIDDEN", "Anda tidak dapat mengubah katalog outlet ini.");
 }
 
 async function requireProduct(transaction: Prisma.TransactionClient, id: string) {

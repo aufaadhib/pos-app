@@ -16,7 +16,7 @@ export const metadata: Metadata = { title: "Pengaturan absensi", description: "A
 /** Loads fresh geofence settings for the assigned active outlet. */
 export default async function AttendanceSettingsPage() {
   const session = await requirePermission({ attendance: ["manage"] });
-  if (!isAppRole(session.user.role) || session.user.role === "cashier") redirect("/workspace?access=denied");
+  if (!isAppRole(session.user.role) || (session.user.role !== "owner" && session.user.role !== "manager")) redirect("/workspace?access=denied");
   const activeOutlet = await requireActiveOutlet(session);
   const outlet = await getAttendanceSettings(activeOutlet.id, { id: session.user.id, name: session.user.name, email: session.user.email, role: session.user.role });
   if (!outlet) redirect("/select-outlet");

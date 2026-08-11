@@ -2,11 +2,12 @@
 
 import { useCallback, useEffect, useRef, useState, useSyncExternalStore, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { Camera, CheckCircle2, ClockArrowDown, ClockArrowUp, ScanFace, ShieldAlert, Smartphone } from "lucide-react";
+import { CalendarDays, Camera, CheckCircle2, ClockArrowDown, ClockArrowUp, ScanFace, ShieldAlert, Smartphone } from "lucide-react";
 import { toast } from "react-toastify";
 
 import { requestAttendanceExceptionAction } from "@/app/attendance/actions";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -16,11 +17,13 @@ import { Spinner } from "@/components/ui/spinner";
 import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
 import type { AttendanceChallengeAction } from "@/lib/attendance/constants";
+import { attendanceEarlyCheckInMinutes, attendanceStatusLabels } from "@/lib/attendance/roster";
 import { getSharedDevicePreference, setSharedDevicePreference, subscribeSharedDevicePreference } from "@/lib/attendance/device-preference";
 import { authClient } from "@/lib/auth/client";
 import type { AppRole } from "@/lib/auth/permissions";
 
 type AttendanceOutlet = { id: string; code: string; name: string; attendanceEnabled: boolean; attendanceLatitude: number | null; attendanceLongitude: number | null; attendanceRadiusMeters: number };
+type PersonalRoster = { id: string; workDate: string; outlet: { id?: string; code: string; name: string }; timezone: string; positionName: string; shiftName: string; scheduledStartAt: string; scheduledEndAt: string; checkInAt: string | null; checkOutAt: string | null; status: keyof typeof attendanceStatusLabels; lateMinutes: number; earlyLeaveMinutes: number; totalMinutes: number };
 type RecentSession = { id: string; status: "OPEN" | "CLOSED"; checkInAt: string; checkOutAt: string | null; outlet: { code: string; name: string; timezone: string }; correction: { reason: string } | null };
 type HumanInstance = { load: () => Promise<unknown>; detect: (input: HTMLVideoElement) => Promise<{ face: Array<{ embedding?: number[]; real?: number; live?: number }>; gesture: Array<{ gesture: string }> }> };
 type AttendanceLocation = { latitude: number; longitude: number; accuracyMeters: number };
@@ -32,13 +35,14 @@ const enrollmentSteps = [
 ] as const;
 
 /** Runs enrollment and 1:1 attendance for the signed-in account with optional shared-device logout. */
-export function AttendanceClock({ user, outlets, profile, pendingReenrollment, openSession, recentSessions }: {
+export function AttendanceClock({ user, outlets, profile, pendingReenrollment, openSession, recentSessions, roster = [] }: {
   user: { name: string; email: string; role: AppRole };
   outlets: AttendanceOutlet[];
   profile: { enrolledAt: string; modelVersion: string } | null;
   pendingReenrollment: { id: string; requestedAt: string } | null;
   openSession: { id: string; checkInAt: string; outlet: { id: string; code: string; name: string; timezone: string } } | null;
   recentSessions: RecentSession[];
+  roster?: PersonalRoster[];
 }) {
   const router = useRouter();
   const videoRef = useRef<HTMLVideoElement>(null);
@@ -57,20 +61,23 @@ export function AttendanceClock({ user, outlets, profile, pendingReenrollment, o
   const [challenge, setChallenge] = useState<{ verificationId: string; nonce: string; action: AttendanceChallengeAction; actionLabel: string } | null>(null);
   const [exceptionReason, setExceptionReason] = useState("");
   const [exceptionAvailable, setExceptionAvailable] = useState(false);
+  const [unscheduledPrompt, setUnscheduledPrompt] = useState(false);
+  const [unscheduledAcknowledged, setUnscheduledAcknowledged] = useState(false);
   const [pending, startTransition] = useTransition();
   const subscribeSharedDevice = useCallback((onChange: () => void) => subscribeSharedDevicePreference(onChange), []);
   const sharedDevice = useSyncExternalStore(subscribeSharedDevice, getSharedDevicePreference, getManualSharedDeviceSnapshot);
   const selectedOutlet = outlets.find((outlet) => outlet.id === selectedOutletId);
   const attendanceKind = openSession ? "CHECK_OUT" : "CHECK_IN";
-  const reenrollmentNeedsApproval = Boolean(profile && user.role === "cashier");
+  const reenrollmentNeedsApproval = Boolean(profile && (user.role === "cashier" || user.role === "staff"));
+  const selectedSchedule = roster.find((entry) => entry.outlet.id === selectedOutletId && canAttachSchedule(entry));
 
-  const refreshChallenge = useCallback(async () => {
+  const refreshChallenge = useCallback(async (allowUnscheduled = unscheduledAcknowledged) => {
     if (!selectedOutlet) throw new Error("Pilih outlet absensi terlebih dahulu.");
-    const response = await fetch("/api/attendance/challenge", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ outletId: selectedOutlet.id, kind: attendanceKind }) });
+    const response = await fetch("/api/attendance/challenge", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ outletId: selectedOutlet.id, kind: attendanceKind, unscheduledAcknowledged: allowUnscheduled }) });
     const data = await response.json();
     if (!response.ok) throw new Error(data.message);
     setChallenge(data);
-  }, [attendanceKind, selectedOutlet]);
+  }, [attendanceKind, selectedOutlet, unscheduledAcknowledged]);
 
   useEffect(() => () => {
     streamRef.current?.getTracks().forEach((track) => track.stop());
@@ -91,9 +98,11 @@ export function AttendanceClock({ user, outlets, profile, pendingReenrollment, o
     await startCamera();
   }
 
-  async function openVerification() {
+  async function openVerification(allowUnscheduled = false) {
     if (!selectedOutlet?.attendanceEnabled) return toast.error("Absensi belum diaktifkan pada outlet ini.");
     if (!profile) return toast.error("Daftarkan wajah akun ini terlebih dahulu.");
+    if (!openSession && !allowUnscheduled && !canAttachSchedule(selectedSchedule)) { setUnscheduledPrompt(true); return; }
+    setUnscheduledAcknowledged(allowUnscheduled);
     verificationRunRef.current += 1;
     setExceptionAvailable(false);
     setExceptionReason("");
@@ -104,7 +113,7 @@ export function AttendanceClock({ user, outlets, profile, pendingReenrollment, o
     locationPermissionRef.current = locationPermission;
     void locationPermission.catch(() => undefined);
     try {
-      await refreshChallenge();
+      await refreshChallenge(allowUnscheduled);
       await startCamera();
     } catch (error) {
       setCameraStatus("error");
@@ -317,12 +326,12 @@ export function AttendanceClock({ user, outlets, profile, pendingReenrollment, o
         </div>
       </div>
       <div className="grid gap-5 border-t p-4 sm:p-6">
-        <label className="grid gap-2" htmlFor="attendance-outlet"><span className="font-semibold">Outlet absensi</span><Select onValueChange={(value) => value && setSelectedOutletId(value)} value={selectedOutletId}><SelectTrigger className="h-11 w-full" id="attendance-outlet"><SelectValue>{selectedOutlet ? `${selectedOutlet.code} · ${selectedOutlet.name}` : "Pilih outlet"}</SelectValue></SelectTrigger><SelectContent>{outlets.map((outlet) => <SelectItem key={outlet.id} value={outlet.id}>{outlet.code} · {outlet.name}</SelectItem>)}</SelectContent></Select></label>
+        <label className="grid gap-2" htmlFor="attendance-outlet"><span className="font-semibold">Outlet absensi</span><Select onValueChange={(value) => { if (value) { setSelectedOutletId(value); setUnscheduledAcknowledged(false); } }} value={selectedOutletId}><SelectTrigger className="h-11 w-full" id="attendance-outlet"><SelectValue>{selectedOutlet ? `${selectedOutlet.code} · ${selectedOutlet.name}` : "Pilih outlet"}</SelectValue></SelectTrigger><SelectContent>{outlets.map((outlet) => <SelectItem key={outlet.id} value={outlet.id}>{outlet.code} · {outlet.name}</SelectItem>)}</SelectContent></Select></label>
         {!outlets.length && <Alert variant="destructive"><ShieldAlert aria-hidden="true" /><AlertTitle>Belum ada outlet</AlertTitle><AlertDescription>Akun Anda belum ditugaskan pada outlet aktif. Hubungi pemilik atau manajer.</AlertDescription></Alert>}
         {selectedOutlet && !selectedOutlet.attendanceEnabled && <Alert><ShieldAlert aria-hidden="true" /><AlertTitle>Absensi outlet nonaktif</AlertTitle><AlertDescription>Manajer perlu mengatur titik lokasi dan mengaktifkan absensi outlet ini.</AlertDescription></Alert>}
         <div className="grid gap-3 sm:grid-cols-2">
           <Button className="min-h-12" disabled={pendingReenrollment !== null} onClick={openEnrollment} type="button" variant="outline"><ScanFace aria-hidden="true" />{pendingReenrollment ? "Menunggu persetujuan" : reenrollmentNeedsApproval ? "Ajukan daftar ulang wajah" : profile ? "Daftarkan ulang wajah" : "Daftarkan wajah"}</Button>
-          <Button className="min-h-12" disabled={!selectedOutlet?.attendanceEnabled || !profile} onClick={openVerification} type="button">{openSession ? <ClockArrowDown aria-hidden="true" /> : <ClockArrowUp aria-hidden="true" />}{openSession ? "Absensi pulang" : "Absensi masuk"}</Button>
+          <Button className="min-h-12" disabled={!selectedOutlet?.attendanceEnabled || !profile} onClick={() => void openVerification()} type="button">{openSession ? <ClockArrowDown aria-hidden="true" /> : <ClockArrowUp aria-hidden="true" />}{openSession ? "Absensi pulang" : "Absensi masuk"}</Button>
         </div>
         {pendingReenrollment && <Alert><ShieldAlert aria-hidden="true" /><AlertTitle>Daftar ulang menunggu persetujuan</AlertTitle><AlertDescription>Profil wajah lama tetap aktif sampai owner atau manajer menyetujui sampel baru.</AlertDescription></Alert>}
         <div className="flex min-h-14 items-start justify-between gap-4 rounded-xl border bg-muted/35 p-4"><span><span className="flex items-center gap-2 font-semibold"><Smartphone aria-hidden="true" className="size-4" />Tablet bersama</span><span className="mt-1 block text-sm leading-5 text-muted-foreground">Logout otomatis setelah absensi atau pengecualian dikirim.</span></span><Switch aria-label="Logout otomatis pada tablet bersama" checked={sharedDevice} onCheckedChange={changeSharedDevice} /></div>
@@ -334,6 +343,8 @@ export function AttendanceClock({ user, outlets, profile, pendingReenrollment, o
       {openSession ? <div className="mt-5 rounded-xl border border-success/30 bg-success/10 p-4"><p className="font-semibold text-success">{openSession.outlet.code} · {openSession.outlet.name}</p><p className="mt-1 text-sm text-muted-foreground">Masuk {formatAttendanceTime(openSession.checkInAt, openSession.outlet.timezone)}</p></div> : <p className="mt-5 rounded-xl border border-dashed p-4 text-sm leading-6 text-muted-foreground">Belum ada sesi terbuka. Pilih outlet lalu lakukan absensi masuk.</p>}
       <div className="mt-6"><h3 className="font-semibold">Riwayat terakhir</h3><div className="mt-3 grid gap-2">{recentSessions.length ? recentSessions.slice(0, 5).map((session) => <div className="rounded-lg border p-3 text-sm" key={session.id}><div className="flex items-center justify-between gap-2"><span className="font-semibold">{session.outlet.code}</span><Badge variant="outline">{session.status === "OPEN" ? "Terbuka" : "Selesai"}</Badge></div><p className="mt-1 text-muted-foreground">{formatAttendanceTime(session.checkInAt, session.outlet.timezone)} — {session.checkOutAt ? formatAttendanceTime(session.checkOutAt, session.outlet.timezone) : "Belum pulang"}</p>{session.correction && <p className="mt-1 text-xs text-primary">Dikoreksi: {session.correction.reason}</p>}</div>) : <p className="text-sm text-muted-foreground">Belum ada riwayat absensi.</p>}</div></div>
     </aside>
+
+    <section className="min-w-0 rounded-2xl border bg-card p-4 sm:p-6 xl:col-span-2"><div className="flex items-start gap-3"><span className="grid size-11 shrink-0 place-items-center rounded-xl bg-primary/10 text-primary"><CalendarDays aria-hidden="true" /></span><div><h2 className="font-heading text-xl font-semibold">Roster terbit</h2><p className="mt-1 text-sm text-muted-foreground">Minggu berjalan dan minggu berikutnya.</p></div></div><div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">{roster.map((entry) => <article className="rounded-xl border p-4" key={entry.id}><div className="flex items-start justify-between gap-2"><div><p className="text-xs font-medium text-muted-foreground">{formatRosterDate(entry.workDate)}</p><h3 className="mt-1 font-semibold">{entry.shiftName}</h3></div><Badge variant="outline">{attendanceStatusLabels[entry.status]}</Badge></div><p className="mt-3 font-mono text-sm">{formatRosterTime(entry.scheduledStartAt, entry.timezone)}–{formatRosterTime(entry.scheduledEndAt, entry.timezone)}</p><p className="mt-1 text-xs text-muted-foreground">{entry.outlet.code} · {entry.outlet.name} · {entry.positionName}</p></article>)}</div>{!roster.length && <p className="mt-4 rounded-xl border border-dashed p-5 text-sm text-muted-foreground">Belum ada roster yang diterbitkan untuk dua minggu ini. Absensi tetap dapat dilakukan sebagai di luar jadwal.</p>}</section>
 
     <Dialog onOpenChange={(open) => { if (!open) closeDialog(); }} open={dialogMode !== null}><DialogContent className="gap-3 p-4 sm:w-[min(34rem,calc(100vw-3rem))] sm:gap-5 sm:p-6"><DialogHeader className="gap-1.5 sm:gap-2"><DialogTitle className="text-lg sm:text-xl">{dialogMode === "enroll" ? reenrollmentNeedsApproval ? "Ajukan daftar ulang wajah" : "Daftarkan wajah akun" : openSession ? "Verifikasi absensi pulang" : "Verifikasi absensi masuk"}</DialogTitle><DialogDescription className="text-xs leading-5 sm:text-sm sm:leading-6">{dialogMode === "enroll" ? reenrollmentNeedsApproval ? "Tiga sampel baru disimpan terenkripsi dan baru menggantikan profil aktif setelah disetujui owner atau manajer." : "Setelah disetujui, tiga sampel diambil otomatis dan disimpan sebagai template terenkripsi." : "Izinkan kamera dan lokasi, lalu ikuti gerakan. Verifikasi diproses otomatis."}</DialogDescription></DialogHeader>
       <figure className="mx-auto grid w-full max-w-[min(12rem,27svh)] gap-2 sm:max-w-[min(19rem,45svh)] sm:gap-3">
@@ -355,8 +366,13 @@ export function AttendanceClock({ user, outlets, profile, pendingReenrollment, o
       <DialogFooter className="pt-3 sm:pt-5"><Button disabled={dialogMode === "verify" && pending} onClick={closeDialog} type="button" variant="outline">Batal</Button>{dialogMode === "verify" && exceptionAvailable && <Button disabled={pending || exceptionReason.trim().length < 8} onClick={requestException} type="button" variant="destructive">{pending ? <Spinner /> : <ShieldAlert aria-hidden="true" />}{pending ? "Mengirim…" : "Kirim pengecualian"}</Button>}</DialogFooter>
       </DialogContent>
     </Dialog>
+    <AlertDialog onOpenChange={setUnscheduledPrompt} open={unscheduledPrompt}><AlertDialogContent><AlertDialogHeader><AlertDialogTitle>Masuk di luar jadwal?</AlertDialogTitle><AlertDialogDescription>Tidak ada roster terbit yang cocok pada outlet dan jendela waktu ini. Absensi tetap disimpan dan akan ditandai untuk ditinjau manager.</AlertDialogDescription></AlertDialogHeader><AlertDialogFooter><AlertDialogCancel>Batal</AlertDialogCancel><AlertDialogAction onClick={() => { setUnscheduledPrompt(false); void openVerification(true); }}>Lanjutkan absensi</AlertDialogAction></AlertDialogFooter></AlertDialogContent></AlertDialog>
   </div>;
 }
+
+function canAttachSchedule(entry?: PersonalRoster) { if (!entry) return false; const now = Date.now(); return now >= new Date(entry.scheduledStartAt).getTime() - attendanceEarlyCheckInMinutes * 60_000 && now <= new Date(entry.scheduledEndAt).getTime(); }
+function formatRosterDate(value: string) { return new Intl.DateTimeFormat("id-ID", { weekday: "short", day: "2-digit", month: "short", timeZone: "UTC" }).format(new Date(`${value}T00:00:00Z`)); }
+function formatRosterTime(value: string, timezone: string) { return new Intl.DateTimeFormat("id-ID", { hour: "2-digit", minute: "2-digit", timeZone: timezone }).format(new Date(value)); }
 
 async function loadHuman(): Promise<HumanInstance> {
   const { default: Human } = await import("@vladmandic/human");

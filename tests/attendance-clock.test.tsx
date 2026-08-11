@@ -83,6 +83,7 @@ describe("attendance clock", () => {
     render(<AttendanceClock openSession={null} outlets={[outlet]} pendingReenrollment={null} profile={{ enrolledAt: new Date().toISOString(), modelVersion: "human-3.3.6" }} recentSessions={[]} user={{ name: "Kasir Satu", email: "kasir@example.com", role: "cashier" }} />);
 
     await user.click(screen.getByRole("button", { name: "Absensi masuk" }));
+    await user.click(screen.getByRole("button", { name: "Lanjutkan absensi" }));
 
     expect(screen.queryByRole("button", { name: "Ambil dan verifikasi" })).not.toBeInTheDocument();
     await waitFor(() => expect(mocks.fetch).toHaveBeenCalledWith("/api/attendance/verify", expect.objectContaining({ method: "POST" })), { timeout: 3_000 });

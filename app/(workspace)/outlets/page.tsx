@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
+import { redirect } from "next/navigation";
 import { ChevronLeft, ChevronRight, MapPin, Search, Store } from "lucide-react";
 
 import { OutletFormDialog, OutletStatusAction } from "@/components/outlets/outlet-dialogs";
@@ -20,7 +21,8 @@ export const metadata: Metadata = { title: "Outlet", description: "Kelola lokasi
 
 export default async function OutletsPage({ searchParams }: { searchParams: Promise<Record<string, string | string[] | undefined>> }) {
   const [session, rawSearch] = await Promise.all([requirePermission({ outlet: ["view"] }), searchParams]);
-  const role = isAppRole(session.user.role) ? session.user.role : "cashier";
+  if (!isAppRole(session.user.role)) redirect("/workspace?access=denied");
+  const role = session.user.role;
   const canManage = roleHasPermission(role, { outlet: ["manage"] });
   const search = outletSearchSchema.parse({ q: singleValue(rawSearch.q), status: singleValue(rawSearch.status), page: singleValue(rawSearch.page) });
   const outlets = await getOutlets(search, { id: session.user.id, role });

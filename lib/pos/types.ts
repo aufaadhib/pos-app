@@ -1,3 +1,5 @@
+import type { AppRole } from "@/lib/auth/permissions";
+
 export type PosMenuOption = {
   id: string;
   name: string;
@@ -76,7 +78,7 @@ export type PosActor = {
   id: string;
   name: string;
   email: string;
-  role: "owner" | "manager" | "cashier";
+  role: AppRole;
 };
 
 export type SaleListItem = {

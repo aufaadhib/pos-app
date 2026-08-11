@@ -44,6 +44,7 @@ export async function createStaff(input: CreateStaffInput, actor: AdminActor) {
 
   const user = await runStaffMutation(async (transaction) => {
     await assertManageableOutlets(transaction, actor, input.outletIds);
+    await assertActivePosition(transaction, input.jobPositionId);
     const userId = randomUUID();
     const created = await transaction.user.create({
       data: {
@@ -51,6 +52,7 @@ export async function createStaff(input: CreateStaffInput, actor: AdminActor) {
         name: input.name,
         email: input.email,
         role: input.role,
+        jobPositionId: input.jobPositionId,
         mustChangePassword: true,
         accounts: {
           create: {
@@ -73,7 +75,7 @@ export async function createStaff(input: CreateStaffInput, actor: AdminActor) {
       entityId: created.id,
       action: AdminAuditAction.CREATE,
       actor,
-      after: staffSnapshot({ ...created, outletIds: input.outletIds }),
+      after: staffSnapshot({ ...created, jobPositionId: input.jobPositionId, outletIds: input.outletIds }),
     });
     await Promise.all(input.outletIds.map((outletId) => writeAdminAudit(transaction, {
       entityType: AdminAuditEntityType.STAFF_ASSIGNMENT,
@@ -96,13 +98,14 @@ export async function updateStaff(input: UpdateStaffInput, actor: AdminActor) {
     const current = await findManageableStaff(transaction, input.id, actor);
     assertVersion(current.updatedAt, input.expectedUpdatedAt);
     await assertManageableOutlets(transaction, actor, input.outletIds);
+    await assertActivePosition(transaction, input.jobPositionId);
     const previousOutletIds = current.outletAssignments.map((assignment) => assignment.outletId);
     const addedOutletIds = input.outletIds.filter((id) => !previousOutletIds.includes(id));
     const removedOutletIds = previousOutletIds.filter((id) => !input.outletIds.includes(id));
-    if (removedOutletIds.length > 0) {
+    if (removedOutletIds.length > 0 || (current.role === "cashier" && input.role !== "cashier")) {
       const openShift = await transaction.cashShift.findUnique({ where: { openUserKey: current.id }, select: { outletId: true } });
-      if (openShift && removedOutletIds.includes(openShift.outletId)) {
-        throw new StaffError("CONFLICT", "Staf masih memiliki shift terbuka pada outlet yang akan dilepas.");
+      if (openShift && (removedOutletIds.includes(openShift.outletId) || input.role !== "cashier")) {
+        throw new StaffError("CONFLICT", "Staf masih memiliki shift kas terbuka. Tutup shift sebelum mengubah akses kasir.");
       }
       const openAttendance = await transaction.attendanceSession.findUnique({ where: { openUserKey: current.id }, select: { outletId: true } });
       if (openAttendance && removedOutletIds.includes(openAttendance.outletId)) {
@@ -112,7 +115,7 @@ export async function updateStaff(input: UpdateStaffInput, actor: AdminActor) {
 
     const update = await transaction.user.updateMany({
       where: { id: current.id, updatedAt: current.updatedAt },
-      data: { name: input.name, role: input.role },
+      data: { name: input.name, role: input.role, jobPositionId: input.jobPositionId },
     });
     assertUpdateSucceeded(update.count);
     if (removedOutletIds.length > 0) {
@@ -142,8 +145,8 @@ export async function updateStaff(input: UpdateStaffInput, actor: AdminActor) {
       entityId: updated.id,
       action: AdminAuditAction.UPDATE,
       actor,
-      before: staffSnapshot({ ...current, outletIds: previousOutletIds }),
-      after: staffSnapshot({ ...updated, outletIds: input.outletIds }),
+      before: staffSnapshot({ ...current, jobPositionId: current.jobPositionId, outletIds: previousOutletIds }),
+      after: staffSnapshot({ ...updated, jobPositionId: input.jobPositionId, outletIds: input.outletIds }),
     });
     await Promise.all([
       ...addedOutletIds.map((outletId) => writeAdminAudit(transaction, {
@@ -304,13 +307,13 @@ async function findManageableStaff(
   if (!user) throw new StaffError("NOT_FOUND", "Staf tidak ditemukan.");
   if (user.role === "owner") throw new StaffError("FORBIDDEN", "Akun pemilik tidak dapat diubah dari daftar staf.");
   if (actor.role === "manager") {
-    if (user.role !== "cashier") throw new StaffError("FORBIDDEN", "Manajer hanya dapat mengelola kasir.");
+    if (user.role !== "cashier" && user.role !== "staff") throw new StaffError("FORBIDDEN", "Manajer hanya dapat mengelola kasir dan staf biasa.");
     const actorOutletIds = await getActorOutletIds(transaction, actor);
     if (!user.outletAssignments.some((assignment) => actorOutletIds.includes(assignment.outletId))) {
       throw new StaffError("FORBIDDEN", "Kasir berada di luar cakupan outlet Anda.");
     }
   }
-  if (actor.role === "cashier") throw new StaffError("FORBIDDEN", "Akses pengelolaan staf ditolak.");
+  if (actor.role !== "owner" && actor.role !== "manager") throw new StaffError("FORBIDDEN", "Akses pengelolaan staf ditolak.");
   return user;
 }
 
@@ -338,6 +341,11 @@ async function getActorOutletIds(transaction: Prisma.TransactionClient, actor: A
     select: { outletId: true },
   });
   return assignments.map((assignment) => assignment.outletId);
+}
+
+async function assertActivePosition(transaction: Prisma.TransactionClient, positionId: string) {
+  const position = await transaction.staffPosition.findFirst({ where: { id: positionId, status: "ACTIVE" }, select: { id: true } });
+  if (!position) throw new StaffError("NOT_FOUND", "Jabatan tidak tersedia atau sudah diarsipkan.");
 }
 
 function assertVersion(actual: Date, expected: string) {
@@ -369,6 +377,7 @@ function staffSnapshot(user: {
   banned: boolean | null;
   mustChangePassword: boolean;
   outletIds: string[];
+  jobPositionId: string | null;
 }) {
   return {
     name: user.name,
@@ -377,5 +386,6 @@ function staffSnapshot(user: {
     banned: Boolean(user.banned),
     mustChangePassword: user.mustChangePassword,
     outletIds: user.outletIds,
+    jobPositionId: user.jobPositionId,
   } satisfies Prisma.InputJsonObject;
 }

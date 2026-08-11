@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
+import { redirect } from "next/navigation";
 import { Suspense } from "react";
 import { ChevronLeft, ChevronRight, PackageOpen, Search, Settings2 } from "lucide-react";
 
@@ -26,7 +27,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { isAppRole, roleHasPermission } from "@/lib/auth/permissions";
+import { isAppRole, roleHasPermission, type AppRole } from "@/lib/auth/permissions";
 import { requirePermission } from "@/lib/auth/session";
 import { getAccessibleCatalogOutlet, getOutletCatalogProducts } from "@/lib/catalog/advanced-queries";
 import { formatRupiah } from "@/lib/currency";
@@ -61,7 +62,8 @@ async function CatalogContent({ searchParams }: CatalogPageProps) {
     requirePermission({ catalog: ["view"] }),
     searchParams,
   ]);
-  const role = isAppRole(session.user.role) ? session.user.role : "cashier";
+  if (!isAppRole(session.user.role)) redirect("/workspace?access=denied");
+  const role = session.user.role;
   const canManageMaster = roleHasPermission(role, { catalog: ["manageMaster"] });
   const canManageOutlet = roleHasPermission(role, { catalog: ["manageOutlet"] });
   const search = catalogSearchSchema.parse({
@@ -222,7 +224,7 @@ function OutletCatalogContent({
   outlet: NonNullable<Awaited<ReturnType<typeof getAccessibleCatalogOutlet>>>;
   outlets: Awaited<ReturnType<typeof getAccessibleOutlets>>;
   products: Awaited<ReturnType<typeof getOutletCatalogProducts>>;
-  role: "owner" | "manager" | "cashier";
+  role: AppRole;
   search: ReturnType<typeof catalogSearchSchema.parse>;
 }) {
   const taxSummary = outlet.pricesIncludeTax

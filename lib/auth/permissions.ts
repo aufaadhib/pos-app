@@ -7,7 +7,7 @@ export const permissionStatements = {
   pos: ["operate"],
   transaction: ["correct"],
   shift: ["operate", "view", "forceClose"],
-  staff: ["view", "manage"],
+  staff: ["view", "manage", "managePositions"],
   settings: ["view", "manage"],
   designSystem: ["view"],
   catalog: ["view", "manageMaster", "manageOutlet"],
@@ -15,7 +15,7 @@ export const permissionStatements = {
   settlement: ["view", "reconcile", "reverse"],
   report: ["view", "export"],
   outlet: ["view", "manage"],
-  attendance: ["clock", "viewOwn", "review", "correct", "viewReport", "export", "manage"],
+  attendance: ["clock", "viewOwn", "review", "correct", "viewReport", "export", "manage", "schedule"],
   profile: ["view", "update"],
 } as const;
 
@@ -28,7 +28,7 @@ export const ownerRole = accessControl.newRole({
   pos: ["operate"],
   transaction: ["correct"],
   shift: ["operate", "view", "forceClose"],
-  staff: ["view", "manage"],
+  staff: ["view", "manage", "managePositions"],
   settings: ["view", "manage"],
   designSystem: ["view"],
   catalog: ["view", "manageMaster", "manageOutlet"],
@@ -36,7 +36,7 @@ export const ownerRole = accessControl.newRole({
   settlement: ["view", "reconcile", "reverse"],
   report: ["view", "export"],
   outlet: ["view", "manage"],
-  attendance: ["clock", "viewOwn", "review", "correct", "viewReport", "export", "manage"],
+  attendance: ["clock", "viewOwn", "review", "correct", "viewReport", "export", "manage", "schedule"],
   profile: ["view", "update"],
 });
 
@@ -55,7 +55,7 @@ export const managerRole = accessControl.newRole({
   settlement: ["view", "reconcile"],
   report: ["view", "export"],
   outlet: ["view"],
-  attendance: ["clock", "viewOwn", "review", "correct", "viewReport", "export", "manage"],
+  attendance: ["clock", "viewOwn", "review", "correct", "viewReport", "export", "manage", "schedule"],
   profile: ["view", "update"],
 });
 
@@ -78,10 +78,30 @@ export const cashierRole = accessControl.newRole({
   profile: ["view", "update"],
 });
 
+export const staffRole = accessControl.newRole({
+  user: [],
+  session: [],
+  workspace: ["view"],
+  pos: [],
+  transaction: [],
+  shift: [],
+  staff: [],
+  settings: [],
+  designSystem: [],
+  catalog: [],
+  deliveryChannel: [],
+  settlement: [],
+  report: [],
+  outlet: ["view"],
+  attendance: ["clock", "viewOwn"],
+  profile: ["view", "update"],
+});
+
 export const roles = {
   owner: ownerRole,
   manager: managerRole,
   cashier: cashierRole,
+  staff: staffRole,
 } as const;
 
 export type AppRole = keyof typeof roles;
@@ -95,6 +115,7 @@ export const roleLabels: Record<AppRole, string> = {
   owner: "Pemilik",
   manager: "Manajer",
   cashier: "Kasir",
+  staff: "Staf",
 };
 
 export function isAppRole(role: string | null | undefined): role is AppRole {

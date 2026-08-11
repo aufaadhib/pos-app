@@ -195,7 +195,7 @@ export async function updateKitchenTicketStatus(input: TicketStatusInput, actor:
 
 /** Updates the active outlet's open-order feature and records an admin audit entry. */
 export async function updateOpenOrderSetting(outletId: string, enabled: boolean, actor: OrderActor): Promise<OrderActionState> {
-  if (actor.role === "cashier") throw new OrderError("FORBIDDEN", "Kasir tidak dapat mengubah pengaturan outlet.");
+  if (actor.role !== "owner" && actor.role !== "manager") throw new OrderError("FORBIDDEN", "Akun ini tidak dapat mengubah pengaturan outlet.");
   const outlet = await prisma.outlet.findFirst({ where: { id: outletId, status: OutletStatus.ACTIVE, ...(actor.role === "owner" ? {} : { assignments: { some: { userId: actor.id } } }) }, select: { id: true, openOrdersEnabled: true } });
   if (!outlet) throw new OrderError("FORBIDDEN", "Outlet aktif tidak tersedia untuk akun ini.");
   if (outlet.openOrdersEnabled === enabled) return { status: "success", message: "Pengaturan operasional tidak berubah." };

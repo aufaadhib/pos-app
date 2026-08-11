@@ -11,7 +11,7 @@ vi.mock("next/dynamic", () => ({ default: () => function MockMap({ value, onChan
 
 import { AttendanceSettingsForm } from "@/components/settings/attendance-settings-form";
 
-const outlet = { id: "outlet-1", code: "SBY", name: "Surabaya", attendanceEnabled: false, attendanceLatitude: null, attendanceLongitude: null, attendanceRadiusMeters: 100 };
+const outlet = { id: "outlet-1", code: "SBY", name: "Surabaya", attendanceEnabled: false, attendanceLatitude: null, attendanceLongitude: null, attendanceRadiusMeters: 100, attendanceLateGraceMinutes: 15, attendanceEarlyLeaveGraceMinutes: 15 };
 
 describe("attendance settings form", () => {
   beforeEach(() => {

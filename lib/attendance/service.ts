@@ -24,6 +24,7 @@ import { createAttendanceNonce, decryptEmbedding, encryptEmbedding, hashAttendan
 import { deleteAttendanceEvidence, uploadAttendanceEvidence } from "@/lib/attendance/evidence";
 import { averageEmbeddings, faceSimilarity, normalizeEmbedding } from "@/lib/attendance/face";
 import { businessDateAt, distanceInMeters } from "@/lib/attendance/geofence";
+import { addIsoDays, isWithinScheduledWindow } from "@/lib/attendance/roster";
 import type { AttendanceActor } from "@/lib/attendance/types";
 import type {
   AttendanceChallengeInput,
@@ -44,7 +45,7 @@ export class AttendanceError extends Error {
   }
 }
 
-/** Enrolls a first profile directly, while cashier reenrollment waits for manager approval. */
+/** Enrolls a first profile directly, while cashier/staff reenrollment waits for manager approval. */
 export async function enrollFaceProfile(input: AttendanceEnrollmentInput, actor: AttendanceActor) {
   let template: number[];
   try {
@@ -64,7 +65,7 @@ export async function enrollFaceProfile(input: AttendanceEnrollmentInput, actor:
       if (pending) throw new AttendanceError("CONFLICT", "Permintaan daftar ulang wajah masih menunggu persetujuan.");
       const active = await transaction.faceProfile.findUnique({ where: { activeUserKey: actor.id } });
       const consentAt = new Date();
-      if (active && actor.role === "cashier") {
+      if (active && (actor.role === "cashier" || actor.role === "staff")) {
         const request = await transaction.faceReenrollmentRequest.create({
           data: {
             userId: actor.id,
@@ -134,7 +135,7 @@ export async function revokeFaceProfile(userId: string, actor: AttendanceActor) 
   });
 }
 
-/** Approves or rejects one cashier reenrollment request and erases its pending payload. */
+/** Approves or rejects one cashier/staff reenrollment request and erases its pending payload. */
 export async function reviewFaceReenrollment(input: AttendanceReviewInput, actor: AttendanceActor) {
   assertManager(actor);
   return prisma.$transaction(async (transaction) => {
@@ -194,20 +195,23 @@ export async function createAttendanceChallenge(input: AttendanceChallengeInput,
   const now = new Date();
   const expiresAt = new Date(now.getTime() + attendanceVerificationMinutes * 60_000);
   const verification = await prisma.$transaction(async (transaction) => {
-    await assertClockScope(transaction, input.outletId, actor);
-    const openSession = await transaction.attendanceSession.findUnique({ where: { openUserKey: actor.id }, select: { id: true, outletId: true } });
+    const scopedOutlet = await assertClockScope(transaction, input.outletId, actor);
+    const openSession = await transaction.attendanceSession.findUnique({ where: { openUserKey: actor.id }, select: { id: true, outletId: true, rosterEntryId: true, scheduleMatch: true } });
     if (input.kind === AttendanceKind.CHECK_IN && openSession) throw new AttendanceError("CONFLICT", "Anda masih memiliki absensi masuk yang belum ditutup.");
     if (input.kind === AttendanceKind.CHECK_OUT && !openSession) throw new AttendanceError("CONFLICT", "Belum ada absensi masuk yang dapat ditutup.");
     if (input.kind === AttendanceKind.CHECK_OUT && openSession?.outletId !== input.outletId) throw new AttendanceError("CONFLICT", "Absensi pulang harus dilakukan pada outlet tempat Anda masuk.");
+    const schedule = input.kind === AttendanceKind.CHECK_IN
+      ? await resolveCheckInSchedule(transaction, actor.id, input.outletId, scopedOutlet.timezone, now, input.unscheduledAcknowledged)
+      : { rosterEntryId: openSession?.rosterEntryId ?? null, scheduleMatch: openSession?.scheduleMatch ?? null };
     const current = await transaction.attendanceVerification.findFirst({
       where: { userId: actor.id, outletId: input.outletId, kind: input.kind, status: AttendanceVerificationStatus.ACTIVE, expiresAt: { gt: now } },
       orderBy: { createdAt: "desc" },
     });
     if (current) {
-      return transaction.attendanceVerification.update({ where: { id: current.id }, data: { nonceHash, challengeAction } });
+      return transaction.attendanceVerification.update({ where: { id: current.id }, data: { nonceHash, challengeAction, ...schedule } });
     }
     return transaction.attendanceVerification.create({
-      data: { userId: actor.id, outletId: input.outletId, kind: input.kind, nonceHash, challengeAction, expiresAt },
+      data: { userId: actor.id, outletId: input.outletId, kind: input.kind, nonceHash, challengeAction, expiresAt, ...schedule },
     });
   });
   return {
@@ -217,6 +221,7 @@ export async function createAttendanceChallenge(input: AttendanceChallengeInput,
     actionLabel: attendanceChallengeLabels[verification.challengeAction as AttendanceChallengeAction],
     expiresAt: verification.expiresAt.toISOString(),
     attemptCount: verification.attemptCount,
+    scheduleMatch: verification.scheduleMatch,
   };
 }
 
@@ -272,7 +277,7 @@ export async function verifyAttendance(
         });
         return { success: false, replayed: false, attemptCount, exceptionAvailable: attemptCount >= 3, message: failure.message };
       }
-      const attendanceSession = await applyAttendanceEvent(transaction, verification.kind, actor.id, verification.outlet, attempt.id, now);
+      const attendanceSession = await applyAttendanceEvent(transaction, verification.kind, actor.id, verification.outlet, attempt.id, now, verification.rosterEntryId, verification.scheduleMatch);
       await transaction.attendanceVerification.update({ where: { id: verification.id }, data: { status: AttendanceVerificationStatus.VERIFIED, completedAt: now, nonceHash: hashAttendanceNonce(createAttendanceNonce()) } });
       await writeAttendanceAudit(transaction, "ATTENDANCE_SESSION", attendanceSession.id, verification.kind === AttendanceKind.CHECK_IN ? AttendanceAuditAction.CHECK_IN : AttendanceAuditAction.CHECK_OUT, actor, null, { attemptId: attempt.id, at: now.toISOString() });
       return { success: true, replayed: false, attendanceSessionId: attendanceSession.id, kind: verification.kind };
@@ -318,7 +323,7 @@ export async function reviewAttendanceException(input: AttendanceReviewInput, ac
     await assertOutletInActorScope(transaction, request.verification.outletId, actor);
     let createdSessionId: string | null = null;
     if (input.decision === AttendanceExceptionStatus.APPROVED) {
-      const session = await applyAttendanceEvent(transaction, request.verification.kind, request.userId, request.verification.outlet, request.attemptId, request.attempt.attemptedAt);
+      const session = await applyAttendanceEvent(transaction, request.verification.kind, request.userId, request.verification.outlet, request.attemptId, request.attempt.attemptedAt, request.verification.rosterEntryId, request.verification.scheduleMatch);
       createdSessionId = session.id;
     }
     const updated = await transaction.attendanceExceptionRequest.update({
@@ -355,11 +360,11 @@ export async function updateAttendanceSettings(input: AttendanceSettingsInput, a
   return prisma.$transaction(async (transaction) => {
     const outlet = await transaction.outlet.findFirst({
       where: { id: input.outletId, status: OutletStatus.ACTIVE, ...(actor.role === "owner" ? {} : { assignments: { some: { userId: actor.id } } }) },
-      select: { id: true, attendanceEnabled: true, attendanceLatitude: true, attendanceLongitude: true, attendanceRadiusMeters: true },
+      select: { id: true, attendanceEnabled: true, attendanceLatitude: true, attendanceLongitude: true, attendanceRadiusMeters: true, attendanceLateGraceMinutes: true, attendanceEarlyLeaveGraceMinutes: true },
     });
     if (!outlet) throw new AttendanceError("FORBIDDEN", "Outlet tidak tersedia untuk akun Anda.");
-    await transaction.outlet.update({ where: { id: outlet.id }, data: { attendanceEnabled: input.attendanceEnabled, attendanceLatitude: input.latitude, attendanceLongitude: input.longitude, attendanceRadiusMeters: input.radiusMeters } });
-    await writeAttendanceAudit(transaction, "OUTLET", outlet.id, AttendanceAuditAction.SETTINGS_UPDATE, actor, attendanceSettingsSnapshot(outlet), { attendanceEnabled: input.attendanceEnabled, latitude: input.latitude, longitude: input.longitude, radiusMeters: input.radiusMeters });
+    await transaction.outlet.update({ where: { id: outlet.id }, data: { attendanceEnabled: input.attendanceEnabled, attendanceLatitude: input.latitude, attendanceLongitude: input.longitude, attendanceRadiusMeters: input.radiusMeters, attendanceLateGraceMinutes: input.lateGraceMinutes, attendanceEarlyLeaveGraceMinutes: input.earlyLeaveGraceMinutes } });
+    await writeAttendanceAudit(transaction, "OUTLET", outlet.id, AttendanceAuditAction.SETTINGS_UPDATE, actor, attendanceSettingsSnapshot(outlet), { attendanceEnabled: input.attendanceEnabled, latitude: input.latitude, longitude: input.longitude, radiusMeters: input.radiusMeters, lateGraceMinutes: input.lateGraceMinutes, earlyLeaveGraceMinutes: input.earlyLeaveGraceMinutes });
   });
 }
 
@@ -435,9 +440,9 @@ type VerificationWithOutlet = {
   };
 };
 
-async function applyAttendanceEvent(transaction: Prisma.TransactionClient, kind: AttendanceKind, userId: string, outlet: { id: string; timezone: string }, attemptId: string, at: Date) {
+async function applyAttendanceEvent(transaction: Prisma.TransactionClient, kind: AttendanceKind, userId: string, outlet: { id: string; timezone: string }, attemptId: string, at: Date, rosterEntryId: string | null, scheduleMatch: "SCHEDULED" | "UNSCHEDULED" | null) {
   if (kind === AttendanceKind.CHECK_IN) {
-    return transaction.attendanceSession.create({ data: { userId, outletId: outlet.id, businessDate: businessDateAt(at, outlet.timezone), openUserKey: userId, checkInAt: at, checkInAttemptId: attemptId } });
+    return transaction.attendanceSession.create({ data: { userId, outletId: outlet.id, businessDate: businessDateAt(at, outlet.timezone), openUserKey: userId, checkInAt: at, checkInAttemptId: attemptId, rosterEntryId, scheduleMatch: scheduleMatch ?? "UNSCHEDULED" } });
   }
   const open = await transaction.attendanceSession.findUnique({ where: { openUserKey: userId } });
   if (!open) throw new AttendanceError("CONFLICT", "Absensi masuk aktif tidak ditemukan.");
@@ -446,9 +451,10 @@ async function applyAttendanceEvent(transaction: Prisma.TransactionClient, kind:
 }
 
 async function assertClockScope(transaction: Prisma.TransactionClient, outletId: string, actor: AttendanceActor) {
-  const outlet = await transaction.outlet.findFirst({ where: { id: outletId, status: OutletStatus.ACTIVE, ...(actor.role === "owner" ? {} : { assignments: { some: { userId: actor.id } } }) }, select: { id: true, attendanceEnabled: true } });
+  const outlet = await transaction.outlet.findFirst({ where: { id: outletId, status: OutletStatus.ACTIVE, ...(actor.role === "owner" ? {} : { assignments: { some: { userId: actor.id } } }) }, select: { id: true, attendanceEnabled: true, timezone: true } });
   if (!outlet) throw new AttendanceError("FORBIDDEN", "Outlet tidak tersedia untuk akun Anda.");
   if (!outlet.attendanceEnabled) throw new AttendanceError("NOT_CONFIGURED", "Absensi belum diaktifkan untuk outlet ini.");
+  return outlet;
 }
 
 async function assertOutletInActorScope(transaction: Prisma.TransactionClient, outletId: string, actor: AttendanceActor) {
@@ -467,7 +473,7 @@ async function assertUserInActorScope(transaction: Prisma.TransactionClient, use
 }
 
 function assertManager(actor: AttendanceActor) {
-  if (actor.role === "cashier") throw new AttendanceError("FORBIDDEN", "Akun kasir tidak dapat mengelola absensi.");
+  if (actor.role !== "owner" && actor.role !== "manager") throw new AttendanceError("FORBIDDEN", "Akun ini tidak dapat mengelola absensi.");
 }
 
 function calculateDistance(outlet: { attendanceLatitude: Prisma.Decimal | null; attendanceLongitude: Prisma.Decimal | null }, input: AttendanceVerificationInput) {
@@ -475,8 +481,18 @@ function calculateDistance(outlet: { attendanceLatitude: Prisma.Decimal | null; 
   return distanceInMeters({ latitude: Number(outlet.attendanceLatitude), longitude: Number(outlet.attendanceLongitude) }, input.location);
 }
 
-function attendanceSettingsSnapshot(outlet: { attendanceEnabled: boolean; attendanceLatitude: Prisma.Decimal | null; attendanceLongitude: Prisma.Decimal | null; attendanceRadiusMeters: number }) {
-  return { attendanceEnabled: outlet.attendanceEnabled, latitude: outlet.attendanceLatitude?.toString() ?? null, longitude: outlet.attendanceLongitude?.toString() ?? null, radiusMeters: outlet.attendanceRadiusMeters };
+function attendanceSettingsSnapshot(outlet: { attendanceEnabled: boolean; attendanceLatitude: Prisma.Decimal | null; attendanceLongitude: Prisma.Decimal | null; attendanceRadiusMeters: number; attendanceLateGraceMinutes: number; attendanceEarlyLeaveGraceMinutes: number }) {
+  return { attendanceEnabled: outlet.attendanceEnabled, latitude: outlet.attendanceLatitude?.toString() ?? null, longitude: outlet.attendanceLongitude?.toString() ?? null, radiusMeters: outlet.attendanceRadiusMeters, lateGraceMinutes: outlet.attendanceLateGraceMinutes, earlyLeaveGraceMinutes: outlet.attendanceEarlyLeaveGraceMinutes };
+}
+
+async function resolveCheckInSchedule(transaction: Prisma.TransactionClient, userId: string, outletId: string, timezone: string, now: Date, unscheduledAcknowledged: boolean) {
+  const workDate = businessDateAt(now, timezone);
+  const dateValue = workDate.toISOString().slice(0, 10);
+  const entries = await Promise.all([dateValue, addIsoDays(dateValue, -1)].map((candidate) => transaction.attendanceRosterEntry.findUnique({ where: { userId_workDate: { userId, workDate: new Date(`${candidate}T00:00:00.000Z`) } }, include: { rosterWeek: { select: { status: true } } } })));
+  const entry = entries.find((candidate) => candidate?.outletId === outletId && candidate.rosterWeek.status === "PUBLISHED" && isWithinScheduledWindow(now, candidate.scheduledStartAt, candidate.scheduledEndAt));
+  if (entry) return { rosterEntryId: entry.id, scheduleMatch: "SCHEDULED" as const };
+  if (!unscheduledAcknowledged) throw new AttendanceError("INVALID", "Absensi ini berada di luar jadwal. Konfirmasikan masuk di luar jadwal untuk melanjutkan.");
+  return { rosterEntryId: null, scheduleMatch: "UNSCHEDULED" as const };
 }
 
 function randomChallengeAction(): AttendanceChallengeAction {

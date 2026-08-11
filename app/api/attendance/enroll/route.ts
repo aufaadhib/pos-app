@@ -2,7 +2,7 @@ import { AttendanceError, enrollFaceProfile } from "@/lib/attendance/service";
 import { authorizeAttendanceRequest } from "@/lib/attendance/http";
 import { attendanceEnrollmentSchema } from "@/lib/attendance/validation";
 
-/** Enrolls a first profile or creates a cashier reenrollment approval request. */
+/** Enrolls a first profile or creates a cashier/staff reenrollment approval request. */
 export async function POST(request: Request) {
   const authorization = await authorizeAttendanceRequest({ attendance: ["clock"] });
   if ("error" in authorization) return authorization.error;
