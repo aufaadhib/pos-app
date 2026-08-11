@@ -24,16 +24,11 @@ export function proxy(request: NextRequest) {
     return NextResponse.redirect(new URL("/sign-in", request.url));
   }
 
-  if (pathname === "/sign-in" && sessionCookie) {
-    return NextResponse.redirect(new URL("/workspace", request.url));
-  }
-
   return NextResponse.next();
 }
 
 export const config = {
   matcher: [
-    "/sign-in",
     "/workspace/:path*",
     "/design-system/:path*",
     "/catalog/:path*",

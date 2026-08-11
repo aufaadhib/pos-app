@@ -1,16 +1,23 @@
 import type { Metadata } from "next";
+import { redirect } from "next/navigation";
 
 import { BrandMark } from "@/components/brand-mark";
 import { LoginForm } from "@/components/login-form";
 import { ServiceTicketRail } from "@/components/service-ticket-rail";
 import { ThemeToggle } from "@/components/theme-toggle";
+import { getCurrentSession } from "@/lib/auth/session";
+
+export const dynamic = "force-dynamic";
 
 export const metadata: Metadata = {
   title: "Masuk",
   description: "Masuk ke workspace Glutong POS.",
 };
 
-export default function SignInPage() {
+export default async function SignInPage() {
+  const session = await getCurrentSession();
+  if (session) redirect("/");
+
   return (
     <main className="grid min-h-svh grid-rows-[auto_1fr] bg-background lg:grid-cols-[minmax(22rem,0.82fr)_minmax(32rem,1.18fr)] lg:grid-rows-none" id="main-content">
       <section className="relative overflow-hidden bg-brand-panel px-5 py-6 text-brand-panel-foreground sm:px-8 sm:py-8 lg:flex lg:min-h-svh lg:flex-col lg:justify-between lg:px-10 lg:py-10 xl:px-14 xl:py-12">
