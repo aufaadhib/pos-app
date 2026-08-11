@@ -44,11 +44,17 @@ export function attendanceDisplay(input: { now: Date; scheduledStartAt?: Date | 
   }
   const lateMinutes = Math.max(0, Math.floor((input.checkInAt.getTime() - input.scheduledStartAt.getTime()) / 60_000));
   const earlyLeaveMinutes = input.checkOutAt ? Math.max(0, Math.floor((input.scheduledEndAt.getTime() - input.checkOutAt.getTime()) / 60_000)) : 0;
-  if (input.sessionOpen && input.now > input.scheduledEndAt) return { status: "MISSED_CHECKOUT" as const, lateMinutes, earlyLeaveMinutes: 0, totalMinutes: 0 };
+  if (!input.checkOutAt && input.now > input.scheduledEndAt) return { status: "MISSED_CHECKOUT" as const, lateMinutes, earlyLeaveMinutes: 0, totalMinutes: 0 };
   const late = lateMinutes > (input.lateGraceMinutes ?? 15);
   const early = Boolean(input.checkOutAt) && earlyLeaveMinutes > (input.earlyLeaveGraceMinutes ?? 15);
   const status: AttendanceDisplayStatus = late && early ? "LATE_EARLY" : late ? "LATE" : early ? "EARLY_LEAVE" : "ON_TIME";
   return { status, lateMinutes, earlyLeaveMinutes, totalMinutes: duration(input.checkInAt, input.checkOutAt) };
+}
+
+/** Returns whether the outlet-local calendar has moved past the session or scheduled end date. */
+export function hasMissedCheckoutDeadlinePassed(input: { now: Date; businessDate: Date; timezone: string; scheduledEndAt?: Date | null }) {
+  const referenceDate = input.scheduledEndAt ? dateAt(input.scheduledEndAt, input.timezone) : input.businessDate.toISOString().slice(0, 10);
+  return dateAt(input.now, input.timezone) > referenceDate;
 }
 
 /** Returns whether a check-in can attach to a roster entry under the fixed two-hour early window. */
@@ -56,5 +62,6 @@ export function isWithinScheduledWindow(now: Date, start: Date, end: Date) { ret
 
 function isoDate(value: string) { const date = new Date(`${value}T00:00:00.000Z`); if (Number.isNaN(date.getTime()) || date.toISOString().slice(0, 10) !== value) throw new Error("Tanggal roster tidak valid."); return date; }
 function duration(start?: Date | null, end?: Date | null) { return start && end ? Math.max(0, Math.floor((end.getTime() - start.getTime()) / 60_000)) : 0; }
+function dateAt(value: Date, timezone: string) { return new Intl.DateTimeFormat("en-CA", { timeZone: timezone, year: "numeric", month: "2-digit", day: "2-digit" }).format(value); }
 
-export const attendanceStatusLabels: Record<AttendanceDisplayStatus, string> = { SCHEDULED: "Terjadwal", NOT_CLOCKED_IN: "Belum masuk", ON_TIME: "Tepat waktu", LATE: "Terlambat", EARLY_LEAVE: "Pulang cepat", LATE_EARLY: "Terlambat & pulang cepat", MISSED_CHECKOUT: "Belum checkout", ABSENT: "Tidak hadir", UNSCHEDULED: "Di luar jadwal" };
+export const attendanceStatusLabels: Record<AttendanceDisplayStatus, string> = { SCHEDULED: "Terjadwal", NOT_CLOCKED_IN: "Belum masuk", ON_TIME: "Tepat waktu", LATE: "Terlambat", EARLY_LEAVE: "Pulang cepat", LATE_EARLY: "Terlambat & pulang cepat", MISSED_CHECKOUT: "Tidak absen pulang", ABSENT: "Tidak hadir", UNSCHEDULED: "Di luar jadwal" };

@@ -3,7 +3,7 @@ import "server-only";
 import { AttendanceExceptionStatus, OutletStatus, Prisma } from "@/generated/prisma/client";
 import type { AttendanceActor } from "@/lib/attendance/types";
 import { getPublishedRosterForUser } from "@/lib/attendance/roster-queries";
-import { attendanceDisplay, attendanceStatusLabels } from "@/lib/attendance/roster";
+import { attendanceDisplay, attendanceStatusLabels, hasMissedCheckoutDeadlinePassed } from "@/lib/attendance/roster";
 import { prisma } from "@/lib/prisma";
 
 const attendancePageSize = 20;
@@ -18,12 +18,12 @@ export async function getAttendanceHome(userId: string, role: AttendanceActor["r
       orderBy: { name: "asc" },
       select: { id: true, code: true, name: true, timezone: true, attendanceEnabled: true, attendanceLatitude: true, attendanceLongitude: true, attendanceRadiusMeters: true },
     }),
-    prisma.attendanceSession.findUnique({ where: { openUserKey: userId }, include: { outlet: { select: { id: true, code: true, name: true, timezone: true } } } }),
+    prisma.attendanceSession.findUnique({ where: { openUserKey: userId }, include: { outlet: { select: { id: true, code: true, name: true, timezone: true } }, rosterEntry: { select: { scheduledEndAt: true } } } }),
     prisma.attendanceSession.findMany({
       where: { userId },
       orderBy: { checkInAt: "desc" },
       take: 10,
-      include: { outlet: { select: { code: true, name: true, timezone: true } }, checkInAttempt: { select: { id: true, similarity: true, evidencePath: true, evidenceExpiresAt: true, evidenceDeletedAt: true } }, checkOutAttempt: { select: { id: true, similarity: true, evidencePath: true, evidenceExpiresAt: true, evidenceDeletedAt: true } }, corrections: { orderBy: { createdAt: "desc" }, take: 1 } },
+      include: { outlet: { select: { code: true, name: true, timezone: true } }, rosterEntry: { select: { scheduledEndAt: true } }, checkInAttempt: { select: { id: true, similarity: true, evidencePath: true, evidenceExpiresAt: true, evidenceDeletedAt: true } }, checkOutAttempt: { select: { id: true, similarity: true, evidencePath: true, evidenceExpiresAt: true, evidenceDeletedAt: true } }, corrections: { orderBy: { createdAt: "desc" }, take: 1 } },
     }),
     getPublishedRosterForUser(userId),
   ]);
@@ -31,7 +31,7 @@ export async function getAttendanceHome(userId: string, role: AttendanceActor["r
     profile: profile ? { ...profile, enrolledAt: profile.enrolledAt.toISOString() } : null,
     pendingReenrollment: pendingReenrollment ? { id: pendingReenrollment.id, requestedAt: pendingReenrollment.requestedAt.toISOString() } : null,
     outlets: outlets.map((outlet) => ({ ...outlet, attendanceLatitude: outlet.attendanceLatitude?.toNumber() ?? null, attendanceLongitude: outlet.attendanceLongitude?.toNumber() ?? null })),
-    openSession: openSession ? { id: openSession.id, outlet: openSession.outlet, checkInAt: openSession.checkInAt.toISOString() } : null,
+    openSession: openSession && !hasMissedCheckoutDeadlinePassed({ now: new Date(), businessDate: openSession.businessDate, timezone: openSession.outlet.timezone, scheduledEndAt: openSession.rosterEntry?.scheduledEndAt }) ? { id: openSession.id, outlet: openSession.outlet, checkInAt: openSession.checkInAt.toISOString() } : null,
     recentSessions: recentSessions.map((session) => serializeAttendanceSession(session)),
     roster,
   };
@@ -61,7 +61,7 @@ export async function getAttendanceManagement(outletId: string, actor: Attendanc
     orderBy: { checkInAt: "desc" },
     skip: (currentPage - 1) * attendancePageSize,
     take: attendancePageSize,
-    include: { user: { select: { id: true, name: true, email: true } }, outlet: { select: { code: true, name: true, timezone: true } }, checkInAttempt: { select: { id: true, similarity: true, evidencePath: true, evidenceExpiresAt: true, evidenceDeletedAt: true } }, checkOutAttempt: { select: { id: true, similarity: true, evidencePath: true, evidenceExpiresAt: true, evidenceDeletedAt: true } }, corrections: { orderBy: { createdAt: "desc" }, take: 1 } },
+    include: { user: { select: { id: true, name: true, email: true } }, outlet: { select: { code: true, name: true, timezone: true } }, rosterEntry: { select: { scheduledEndAt: true } }, checkInAttempt: { select: { id: true, similarity: true, evidencePath: true, evidenceExpiresAt: true, evidenceDeletedAt: true } }, checkOutAttempt: { select: { id: true, similarity: true, evidencePath: true, evidenceExpiresAt: true, evidenceDeletedAt: true } }, corrections: { orderBy: { createdAt: "desc" }, take: 1 } },
   });
   return {
     pending: pending.map((request) => ({ ...request, requestedAt: request.requestedAt.toISOString(), attempt: { id: request.attempt.id, attemptedAt: request.attempt.attemptedAt.toISOString(), failureReason: request.attempt.failureReason, similarity: request.attempt.similarity?.toString() ?? null, evidenceAvailable: isAttendanceEvidenceAvailable(request.attempt) } })),
@@ -137,6 +137,7 @@ function serializeAttendanceSession(session: {
   checkOutAt: Date | null;
   user?: { id?: string; name: string; email: string };
   outlet: { code: string; name: string; timezone: string };
+  rosterEntry: { scheduledEndAt: Date } | null;
   checkInAttempt: AttendanceEvidenceAttempt;
   checkOutAttempt: AttendanceEvidenceAttempt | null;
   corrections: Array<{ id: string; correctedCheckInAt: Date | null; correctedCheckOutAt: Date | null; reason: string; actorName: string; createdAt: Date }>;
@@ -154,6 +155,7 @@ function serializeAttendanceSession(session: {
     originalCheckOutAt: session.checkOutAt?.toISOString() ?? null,
     checkInAt: (correction?.correctedCheckInAt ?? session.checkInAt).toISOString(),
     checkOutAt: (correction?.correctedCheckOutAt ?? session.checkOutAt)?.toISOString() ?? null,
+    missedCheckout: !(correction?.correctedCheckOutAt ?? session.checkOutAt) && (session.status === "CLOSED" || hasMissedCheckoutDeadlinePassed({ now: new Date(), businessDate: session.businessDate, timezone: session.outlet.timezone, scheduledEndAt: session.rosterEntry?.scheduledEndAt })),
     checkInEvidence: serializeAttendanceEvidence(session.checkInAttempt),
     checkOutEvidence: serializeAttendanceEvidence(session.checkOutAttempt),
     correction: correction ? { ...correction, correctedCheckInAt: correction.correctedCheckInAt?.toISOString() ?? null, correctedCheckOutAt: correction.correctedCheckOutAt?.toISOString() ?? null, createdAt: correction.createdAt.toISOString() } : null,

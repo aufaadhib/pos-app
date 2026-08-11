@@ -31,6 +31,7 @@ describe("attendance management", () => {
         status: "CLOSED",
         checkInAt: "2026-08-10T12:30:00.000Z",
         checkOutAt: "2026-08-10T13:30:00.000Z",
+        missedCheckout: false,
         originalCheckInAt: "2026-08-10T12:30:00.000Z",
         originalCheckOutAt: "2026-08-10T13:30:00.000Z",
         outlet: { code: "TMR", name: "Timur", timezone: "Asia/Jayapura" },

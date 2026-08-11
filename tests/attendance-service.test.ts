@@ -5,6 +5,7 @@ const mocks = vi.hoisted(() => ({
   attemptCreate: vi.fn(),
   attendanceSessionCreate: vi.fn(),
   attendanceSessionFindUnique: vi.fn(),
+  attendanceSessionUpdate: vi.fn(),
   attendanceRosterEntryFindUnique: vi.fn(),
   auditCreate: vi.fn(),
   exceptionFindUnique: vi.fn(),
@@ -41,7 +42,7 @@ const transactionClient = {
   attendanceExceptionRequest: { findUnique: mocks.exceptionFindUnique, update: mocks.exceptionUpdate },
   faceProfile: { create: mocks.faceProfileCreate, findUnique: mocks.faceProfileFindUnique, update: mocks.faceProfileUpdate },
   faceReenrollmentRequest: { create: mocks.faceRequestCreate, findUnique: mocks.faceRequestFindUnique, update: mocks.faceRequestUpdate },
-  attendanceSession: { create: mocks.attendanceSessionCreate, findUnique: mocks.attendanceSessionFindUnique },
+  attendanceSession: { create: mocks.attendanceSessionCreate, findUnique: mocks.attendanceSessionFindUnique, update: mocks.attendanceSessionUpdate },
   attendanceRosterEntry: { findUnique: mocks.attendanceRosterEntryFindUnique },
   attendanceVerification: { create: mocks.verificationCreate, findFirst: mocks.verificationFindFirst, update: mocks.verificationUpdate },
   outlet: { findFirst: mocks.outletFindFirst, update: mocks.outletUpdate },
@@ -82,6 +83,30 @@ describe("attendance service", () => {
 
     expect(mocks.outletFindFirst).toHaveBeenCalledWith(expect.objectContaining({ where: expect.objectContaining({ assignments: { some: { userId: actor.id } } }) }));
     expect(mocks.verificationCreate).not.toHaveBeenCalled();
+  });
+
+  it("closes yesterday's open session without a checkout before starting a new check-in challenge", async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-08-11T02:00:00.000Z"));
+    mocks.outletFindFirst.mockResolvedValue({ id: "outlet-1", attendanceEnabled: true, timezone: "Asia/Jakarta" });
+    mocks.attendanceSessionFindUnique.mockResolvedValue({ id: "session-old", outletId: "outlet-1", businessDate: new Date("2026-08-10T00:00:00.000Z"), rosterEntryId: null, scheduleMatch: "UNSCHEDULED", outlet: { timezone: "Asia/Jakarta" }, rosterEntry: null });
+    mocks.attendanceSessionUpdate.mockResolvedValue({ id: "session-old", status: "CLOSED" });
+    mocks.verificationCreate.mockResolvedValue({ id: "verification-new", challengeAction: "BLINK", expiresAt: new Date("2026-08-11T02:15:00.000Z"), attemptCount: 0, scheduleMatch: "UNSCHEDULED" });
+
+    await expect(createAttendanceChallenge({ outletId: "outlet-1", kind: "CHECK_IN", unscheduledAcknowledged: true }, actor)).resolves.toEqual(expect.objectContaining({ verificationId: "verification-new" }));
+
+    expect(mocks.attendanceSessionUpdate).toHaveBeenCalledWith({ where: { id: "session-old" }, data: { status: "CLOSED", openUserKey: null } });
+    expect(mocks.auditCreate).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ entityId: "session-old", action: "MISSED_CHECKOUT", after: expect.objectContaining({ checkOutAt: null }) }) }));
+  });
+
+  it("still requires checkout while the open session belongs to the current outlet day", async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-08-10T08:00:00.000Z"));
+    mocks.outletFindFirst.mockResolvedValue({ id: "outlet-1", attendanceEnabled: true, timezone: "Asia/Jakarta" });
+    mocks.attendanceSessionFindUnique.mockResolvedValue({ id: "session-current", outletId: "outlet-1", businessDate: new Date("2026-08-10T00:00:00.000Z"), rosterEntryId: null, scheduleMatch: "UNSCHEDULED", outlet: { timezone: "Asia/Jakarta" }, rosterEntry: null });
+
+    await expect(createAttendanceChallenge({ outletId: "outlet-1", kind: "CHECK_IN", unscheduledAcknowledged: true }, actor)).rejects.toMatchObject({ code: "CONFLICT" });
+    expect(mocks.attendanceSessionUpdate).not.toHaveBeenCalled();
   });
 
   it("matches an overnight roster from the previous outlet-local date", async () => {

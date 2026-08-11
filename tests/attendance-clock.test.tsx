@@ -69,8 +69,15 @@ describe("attendance clock", () => {
   });
 
   it("formats recent attendance using each outlet timezone", () => {
-    render(<AttendanceClock openSession={null} outlets={[outlet]} pendingReenrollment={null} profile={null} recentSessions={[{ id: "session-1", status: "CLOSED", checkInAt: "2026-08-10T12:30:00.000Z", checkOutAt: "2026-08-10T13:30:00.000Z", outlet: { code: "TMR", name: "Timur", timezone: "Asia/Jayapura" }, correction: null }]} user={{ name: "Kasir Satu", email: "kasir@example.com", role: "cashier" }} />);
+    render(<AttendanceClock openSession={null} outlets={[outlet]} pendingReenrollment={null} profile={null} recentSessions={[{ id: "session-1", status: "CLOSED", checkInAt: "2026-08-10T12:30:00.000Z", checkOutAt: "2026-08-10T13:30:00.000Z", missedCheckout: false, outlet: { code: "TMR", name: "Timur", timezone: "Asia/Jayapura" }, correction: null }]} user={{ name: "Kasir Satu", email: "kasir@example.com", role: "cashier" }} />);
     expect(screen.getByText(/21\.30 WIT.*22\.30 WIT/)).toBeInTheDocument();
+  });
+
+  it("shows a missed checkout while allowing the next check-in flow", () => {
+    render(<AttendanceClock openSession={null} outlets={[outlet]} pendingReenrollment={null} profile={{ enrolledAt: new Date().toISOString(), modelVersion: "human-3.3.6" }} recentSessions={[{ id: "session-old", status: "OPEN", checkInAt: "2026-08-10T01:00:00.000Z", checkOutAt: null, missedCheckout: true, outlet: { code: "PST", name: "Pusat", timezone: "Asia/Jakarta" }, correction: null }]} user={{ name: "Kasir Satu", email: "kasir@example.com", role: "cashier" }} />);
+    expect(screen.getByText("Tidak absen pulang")).toBeVisible();
+    expect(screen.getByText(/Jam pulang tidak tercatat/)).toBeVisible();
+    expect(screen.getByRole("button", { name: "Absensi masuk" })).toBeEnabled();
   });
 
   it("requests location and submits attendance automatically after the liveness gesture", async () => {

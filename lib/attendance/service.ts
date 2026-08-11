@@ -24,7 +24,7 @@ import { createAttendanceNonce, decryptEmbedding, encryptEmbedding, hashAttendan
 import { deleteAttendanceEvidence, uploadAttendanceEvidence } from "@/lib/attendance/evidence";
 import { averageEmbeddings, faceSimilarity, normalizeEmbedding } from "@/lib/attendance/face";
 import { businessDateAt, distanceInMeters } from "@/lib/attendance/geofence";
-import { addIsoDays, isWithinScheduledWindow } from "@/lib/attendance/roster";
+import { addIsoDays, hasMissedCheckoutDeadlinePassed, isWithinScheduledWindow } from "@/lib/attendance/roster";
 import type { AttendanceActor } from "@/lib/attendance/types";
 import type {
   AttendanceChallengeInput,
@@ -196,7 +196,12 @@ export async function createAttendanceChallenge(input: AttendanceChallengeInput,
   const expiresAt = new Date(now.getTime() + attendanceVerificationMinutes * 60_000);
   const verification = await prisma.$transaction(async (transaction) => {
     const scopedOutlet = await assertClockScope(transaction, input.outletId, actor);
-    const openSession = await transaction.attendanceSession.findUnique({ where: { openUserKey: actor.id }, select: { id: true, outletId: true, rosterEntryId: true, scheduleMatch: true } });
+    let openSession = await transaction.attendanceSession.findUnique({ where: { openUserKey: actor.id }, select: { id: true, outletId: true, businessDate: true, rosterEntryId: true, scheduleMatch: true, outlet: { select: { timezone: true } }, rosterEntry: { select: { scheduledEndAt: true } } } });
+    if (openSession && hasMissedCheckoutDeadlinePassed({ now, businessDate: openSession.businessDate, timezone: openSession.outlet.timezone, scheduledEndAt: openSession.rosterEntry?.scheduledEndAt })) {
+      await transaction.attendanceSession.update({ where: { id: openSession.id }, data: { status: AttendanceSessionStatus.CLOSED, openUserKey: null } });
+      await writeAttendanceAudit(transaction, "ATTENDANCE_SESSION", openSession.id, AttendanceAuditAction.MISSED_CHECKOUT, actor, { status: AttendanceSessionStatus.OPEN, checkOutAt: null }, { status: AttendanceSessionStatus.CLOSED, checkOutAt: null, reason: "Tanggal absensi berikutnya dimulai tanpa absen pulang." });
+      openSession = null;
+    }
     if (input.kind === AttendanceKind.CHECK_IN && openSession) throw new AttendanceError("CONFLICT", "Anda masih memiliki absensi masuk yang belum ditutup.");
     if (input.kind === AttendanceKind.CHECK_OUT && !openSession) throw new AttendanceError("CONFLICT", "Belum ada absensi masuk yang dapat ditutup.");
     if (input.kind === AttendanceKind.CHECK_OUT && openSession?.outletId !== input.outletId) throw new AttendanceError("CONFLICT", "Absensi pulang harus dilakukan pada outlet tempat Anda masuk.");
@@ -213,7 +218,7 @@ export async function createAttendanceChallenge(input: AttendanceChallengeInput,
     return transaction.attendanceVerification.create({
       data: { userId: actor.id, outletId: input.outletId, kind: input.kind, nonceHash, challengeAction, expiresAt, ...schedule },
     });
-  });
+  }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
   return {
     verificationId: verification.id,
     nonce,

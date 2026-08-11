@@ -1,0 +1,1 @@
+ALTER TYPE "AttendanceAuditAction" ADD VALUE 'MISSED_CHECKOUT';

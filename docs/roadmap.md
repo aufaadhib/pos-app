@@ -272,7 +272,8 @@ Status: `Completed`. Implementasi web, schema, migration production, RBAC, verif
 - Peta OSM menyinkronkan marker pusat, handle radius 44 px, lokasi perangkat, serta input koordinat/radius manual.
 - Foto JPEG maksimal 300 KB disimpan privat selama 30 hari dan dihapus melalui Vercel Cron; akses bukti selalu melalui Route Handler terotorisasi.
 - Pengecualian setelah tiga kegagalan, review daftar ulang kasir/staf oleh owner/manager, larangan self-approval, koreksi append-only, revoke profile, CSV, dan pembersihan profil saat staf dinonaktifkan sudah diterapkan.
-- Prisma validate/generate, Next typegen, seluruh test, lint, typecheck, dan production build lulus. Seluruh 19 migration production sudah up to date.
+- Sesi yang melewati tanggal akhir shift tanpa check-out ditandai **Tidak absen pulang** tanpa timestamp buatan; staf dapat memulai check-in berikutnya dan manager mengisi koreksi append-only jika waktu sebenarnya diketahui.
+- Prisma validate/generate, Next typegen, seluruh test, lint, typecheck, dan production build lulus. Seluruh 20 migration production sudah up to date.
 - `ATTENDANCE_EMBEDDING_KEY`, private attendance Blob, dan `CRON_SECRET` tersedia di production; koneksi Blob serta endpoint cleanup cron telah diuji langsung tanpa menampilkan nilai credential.
 
 ### Tujuan
@@ -425,6 +426,7 @@ Memisahkan jabatan pekerjaan dari hak akses aplikasi serta menghubungkan jadwal 
 | 11 Agustus 2026 | Koreksi rekonsiliasi shift memakai revision append-only | Salah hitung kas aktual harus dapat diperbaiki tanpa menimpa nilai penutupan asli atau menyamarkan kekurangan kas historis |
 | 11 Agustus 2026 | Milestone 10 selesai dan migration production diterapkan | Role staff, jabatan, template, roster global, tambah/ganti/Libur terbit, audit, UI responsif, 288 test, lint, typecheck, dan build telah lulus |
 | 11 Agustus 2026 | Milestone 9 selesai sebagai fitur software production | Migration, credential, private Blob, cron retensi, RBAC, verifikasi 1:1, geofence, audit, laporan, dan UI sudah terverifikasi; pilot Android dipertahankan sebagai gate operasional sebelum payroll |
+| 11 Agustus 2026 | Lupa absen pulang tidak membuat waktu otomatis | Sesi lama ditutup tanpa `checkOutAt` saat check-in berikutnya, durasi tidak dihitung, status tetap terlihat, dan koreksi manager mempertahankan histori asli |
 
 ## Cara memperbarui roadmap
 

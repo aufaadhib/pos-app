@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { addIsoDays, attendanceDisplay, isWithinScheduledWindow, mondayOf, scheduledRange } from "@/lib/attendance/roster";
+import { addIsoDays, attendanceDisplay, hasMissedCheckoutDeadlinePassed, isWithinScheduledWindow, mondayOf, scheduledRange } from "@/lib/attendance/roster";
 import { addPublishedRosterEntrySchema, saveRosterDraftSchema, updatePublishedRosterEntrySchema } from "@/lib/attendance/roster-validation";
 
 describe("attendance roster domain", () => {
@@ -39,6 +39,18 @@ describe("attendance roster domain", () => {
     [new Date("2026-08-10T10:00:00.000Z"), new Date("2026-08-10T01:00:00.000Z"), null, true, "MISSED_CHECKOUT"],
   ])("derives scheduled lifecycle status %s", (now, checkInAt, checkOutAt, sessionOpen, expected) => {
     expect(attendanceDisplay({ now, scheduledStartAt: new Date("2026-08-10T01:00:00.000Z"), scheduledEndAt: new Date("2026-08-10T09:00:00.000Z"), checkInAt, checkOutAt, sessionOpen }).status).toBe(expected);
+  });
+
+  it("keeps a missing checkout uncounted after the session is administratively closed", () => {
+    const result = attendanceDisplay({ now: new Date("2026-08-11T00:00:00.000Z"), scheduledStartAt: new Date("2026-08-10T01:00:00.000Z"), scheduledEndAt: new Date("2026-08-10T09:00:00.000Z"), checkInAt: new Date("2026-08-10T01:00:00.000Z"), checkOutAt: null, sessionOpen: false });
+    expect(result).toEqual(expect.objectContaining({ status: "MISSED_CHECKOUT", totalMinutes: 0 }));
+  });
+
+  it("uses the outlet-local day after the scheduled end as the missed-checkout boundary", () => {
+    const base = { businessDate: new Date("2026-08-10T00:00:00.000Z"), timezone: "Asia/Jakarta", scheduledEndAt: new Date("2026-08-10T23:00:00.000Z") };
+    expect(hasMissedCheckoutDeadlinePassed({ ...base, now: new Date("2026-08-11T16:59:59.000Z") })).toBe(false);
+    expect(hasMissedCheckoutDeadlinePassed({ ...base, now: new Date("2026-08-11T17:00:00.000Z") })).toBe(true);
+    expect(hasMissedCheckoutDeadlinePassed({ now: new Date("2026-08-10T17:00:00.000Z"), businessDate: base.businessDate, timezone: base.timezone })).toBe(true);
   });
 
   it("marks sessions without a matching published roster as unscheduled", () => {
