@@ -6,6 +6,7 @@ import type { AttendanceActor } from "@/lib/attendance/types";
 import type { AddPublishedRosterEntryInput, CopyRosterWeekInput, ResetFixedScheduleOverrideInput, RosterWeekTarget, SaveFixedSchedulesInput, SaveRosterDraftInput, ShiftTemplateInput, ShiftTemplateTarget, UpdatePublishedRosterEntryInput, UpdateScheduleModeInput, UpdateShiftTemplateInput } from "@/lib/attendance/roster-validation";
 import { normalizeOperationalLabel } from "@/lib/outlets/normalization";
 import { prisma } from "@/lib/prisma";
+import { isTransactionWriteConflict } from "@/lib/prisma-errors";
 
 export class RosterError extends Error {
   constructor(public readonly code: "FORBIDDEN" | "NOT_FOUND" | "CONFLICT" | "DUPLICATE" | "INVALID", message: string) { super(message); this.name = "RosterError"; }
@@ -309,5 +310,18 @@ function outletLocalStart(workDate: string, template: { startMinute: number } | 
 function templateSnapshot(template: { name: string; startMinute: number; endMinute: number; status: StaffPositionStatus }) { return { name: template.name, startMinute: template.startMinute, endMinute: template.endMinute, status: template.status }; }
 function entrySnapshot(entry: { shiftTemplateId: string; scheduledStartAt: Date; scheduledEndAt: Date; shiftName: string }) { return { shiftTemplateId: entry.shiftTemplateId, shiftName: entry.shiftName, scheduledStartAt: entry.scheduledStartAt.toISOString(), scheduledEndAt: entry.scheduledEndAt.toISOString() }; }
 async function audit(transaction: Prisma.TransactionClient, entityType: string, entityId: string, action: AttendanceAuditAction, actor: AttendanceActor, before: Prisma.InputJsonValue | null, after: Prisma.InputJsonValue | null) { await transaction.attendanceAuditLog.create({ data: { entityType, entityId, action, actorUserId: actor.id, actorEmail: actor.email, before: before ?? undefined, after: after ?? undefined } }); }
-async function runRosterMutation<T>(callback: (transaction: Prisma.TransactionClient) => Promise<T>, isolationLevel?: Prisma.TransactionIsolationLevel) { try { return await prisma.$transaction(callback, isolationLevel ? { isolationLevel } : undefined); } catch (error) { if (error instanceof RosterError) throw error; if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002") throw new RosterError("DUPLICATE", "Jadwal bertabrakan atau nama template sudah digunakan."); throw error; } }
+async function runRosterMutation<T>(callback: (transaction: Prisma.TransactionClient) => Promise<T>, isolationLevel?: Prisma.TransactionIsolationLevel) {
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    try {
+      return await prisma.$transaction(callback, { isolationLevel, maxWait: 5_000, timeout: 15_000 });
+    } catch (error) {
+      if (error instanceof RosterError) throw error;
+      if (isTransactionWriteConflict(error) && attempt < 2) continue;
+      if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002") throw new RosterError("DUPLICATE", "Jadwal bertabrakan atau nama template sudah digunakan.");
+      if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2028") throw new RosterError("CONFLICT", "Data roster sedang sibuk. Coba simpan kembali.");
+      throw error;
+    }
+  }
+  throw new RosterError("CONFLICT", "Data roster sedang sibuk. Coba simpan kembali.");
+}
 const systemActor: AttendanceActor = { id: "system", name: "Sistem", email: "cron@glutong.local", role: "owner" };

@@ -170,6 +170,27 @@ describe("attendance roster service", () => {
     await expect(saveRosterDraft({ outletId: outlet.id, weekStart: "2026-08-10", expectedUpdatedAt: null, entries: [] }, actor)).rejects.toMatchObject({ code: "DUPLICATE" });
   });
 
+  it("retries a Neon serializable write conflict while saving a roster", async () => {
+    mocks.rosterFindUnique.mockResolvedValue(null);
+    mocks.rosterCreate.mockResolvedValue({ id: "week-1", status: AttendanceRosterStatus.DRAFT });
+    mocks.userFindMany.mockResolvedValue([]);
+    mocks.templateFindMany.mockResolvedValue([]);
+    mocks.transaction
+      .mockRejectedValueOnce({ name: "DriverAdapterError", cause: { kind: "TransactionWriteConflict" } })
+      .mockImplementationOnce(async (callback) => callback(transactionClient));
+
+    await saveRosterDraft({ outletId: outlet.id, weekStart: "2026-08-10", expectedUpdatedAt: null, entries: [] }, actor);
+
+    expect(mocks.transaction).toHaveBeenCalledTimes(2);
+    expect(mocks.transaction).toHaveBeenLastCalledWith(expect.any(Function), { isolationLevel: Prisma.TransactionIsolationLevel.Serializable, maxWait: 5_000, timeout: 15_000 });
+  });
+
+  it("returns a useful conflict when a roster transaction times out", async () => {
+    mocks.transaction.mockRejectedValue(new Prisma.PrismaClientKnownRequestError("transaction timeout", { code: "P2028", clientVersion: "test" }));
+
+    await expect(saveRosterDraft({ outletId: outlet.id, weekStart: "2026-08-10", expectedUpdatedAt: null, entries: [] }, actor)).rejects.toMatchObject({ code: "CONFLICT", message: "Data roster sedang sibuk. Coba simpan kembali." });
+  });
+
   it("replaces an outlet fixed pattern and records its audit atomically", async () => {
     mocks.userFindMany.mockResolvedValue([{ id: "staff-1" }]);
     mocks.templateFindMany.mockResolvedValue([{ id: "shift-1" }]);
